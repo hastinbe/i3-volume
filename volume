@@ -1,0 +1,262 @@
+#!/bin/bash
+#
+#  i3-volume
+#
+#  Volume control and volume notifications for i3wm.
+#
+#  Requires:
+#    notify-osd
+#    pulseaudio-utils
+#    awk
+#
+#  Conflicts:
+#    dunst -- with notify-osd when invoking notify-send
+#
+#  Copyright (c) 2016 Beau Hastings. All rights reserved.
+#  License: GNU General Public License v2
+#
+#  Author: Beau Hastings <beausy@gmail.com>
+#  URL: https://github.com/hastinbe/i3-volume
+
+# Get default sink name
+get_default_sink_name() {
+    pacmd stat | awk -F": " '/^Default sink name: /{print $2}'
+}
+
+# Gets the sink volume as a percentage.
+#
+# Arguments
+#   Sink name   (string) Symbolic name of sink.
+get_volume() {
+    local sink=$1
+    pacmd list-sinks |
+        awk '/^\s+name: /{indefault = $2 == "<'${sink}'>"}
+            /^\s+volume: / && indefault {print $5; exit}' |
+        sed 's/%//'
+}
+
+# Increase volume relative to current volume.
+#
+# Arguments:
+#   Sink name   (string)  Symbolic name of sink.
+#   Step        (integer) Percentage to increase by.
+raise_volume() {
+    local sink="$1"
+    local step="5"
+
+    if [ -n "$2" ]; then
+        step="$2"
+    fi
+
+    set_volume "${sink}" "+${step}%"
+}
+
+# Decrease volume relative to current volume.
+#
+# Arguments:
+#   Sink name   (string)  Symbolic name of sink.
+#   Step        (integer) Percentage to lower by.
+lower_volume() {
+    local sink="$1"
+    local step="5"
+
+    if [ -n "$2" ]; then
+        step="$2"
+    fi
+
+    set_volume "${sink}" "-${step}%"
+}
+
+# Set volume of sink.
+#
+# Arguments:
+#   Sink name   (string) Symbolic name of sink.
+#   Volume      (integer|linear factor|percentage|decibel)
+set_volume() {
+    local sink="$1"
+    local vol="$2"
+
+    pactl set-sink-volume "${sink}" "${vol}" ||
+        pactl set-sink-volume "${sink}" -- "${vol}"
+}
+
+# Toggle mute.
+#
+# Arguments:
+#   Sink name   (string) Symbolic name of sink.
+toggle_mute() {
+    pactl set-sink-mute "${sink}" toggle
+}
+
+# Check if default sink is muted.
+#
+# Arguments:
+#   Sink name    (string) Symbolic name of sink.
+#
+# Returns:
+#   0 when true, 1 when false.
+is_muted() {
+    local sink="$1"
+    muted=$(pacmd list-sinks |
+            awk '/^\s+name: /{indefault = $2 == "<'${sink}'>"}
+                /^\s+muted: / && indefault {print $2; exit}')
+    [ "${muted}" = "yes" ]
+}
+
+# Gets an icon for the provided volume.
+#
+# Arguments:
+#   Volume      (integer) An integer indicating the volume.
+#
+# Returns:
+#   The volume icon name.
+get_volume_icon() {
+    local vol="$1"
+    local icon
+
+    if [ "${vol}" -eq "100" ]; then
+        icon="stock_volume-max"
+    elif [ "${vol}" -ge "70" ]; then
+        icon="stock_volume-high"
+    elif [ "${vol}" -ge "40" ]; then
+        icon="stock_volume-med"
+    elif [ "${vol}" -gt "0" ]; then
+        icon="stock_volume-min"
+    else
+        icon="stock_volume-0"
+    fi
+
+    echo "${icon}"
+}
+
+
+
+# Display a notification indicating the volume is muted.
+notify_muted() {
+    notify-send -i stock_volume-mute -h int:value:0 -h string:synchronous:volume "Volume muted"
+}
+
+# Display a notification indicating the current volume.
+#
+# Arguments:
+#   Sink name    (string)
+notify_volume() {
+    local sink="$1"
+    vol=$(get_volume "$sink")
+    icon=$(get_volume_icon "$vol")
+    notify-send -i "${icon}" -h int:value:"${vol}" -h string:synchronous:volume "Volume ${vol}%"
+}
+
+# Updates the status line.
+#
+# Arguments:
+#   signal  (string) The signal used to update the status line.
+#   proc    (string) The name of the status line process.
+update_statusline() {
+    local signal="$1"
+    local proc="$2"
+    pkill "-${signal}" "${proc}"
+}
+
+# Display program usage.
+usage() {
+    echo "Usage: $0 [options]
+Control volume and related notifications.
+
+Options:
+  -i <amount>       increase volume
+  -d <amount>       decrease volume
+  -m                toggle mute
+  -n                show notification
+  -s <sink name>    symbolic name of sink
+  -t <procname>     name of status line process. must be used with -u
+  -u <signal>       update status line using signal. must be used with -t
+  -v <value>        set volume
+  -h                display this help and exit
+" 1>&2
+    exit 1
+}
+###########################################################
+
+opt_decrease_volume=false
+opt_increase_volume=false
+opt_mute_volume=false
+opt_notification=false
+opt_set_volume=false
+signal=""
+sink="$(get_default_sink_name)"
+statusline=""
+volume_amount="5"
+
+while getopts ":d:hi:mns:t:u:v:" o; do
+    case "${o}" in
+        d)
+            opt_decrease_volume=true
+            volume_amount="${OPTARG}"
+            ;;
+        i)
+            opt_increase_volume=true
+            volume_amount="${OPTARG}"
+            ;;
+        m)
+            opt_mute_volume=true
+            ;;
+        n)
+            opt_notification=true
+            ;;
+        s)
+            sink="${OPTARG}"
+            ;;
+        t)
+            statusline="${OPTARG}"
+            ;;
+        u)
+            signal="${OPTARG}"
+            ;;
+        v)
+            opt_set_volume=true
+            volume_amount="${OPTARG}"
+            ;;
+        h | *)
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND-1)) # Shift off options and optional --
+
+if ${opt_increase_volume}; then
+    raise_volume "${sink}" "${volume_amount}"
+fi
+
+if ${opt_decrease_volume}; then
+    lower_volume "${sink}" "${volume_amount}"
+fi
+
+if ${opt_set_volume}; then
+    set_volume "${sink}" "${volume_amount}"
+fi
+
+if ${opt_mute_volume}; then
+    toggle_mute "${sink}"
+fi
+
+# The options below this line must be last
+if ${opt_notification}; then
+    if is_muted "${sink}"; then
+        notify_muted
+    else
+        notify_volume "${sink}"
+    fi
+fi
+
+if [ -n "${signal}" ]; then
+    if [ -z "${statusline}" ]; then
+        usage
+    fi
+    update_statusline "${signal}" "${statusline}"
+else
+    if [ -n "${statusline}" ]; then
+        usage
+    fi
+fi
+
