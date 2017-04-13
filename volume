@@ -29,10 +29,15 @@ get_default_sink_name() {
 #   Sink name   (string) Symbolic name of sink.
 get_volume() {
     local sink=$1
-    pacmd list-sinks |
-        awk '/^\s+name: /{indefault = $2 == "<'${sink}'>"}
-            /^\s+volume: / && indefault {print $5; exit}' |
-        sed 's/%//'
+    platform=$(awk -F= '/^NAME/{print $2}' /etc/os-release | sed 's/"//g')
+    if [ "$platform" == "Ubuntu" ]; then
+	pacmd list-sinks | grep -A 6 "$sink" | tail -n 1 | awk '{print $5}' | sed 's/%//'
+    fi
+    if [ "platform" == "Something else" ]; then
+	pacmd list-sinks |
+	    awk '/^\s+name: /{indefault = $2 == "<'${sink}'>"} /^\s+volume: / && indefault {print $5; exit}' |
+	    sed 's/%//'
+    fi
 }
 
 # Increase volume relative to current volume.
@@ -47,8 +52,10 @@ raise_volume() {
     if [ -n "$2" ]; then
         step="$2"
     fi
-
-    set_volume "${sink}" "+${step}%"
+    vol=$(get_volume "$sink")
+    if [ "${vol}" -lt "100" ]; then
+	set_volume "${sink}" "+${step}%"
+    fi
 }
 
 # Decrease volume relative to current volume.
@@ -259,4 +266,3 @@ else
         usage
     fi
 fi
-
