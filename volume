@@ -52,8 +52,10 @@ raise_volume() {
     if [ -n "$2" ]; then
         step="$2"
     fi
-
-    set_volume "${sink}" "+${step}%"
+    vol=$(get_volume "$sink")
+    if [ "${vol}" -lt "100" ]; then
+	set_volume "${sink}" "+${step}%"
+    fi
 }
 
 # Decrease volume relative to current volume.
