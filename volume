@@ -30,7 +30,7 @@ get_default_sink_name() {
 get_volume() {
     local sink=$1
     pacmd list-sinks |
-        awk '/^\s+name: /{indefault = $2 == "<'${sink}'>"}
+        awk -v 'RS=\r?\n' '/^\s+name: /{indefault = $2 == "<'${sink}'>"}
             /^\s+volume: / && indefault {print $5; exit}' |
         sed 's/%//'
 }
@@ -98,7 +98,7 @@ toggle_mute() {
 is_muted() {
     local sink="$1"
     muted=$(pacmd list-sinks |
-            awk '/^\s+name: /{indefault = $2 == "<'${sink}'>"}
+            awk -v 'RS=\r?\n' '/^\s+name: /{indefault = $2 == "<'${sink}'>"}
                 /^\s+muted: / && indefault {print $2; exit}')
     [ "${muted}" = "yes" ]
 }
