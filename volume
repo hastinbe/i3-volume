@@ -114,13 +114,13 @@ get_volume_icon() {
     local vol="$1"
     local icon
 
-    if [ "${vol}" -eq "100" ]; then
+    if [ "${vol}" -eq 100 ]; then
         icon="stock_volume-max"
-    elif [ "${vol}" -ge "70" ]; then
+    elif [ "${vol}" -ge 70 ]; then
         icon="stock_volume-high"
-    elif [ "${vol}" -ge "40" ]; then
+    elif [ "${vol}" -ge 40 ]; then
         icon="stock_volume-med"
-    elif [ "${vol}" -gt "0" ]; then
+    elif [ "${vol}" -gt 0 ]; then
         icon="stock_volume-min"
     else
         icon="stock_volume-0"
@@ -259,4 +259,3 @@ else
         usage
     fi
 fi
-
