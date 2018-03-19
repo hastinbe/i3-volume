@@ -31,8 +31,8 @@ get_volume() {
     local sink=$1
 
     pacmd list-sinks |
-        awk -W posix -v 'RS=\r?\n' '/^[[:space:]]name: /{insink = $2 == "<'$sink'>"}
-                                    /^[[:space:]]volume: / && insink {print $5; exit}' |
+        awk -W posix -v 'RS=\r?\n' '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
+                                    /^[ \t]+volume: / && insink {print $5; exit}' |
         sed 's/%//'
 }
 
@@ -99,8 +99,8 @@ is_muted() {
     local sink="$1"
 
     muted=$(pacmd list-sinks |
-            awk -W posix -v 'RS=\r?\n' '/^[[:space:]]name: /{insink = $2 == "<'$sink'>"}
-                                        /^[[:space:]]muted: / && insink {print $2; exit}')
+            awk -W posix -v 'RS=\r?\n' '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
+                                        /^[ \t]+muted: / && insink {print $2; exit}')
     [ "${muted}" = "yes" ]
 }
 
