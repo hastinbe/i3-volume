@@ -29,9 +29,10 @@ get_default_sink_name() {
 #   Sink name   (string) Symbolic name of sink.
 get_volume() {
     local sink=$1
+
     pacmd list-sinks |
-        awk -v 'RS=\r?\n' '/^\s+name: /{indefault = $2 == "<'${sink}'>"}
-            /^\s+volume: / && indefault {print $5; exit}' |
+        awk -W posix -v 'RS=\r?\n' '/^[[:space:]]name: /{insink = $2 == "<'$sink'>"}
+                                    /^[[:space:]]volume: / && insink {print $5; exit}' |
         sed 's/%//'
 }
 
@@ -76,8 +77,7 @@ set_volume() {
     local sink="$1"
     local vol="$2"
 
-    pactl set-sink-volume "${sink}" "${vol}" ||
-        pactl set-sink-volume "${sink}" -- "${vol}"
+    pactl set-sink-volume "${sink}" "${vol}" || pactl set-sink-volume "${sink}" -- "${vol}"
 }
 
 # Toggle mute.
@@ -97,9 +97,10 @@ toggle_mute() {
 #   0 when true, 1 when false.
 is_muted() {
     local sink="$1"
+
     muted=$(pacmd list-sinks |
-            awk -v 'RS=\r?\n' '/^\s+name: /{indefault = $2 == "<'${sink}'>"}
-                /^\s+muted: / && indefault {print $2; exit}')
+            awk -W posix -v 'RS=\r?\n' '/^[[:space:]]name: /{insink = $2 == "<'$sink'>"}
+                                        /^[[:space:]]muted: / && insink {print $2; exit}')
     [ "${muted}" = "yes" ]
 }
 
@@ -142,6 +143,7 @@ notify_muted() {
 #   Sink name    (string)
 notify_volume() {
     local sink="$1"
+
     vol=$(get_volume "$sink")
     icon=$(get_volume_icon "$vol")
     notify-send -i "${icon}" -h int:value:"${vol}" -h string:synchronous:volume "Volume ${vol}%"
