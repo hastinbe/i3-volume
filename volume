@@ -30,10 +30,14 @@ get_default_sink_name() {
 get_volume() {
     local sink=$1
 
-    pacmd list-sinks |
-        awk -W posix -v 'RS=\r?\n' '/^[[:space:]]name: /{insink = $2 == "<'$sink'>"}
-                                    /^[[:space:]]volume: / && insink {print $5; exit}' |
-        sed 's/%//'
+    #pacmd list-sinks |
+        #awk -W posix -v 'RS=\r?\n' '/^[[:space:]]name: /{insink = $2 == "<'$sink'>"}
+                                    #/^[[:space:]]volume: / && insink {print $5; exit}' |
+        #sed 's/%//'
+    pacmd list-sinks | 
+        grep "volume: front-left" | 
+        sed "s/.*volume: front-left: [0-9]* \/ *//g" | 
+        sed "s/\%.*//g"
 }
 
 # Increase volume relative to current volume.
