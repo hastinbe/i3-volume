@@ -85,6 +85,8 @@ set_volume() {
 # Arguments:
 #   Sink name   (string) Symbolic name of sink.
 toggle_mute() {
+    local sink="$1"
+
     pactl set-sink-mute "${sink}" toggle
 }
 
