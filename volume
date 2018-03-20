@@ -5,9 +5,9 @@
 #  Volume control and volume notifications for i3wm.
 #
 #  Requires:
-#    notify-osd
-#    pulseaudio-utils
-#    awk
+#    amixer or pulseaudio-utils
+#    awk (POSIX compatible)
+#    notify-osd (to use notifications)
 #
 #  Conflicts:
 #    dunst -- with notify-osd when invoking notify-send
@@ -23,87 +23,235 @@ get_default_sink_name() {
     pacmd stat | awk -F": " '/^Default sink name: /{print $2}'
 }
 
-# Gets the sink volume as a percentage.
+# Get the volume as a percentage.
+get_volume() {
+    if $opt_use_amixer; then
+        get_volume_amixer $card
+    else
+        get_volume_pulseaudio $sink
+    fi
+}
+
+# Get the volume as a percentage.
 #
 # Arguments
 #   Sink name   (string) Symbolic name of sink.
-get_volume() {
-    local sink=$1
+get_volume_pulseaudio() {
+    local sink="$1"
 
     pacmd list-sinks |
-        awk -W posix -v 'RS=\r?\n' '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
-                                    /^[ \t]+volume: / && insink {print $5; exit}' |
-        sed 's/%//'
+        awk -W posix -v 'RS=\r?\n' \
+            '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
+             /^[ \t]+volume: / && insink {gsub("%", ""); print $5; exit}'
+}
+
+# Get the volume as a percentage.
+#
+# Arguments
+#   Card        (integer) Card number to control.
+get_volume_amixer() {
+    local card="$1"
+    local volume
+
+    if [ -n "$card" ]; then
+        volume=$(amixer -c "$card" -- sget Master)
+    else
+        volume=$(amixer sget Master)
+    fi
+
+    echo $volume | awk -W posix -F'[][]' '/dB/ { gsub("%", ""); print $2 }'
 }
 
 # Increase volume relative to current volume.
 #
 # Arguments:
-#   Sink name   (string)  Symbolic name of sink.
 #   Step        (integer) Percentage to increase by.
 raise_volume() {
-    local sink="$1"
-    local step="5"
-
-    if [ -n "$2" ]; then
-        step="$2"
+    if $opt_use_amixer; then
+        raise_volume_amixer "$card" "$1"
+    else
+        raise_volume_pulseaudio "$sink" "$1"
     fi
+}
 
-    set_volume "${sink}" "+${step}%"
+# Increase volume relative to current volume using pulseaudio.
+#
+# Arguments:
+#   Sink name   (string)  Symbolic name of sink.
+#   Step        (integer) Percentage to increase by.
+raise_volume_pulseaudio() {
+    local sink="$1"
+    local step="${2:-5}"
+
+    set_volume_pulseaudio "$sink" "+${step}%"
+}
+
+# Increase volume relative to current volume using amixer.
+#
+# Arguments:
+#   Card        (integer) Card number to control.
+#   Step        (integer) Percentage to increase by.
+raise_volume_amixer() {
+    local card="$1"
+    local step="${2:-5}"
+
+    set_volume_amixer "$card" "${step}%+"
 }
 
 # Decrease volume relative to current volume.
 #
 # Arguments:
-#   Sink name   (string)  Symbolic name of sink.
-#   Step        (integer) Percentage to lower by.
+#   Step        (integer) Percentage to decrease by.
 lower_volume() {
-    local sink="$1"
-    local step="5"
-
-    if [ -n "$2" ]; then
-        step="$2"
+    if $opt_use_amixer; then
+        lower_volume_amixer "$card" "$1"
+    else
+        lower_volume_pulseaudio "$sink" "$1"
     fi
-
-    set_volume "${sink}" "-${step}%"
 }
 
-# Set volume of sink.
+# Decrease volume relative to current volume using pulseaudio.
+#
+# Arguments:
+#   Sink name   (string)  Symbolic name of sink.
+#   Step        (integer) Percentage to decrease by.
+lower_volume_pulseaudio() {
+    local sink="$1"
+    local step="${2:-5}"
+
+    set_volume_pulseaudio "$sink" "-${step}%"
+}
+
+# Decrease volume relative to current volume using amixer.
+#
+# Arguments:
+#   Card        (integer) Card number to control.
+#   Step        (integer) Percentage to decrease by.
+lower_volume_amixer() {
+    local card="$1"
+    local step="${2:-5}"
+
+    set_volume_amixer "$card" "${step}%-"
+}
+
+# Set volume.
+#
+# Arguments:
+#   Step        (integer) Percentage to decrease by.
+set_volume() {
+    if $opt_use_amixer; then
+        set_volume_amixer "$card" "$1"
+    else
+        set_volume_pulseaudio "$sink" "$1"
+    fi
+}
+
+# Set volume using pulseaudio.
 #
 # Arguments:
 #   Sink name   (string) Symbolic name of sink.
 #   Volume      (integer|linear factor|percentage|decibel)
-set_volume() {
+set_volume_pulseaudio() {
     local sink="$1"
     local vol="$2"
 
-    pactl set-sink-volume "${sink}" "${vol}" || pactl set-sink-volume "${sink}" -- "${vol}"
+    pactl set-sink-volume "$sink" "$vol" || pactl set-sink-volume "$sink" -- "$vol"
+}
+
+# Set volume using amixer.
+#
+# Arguments:
+#   Card        (integer) Card number to control.
+#   Volume      (integer|linear factor|percentage|decibel)
+set_volume_amixer() {
+    local card="$1"
+    local vol="$2"
+
+    if [ -n "$card" ]; then
+        amixer -q -c "$card" -- set Master "$vol"
+    else
+        amixer -q set Master "$vol"
+    fi
 }
 
 # Toggle mute.
+toggle_mute() {
+    if $opt_use_amixer; then
+        toggle_mute_amixer "$card"
+    else
+        toggle_mute_pulseaudio "$sink"
+    fi
+}
+
+# Toggle mute using pulseaudio.
 #
 # Arguments:
 #   Sink name   (string) Symbolic name of sink.
-toggle_mute() {
+toggle_mute_pulseaudio() {
     local sink="$1"
 
-    pactl set-sink-mute "${sink}" toggle
+    pactl set-sink-mute "$sink" toggle
 }
 
-# Check if default sink is muted.
+# Toggle mute using amixer.
+#
+# Arguments:
+#   Card        (integer) Card number to control.
+toggle_mute_amixer() {
+    local card="$1"
+
+    if [ -n "$card" ]; then
+        amixer -q -c "$card" -- set Master toggle
+    else
+        amixer -q set Master toggle
+    fi
+}
+
+# Check if muted.
+is_muted() {
+    if $opt_use_amixer; then
+        return $(is_muted_amixer "$card")
+    else
+        return $(is_muted_pulseaudio "$sink")
+    fi
+}
+
+# Check if sink is muted.
 #
 # Arguments:
 #   Sink name    (string) Symbolic name of sink.
 #
 # Returns:
 #   0 when true, 1 when false.
-is_muted() {
+is_muted_pulseaudio() {
     local sink="$1"
 
     muted=$(pacmd list-sinks |
-            awk -W posix -v 'RS=\r?\n' '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
+                   awk -W posix -v 'RS=\r?\n' '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
                                         /^[ \t]+muted: / && insink {print $2; exit}')
-    [ "${muted}" = "yes" ]
+    [ "$muted" = "yes" ]
+}
+
+# Check if card is muted.
+#
+# Arguments:
+#   Card        (integer) Card number to control.
+#
+# Returns:
+#   0 when true, 1 when false.
+is_muted_amixer() {
+    local card="$1"
+    local output
+
+    if [ -n "$card" ]; then
+        output=$(amixer -c "$card" -- sget Master)
+    else
+        output=$(amixer sget Master)
+    fi
+
+    status=$(echo $output | awk -W posix -F'[][]' '/dB/ { print $6 }')
+
+    [ "$status" = "off" ]
 }
 
 # Gets an icon for the provided volume.
@@ -117,10 +265,10 @@ get_volume_icon() {
     local vol="$1"
     local icon
 
-    if [ "${vol}" -eq 100 ]; then icon="stock_volume-max"
-    elif [ "${vol}" -ge 70 ]; then icon="stock_volume-high"
-    elif [ "${vol}" -ge 40 ]; then icon="stock_volume-med"
-    elif [ "${vol}" -gt 0 ]; then icon="stock_volume-min"
+    if [ "$vol" -eq 100 ]; then icon="stock_volume-max"
+    elif [ "$vol" -ge 70 ]; then icon="stock_volume-high"
+    elif [ "$vol" -ge 40 ]; then icon="stock_volume-med"
+    elif [ "$vol" -gt 0 ]; then icon="stock_volume-min"
     else icon="stock_volume-0"
     fi
 
@@ -133,15 +281,10 @@ notify_muted() {
 }
 
 # Display a notification indicating the current volume.
-#
-# Arguments:
-#   Sink name    (string)
 notify_volume() {
-    local sink="$1"
-
-    vol=$(get_volume "$sink")
+    vol=$(get_volume)
     icon=$(get_volume_icon "$vol")
-    notify-send -i "${icon}" -h int:value:"${vol}" -h string:synchronous:volume "Volume ${vol}%"
+    notify-send -i "$icon" -h int:value:"$vol" -h string:synchronous:volume "Volume ${vol}%"
 }
 
 # Updates the status line.
@@ -152,7 +295,7 @@ notify_volume() {
 update_statusline() {
     local signal="$1"
     local proc="$2"
-    pkill "-${signal}" "${proc}"
+    pkill "-$signal" "$proc"
 }
 
 # Display program usage.
@@ -161,12 +304,14 @@ usage() {
 Control volume and related notifications.
 
 Options:
-  -i <amount>       increase volume
+  -a                use alsa-utils instead of pulseaudio-utils for volume control
+  -c <card>         card number to control (amixer only)
   -d <amount>       decrease volume
+  -i <amount>       increase volume
   -m                toggle mute
-  -n                show notification
-  -s <sink name>    symbolic name of sink
-  -t <procname>     name of status line process. must be used with -u
+  -n                show notifications
+  -s <sink_name>    symbolic name of sink (pulseaudio only)
+  -t <process_name> name of status line process. must be used with -u
   -u <signal>       update status line using signal. must be used with -t
   -v <value>        set volume
   -h                display this help and exit
@@ -180,20 +325,28 @@ opt_increase_volume=false
 opt_mute_volume=false
 opt_notification=false
 opt_set_volume=false
+opt_use_amixer=false
+card=""
 signal=""
-sink="$(get_default_sink_name)"
+sink=""
 statusline=""
-volume_amount="5"
+volume=5
 
-while getopts ":d:hi:mns:t:u:v:" o; do
-    case "${o}" in
+while getopts ":ac:d:hi:mns:t:u:v:" o; do
+    case "$o" in
+        a)
+            opt_use_amixer=true
+            ;;
+        c)
+            card="$OPTARG"
+            ;;
         d)
             opt_decrease_volume=true
-            volume_amount="${OPTARG}"
+            volume="${OPTARG}"
             ;;
         i)
             opt_increase_volume=true
-            volume_amount="${OPTARG}"
+            volume="${OPTARG}"
             ;;
         m)
             opt_mute_volume=true
@@ -212,7 +365,7 @@ while getopts ":d:hi:mns:t:u:v:" o; do
             ;;
         v)
             opt_set_volume=true
-            volume_amount="${OPTARG}"
+            volume="${OPTARG}"
             ;;
         h | *)
             usage
@@ -221,28 +374,34 @@ while getopts ":d:hi:mns:t:u:v:" o; do
 done
 shift $((OPTIND-1)) # Shift off options and optional --
 
+if ! $opt_use_amixer; then
+    if [ -z $sink ]; then
+        sink="$(get_default_sink_name)"
+    fi
+fi
+
 if ${opt_increase_volume}; then
-    raise_volume "${sink}" "${volume_amount}"
+    raise_volume $volume
 fi
 
 if ${opt_decrease_volume}; then
-    lower_volume "${sink}" "${volume_amount}"
+    lower_volume $volume
 fi
 
 if ${opt_set_volume}; then
-    set_volume "${sink}" "${volume_amount}"
+    set_volume $volume
 fi
 
 if ${opt_mute_volume}; then
-    toggle_mute "${sink}"
+    toggle_mute $sink
 fi
 
 # The options below this line must be last
 if ${opt_notification}; then
-    if is_muted "${sink}"; then
+    if is_muted; then
         notify_muted
     else
-        notify_volume "${sink}"
+        notify_volume
     fi
 fi
 
