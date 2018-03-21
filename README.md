@@ -1,6 +1,6 @@
 i3-volume
 =========
-[![License](http://img.shields.io/:license-GPLv2-blue.svg)][license]
+[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)][license]
 
 Volume control and volume notifications for [i3wm]
 
