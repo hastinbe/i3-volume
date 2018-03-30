@@ -75,6 +75,7 @@ Reload i3 configuration by pressing `mod+Shift+r`
 Use your keyboard volume keys to increase, decrease, or mute your volume. If you have a volume indicator in your status line it will be updated to reflect the volume change (requires `-t $statuscmd` and `-u $statussig` to be set). When notifications are enabled (`-n` flag) a popup will display the volume level.
 
 Example of notifications using [notify-osd]:
+
 ![Volume Notifications](https://github.com/hastinbe/i3-volume/blob/master/volume-notifications.png)
 
 ## Common Issues
