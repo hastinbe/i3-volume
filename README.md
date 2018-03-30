@@ -9,24 +9,18 @@ Volume control and volume notifications for [i3wm]
 #### Requirements
 * [i3wm] - A better tiling and dynamic window manager
 * [alsa-utils] (if not using [pulseaudio-utils]) - Advanced Linux Sound Architecture utils
-* [pulseaudio-utils] (if not using [alsa-utils]) - Sound system for POSIX OSes.
+* [pulseaudio-utils] (if not using [alsa-utils]) - Sound system for POSIX OSes
 
 #### Optional
-* [notify-osd] - Canonical's on-screen-display notification agent
-
-#### Conflicts
-* `dunst` will not work with i3-volume's notifications. If you wish to use notifications you must use [notify-osd].
-* [alsa-utils] won't unmute if `pulseaudio` is running. You must disable pulseaudio's auto respawn and terminate the `pulseaudio` process. Or use [pulseaudio-utils] for unmuting.
-
-`Note:` The Ubuntu repository provided by sur5r for the stable i3 package will install `dunst`. The `dunst` daemon cannot be running for notifications to go to [notify-osd]! `killall -9 dunst` or remove `dunst` with `sudo apt-get remove dunst`
+* A [libnotify] compatible notification daemon such as [notify-osd] or [dunst]
 
 #### ALSA mixer and PulseAudio
 Volume control can be done through either [alsa-utils], [pulseaudio-utils], or both. The example configuration uses [pulseaudio-utils]. If you want to use [alsa-utils] instead, comment out the `bindsyms` under [pulseaudio-utils] and uncomment the `bindsyms` under [alsa-utils].
 
 #### Notifications
-Notifications are provided through Canonical's on-screen-display notification agent. If you don't have or want this agent, remove the `-n` option from the `bindsyms` in the example configuration below.
+Notifications are provided by [libnotify]. Any [libnotify] compatible notification daemon can be used for notifications. The most common are [notify-osd] and [dunst]. To disable notifications remove the `-n` option from the `bindsyms` in the example configuration below.
 
-#### Guide
+### Guide
 Clone this repository: `git clone https://github.com/hastinbe/i3-volume.git ~/i3-volume`
 
 Edit the following example and append it to your ~/.config/i3/config:
@@ -74,15 +68,21 @@ set $volumestep 5
 bindsym XF86AudioRaiseVolume exec $volumepath/volume -n -i $volumestep -t $statuscmd -u $statussig
 bindsym XF86AudioLowerVolume exec $volumepath/volume -n -d $volumestep -t $statuscmd -u $statussig
 bindsym XF86AudioMute        exec $volumepath/volume -mn -t $statuscmd -u $statussig
-
-
 ```
 Reload i3 configuration by pressing `mod+Shift+r`
 
 ## Usage
 Use your keyboard volume keys to increase, decrease, or mute your volume. If you have a volume indicator in your status line it will be updated to reflect the volume change (requires `-t $statuscmd` and `-u $statussig` to be set). When notifications are enabled (`-n` flag) a popup will display the volume level.
 
+Example of notifications using [notify-osd]:
 ![Volume Notifications](https://github.com/hastinbe/i3-volume/blob/master/volume-notifications.png)
+
+## Common Issues
+* [alsa-utils] won't unmute if `pulseaudio` is running. You must disable pulseaudio's auto respawn and terminate the `pulseaudio` process. Or use [pulseaudio-utils] for unmuting.
+* [dunst] isn't displaying icons in notifications. `icon_position` needs to be set to either `left` or `right` (default is `off`) in your `~/.config/dunst/dunstrc`.
+* [dunst] icons are too small. Change `icon_path` in your `~/.config/dunst/dunstrc` to a path containing larger icons, such as `/usr/share/icons/gnome/32x32/status/:/usr/share/icons/gnome/32x32/devices/`. Alternatively try increasing `max_icon_size`
+
+`Note` only one notification daemon can be running at the same time. [dunst] can't be running for notifications to go through [notify-osd] and vice-versa.
 
 ## License
 
@@ -91,7 +91,9 @@ Use your keyboard volume keys to increase, decrease, or mute your volume. If you
 Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 
 [alsa-utils]: https://alsa.opensrc.org/Alsa-utils
+[dunst]: https://dunst-project.org
 [i3wm]: https://i3wm.org
+[libnotify]: https://developer.gnome.org/libnotify
 [license]: https://www.gnu.org/licenses/gpl-2.0.en.html
 [notify-osd]: https://launchpad.net/notify-osd
 [pulseaudio-utils]: https://www.freedesktop.org/wiki/Software/PulseAudio/

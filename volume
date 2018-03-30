@@ -5,12 +5,11 @@
 #  Volume control and volume notifications for i3wm.
 #
 #  Requires:
-#    amixer or pulseaudio-utils
+#    alsa-utils or pulseaudio-utils
 #    awk (POSIX compatible)
-#    notify-osd (to use notifications)
 #
-#  Conflicts:
-#    dunst -- with notify-osd when invoking notify-send
+#  Optional:
+#    A libnotify compatible notification daemon such as notify-osd or dunst
 #
 #  Copyright (c) 2016 Beau Hastings. All rights reserved.
 #  License: GNU General Public License v2
