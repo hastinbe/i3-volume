@@ -58,8 +58,8 @@ set $volumestep 5
 #set $alsacard 1
 
 # Uncomment to use alsa-utils (append "-c $alsacard" without quotes to override default card)
-#bindsym XF86AudioRaiseVolume exec $volumepath/volume -an -i $volumestep -t $statuscmd -u $statussig
-#bindsym XF86AudioLowerVolume exec $volumepath/volume -an -d $volumestep -t $statuscmd -u $statussig
+#bindsym XF86AudioRaiseVolume exec $volumepath/volume -anp -i $volumestep -t $statuscmd -u $statussig
+#bindsym XF86AudioLowerVolume exec $volumepath/volume -anp -d $volumestep -t $statuscmd -u $statussig
 #bindsym XF86AudioMute        exec $volumepath/volume -amn -t $statuscmd -u $statussig
 
 # pulseaudio-utils settings when not using alsa-utils
@@ -70,8 +70,8 @@ set $volumestep 5
 #set $sinkname alsa_output.pci-0000_00_1b.0.analog-stereo
 
 # Using pulseaudio-utils (append "-s $sinkname" without quotes to override default sink)
-bindsym XF86AudioRaiseVolume exec $volumepath/volume -n -i $volumestep -t $statuscmd -u $statussig
-bindsym XF86AudioLowerVolume exec $volumepath/volume -n -d $volumestep -t $statuscmd -u $statussig
+bindsym XF86AudioRaiseVolume exec $volumepath/volume -np -i $volumestep -t $statuscmd -u $statussig
+bindsym XF86AudioLowerVolume exec $volumepath/volume -np -d $volumestep -t $statuscmd -u $statussig
 bindsym XF86AudioMute        exec $volumepath/volume -mn -t $statuscmd -u $statussig
 ```
 Reload i3 configuration by pressing `mod+Shift+r`

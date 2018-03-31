@@ -286,13 +286,19 @@ notify_muted() {
 
 # Display a notification indicating the current volume.
 notify_volume() {
-    vol=$(get_volume)
-    icon=$(get_volume_icon "$vol")
+    local vol=$(get_volume)
+    local icon=$(get_volume_icon "$vol")
+    local text="Volume ${vol}%"
+
+    if $opt_show_volume_progress; then
+        local progress=$(get_progress_bar "$vol")
+        text="$text $progress"
+    fi
 
     if $opt_use_dunstify; then
-        dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "Volume ${vol}%" -r 1000
+        dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
     else
-        notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "Volume ${vol}%"
+        notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text"
     fi
 }
 
@@ -305,6 +311,24 @@ update_statusline() {
     local signal="$1"
     local proc="$2"
     pkill "-$signal" "$proc"
+}
+
+# Generates a progress bar for the provided value.
+#
+# Arguments:
+#   Percentage      (integer) Percentage of progress.
+#   Maximum         (integer) Maximum percentage. (default: 100)
+#   Divisor         (integer) For calculating the ratio of blocks to progress (default: 5)
+#
+# Returns:
+#   The progress bar.
+get_progress_bar() {
+    local percent="$1"
+    local max_percent=${2:-100}
+    local divisor=${3:-5}
+    local progress=$((($percent > $max_percent ? $max_percent : $percent) / $divisor))
+
+    printf '█%.0s' $(eval echo "{1..$progress}")
 }
 
 # Display program usage.
@@ -320,6 +344,7 @@ Options:
   -i <amount>       increase volume
   -m                toggle mute
   -n                show notifications
+  -p                show text volume progress bar
   -s <sink_name>    symbolic name of sink (pulseaudio only)
   -t <process_name> name of status line process. must be used with -u
   -u <signal>       update status line using signal. must be used with -t
@@ -336,6 +361,7 @@ opt_increase_volume=false
 opt_mute_volume=false
 opt_notification=false
 opt_set_volume=false
+opt_show_volume_progress=false
 opt_use_amixer=false
 opt_use_dunstify=false
 card=""
@@ -345,7 +371,7 @@ statusline=""
 volume=5
 expires="1500"
 
-while getopts ":ac:d:e:hi:mns:t:u:v:y" o; do
+while getopts ":ac:d:e:hi:mnps:t:u:v:y" o; do
     case "$o" in
         a)
             opt_use_amixer=true
@@ -369,6 +395,9 @@ while getopts ":ac:d:e:hi:mns:t:u:v:y" o; do
             ;;
         n)
             opt_notification=true
+            ;;
+        p)
+            opt_show_volume_progress=true
             ;;
         s)
             sink="${OPTARG}"
