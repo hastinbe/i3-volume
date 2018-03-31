@@ -10,6 +10,7 @@
 #
 #  Optional:
 #    A libnotify compatible notification daemon such as notify-osd or dunst
+#    notify-send (libnotify) or dunstify (dunst)
 #
 #  Copyright (c) 2016 Beau Hastings. All rights reserved.
 #  License: GNU General Public License v2
@@ -226,8 +227,9 @@ is_muted_pulseaudio() {
     local sink="$1"
 
     muted=$(pacmd list-sinks |
-                   awk -W posix -v 'RS=\r?\n' '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
-                                        /^[ \t]+muted: / && insink {print $2; exit}')
+                   awk -W posix -v 'RS=\r?\n' \
+                       '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
+                        /^[ \t]+muted: / && insink {print $2; exit}')
     [ "$muted" = "yes" ]
 }
 
@@ -275,14 +277,23 @@ get_volume_icon() {
 
 # Display a notification indicating the volume is muted.
 notify_muted() {
-    notify-send -i audio-volume-muted -h int:value:0 -h string:synchronous:volume "Volume muted"
+    if $opt_use_dunstify; then
+        dunstify -i audio-volume-muted -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -r 1000
+    else
+        notify-send -i audio-volume-muted -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted"
+    fi
 }
 
 # Display a notification indicating the current volume.
 notify_volume() {
     vol=$(get_volume)
     icon=$(get_volume_icon "$vol")
-    notify-send -i "$icon" -h int:value:"$vol" -h string:synchronous:volume "Volume ${vol}%"
+
+    if $opt_use_dunstify; then
+        dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "Volume ${vol}%" -r 1000
+    else
+        notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "Volume ${vol}%"
+    fi
 }
 
 # Updates the status line.
@@ -305,6 +316,7 @@ Options:
   -a                use alsa-utils instead of pulseaudio-utils for volume control
   -c <card>         card number to control (amixer only)
   -d <amount>       decrease volume
+  -e <expires>      expiration time of notifications, in milliseconds
   -i <amount>       increase volume
   -m                toggle mute
   -n                show notifications
@@ -312,6 +324,7 @@ Options:
   -t <process_name> name of status line process. must be used with -u
   -u <signal>       update status line using signal. must be used with -t
   -v <value>        set volume
+  -y                use dunstify instead of notify-send
   -h                display this help and exit
 " 1>&2
     exit 1
@@ -324,23 +337,28 @@ opt_mute_volume=false
 opt_notification=false
 opt_set_volume=false
 opt_use_amixer=false
+opt_use_dunstify=false
 card=""
 signal=""
 sink=""
 statusline=""
 volume=5
+expires="1500"
 
-while getopts ":ac:d:hi:mns:t:u:v:" o; do
+while getopts ":ac:d:e:hi:mns:t:u:v:y" o; do
     case "$o" in
         a)
             opt_use_amixer=true
             ;;
         c)
-            card="$OPTARG"
+            card="${OPTARG}"
             ;;
         d)
             opt_decrease_volume=true
             volume="${OPTARG}"
+            ;;
+        e)
+            expires="${OPTARG}"
             ;;
         i)
             opt_increase_volume=true
@@ -364,6 +382,9 @@ while getopts ":ac:d:hi:mns:t:u:v:" o; do
         v)
             opt_set_volume=true
             volume="${OPTARG}"
+            ;;
+        y)
+            opt_use_dunstify=true
             ;;
         h | *)
             usage

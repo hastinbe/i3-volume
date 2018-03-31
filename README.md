@@ -13,12 +13,17 @@ Volume control and volume notifications for [i3wm]
 
 #### Optional
 * A [libnotify] compatible notification daemon such as [notify-osd] or [dunst]
+* `notify-send` (provided by [libnotify]) or `dunstify` (provided by [dunst])
 
 #### ALSA mixer and PulseAudio
 Volume control can be done through either [alsa-utils], [pulseaudio-utils], or both. The example configuration uses [pulseaudio-utils]. If you want to use [alsa-utils] instead, comment out the `bindsyms` under [pulseaudio-utils] and uncomment the `bindsyms` under [alsa-utils].
 
 #### Notifications
 Notifications are provided by [libnotify]. Any [libnotify] compatible notification daemon can be used for notifications. The most common are [notify-osd] and [dunst]. To disable notifications remove the `-n` option from the `bindsyms` in the example configuration below.
+
+If you are using [dunst], you may optionally choose to use `dunstify` instead of `notify-send` by adding the `-y` option to the `bindsyms` in the example configuration below.
+
+Expiration time of notifications can be changed using the `-e <time_in_milliseconds>` option. Default is 1500 ms.
 
 ### Guide
 Clone this repository: `git clone https://github.com/hastinbe/i3-volume.git ~/i3-volume`
