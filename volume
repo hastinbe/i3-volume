@@ -40,9 +40,8 @@ get_volume_pulseaudio() {
     local sink="$1"
 
     pacmd list-sinks |
-        awk -W posix -v 'RS=\r?\n' \
-            '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
-             /^[ \t]+volume: / && insink {gsub("%", ""); print $5; exit}'
+        awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
+                      /^[ \t]+volume: / && insink {gsub("%", ""); print $5; exit}'
 }
 
 # Get the volume as a percentage.
@@ -227,9 +226,8 @@ is_muted_pulseaudio() {
     local sink="$1"
 
     muted=$(pacmd list-sinks |
-                   awk -W posix -v 'RS=\r?\n' \
-                       '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
-                        /^[ \t]+muted: / && insink {print $2; exit}')
+                   awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
+                                 /^[ \t]+muted: / && insink {print $2; exit}')
     [ "$muted" = "yes" ]
 }
 
