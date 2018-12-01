@@ -66,6 +66,9 @@ get_volume_amixer() {
 # Arguments:
 #   Step        (integer) Percentage to increase by.
 raise_volume() {
+    if [ $(get_volume) -ge "100" ];then
+        return 0;
+    fi
     if $opt_use_amixer; then
         raise_volume_amixer "$card" "$1"
     else
@@ -102,6 +105,9 @@ raise_volume_amixer() {
 # Arguments:
 #   Step        (integer) Percentage to decrease by.
 lower_volume() {
+    if [ $(get_volume) -le "0" ];then
+        return 0;
+    fi
     if $opt_use_amixer; then
         lower_volume_amixer "$card" "$1"
     else
