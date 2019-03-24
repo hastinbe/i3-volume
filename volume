@@ -66,7 +66,7 @@ get_volume_amixer() {
 # Arguments:
 #   Step        (integer) Percentage to increase by.
 raise_volume() {
-    if [ $(get_volume) -ge "100" ];then
+    if [[ "$max_volume" -ge "0" && $(get_volume) -ge "$max_volume" ]];then
         return 0;
     fi
     if $opt_use_amixer; then
@@ -332,7 +332,9 @@ get_progress_bar() {
     local divisor=${3:-5}
     local progress=$((($percent > $max_percent ? $max_percent : $percent) / $divisor))
 
-    printf '█%.0s' $(eval echo "{1..$progress}")
+    if [ "$percent" -gt "0" ]; then
+        printf '█%.0s' $(eval echo "{1..$progress}")
+    fi
 }
 
 # Display program usage.
@@ -354,6 +356,7 @@ Options:
   -u <signal>       update status line using signal. must be used with -t
   -v <value>        set volume
   -y                use dunstify instead of notify-send
+  -l <max_volume>   limits volume
   -h                display this help and exit
 " 1>&2
     exit 1
@@ -374,8 +377,9 @@ sink=""
 statusline=""
 volume=5
 expires="1500"
+max_volume=-1
 
-while getopts ":ac:d:e:hi:mnps:t:u:v:y" o; do
+while getopts ":ac:d:e:hi:mnps:t:u:v:yl:" o; do
     case "$o" in
         a)
             opt_use_amixer=true
@@ -418,6 +422,9 @@ while getopts ":ac:d:e:hi:mnps:t:u:v:y" o; do
             ;;
         y)
             opt_use_dunstify=true
+            ;;
+        l)
+            max_volume="${OPTARG}"
             ;;
         h | *)
             usage
