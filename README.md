@@ -15,6 +15,10 @@ Volume control and volume notifications for [i3wm]
 * A [libnotify] compatible notification daemon such as [notify-osd] or [dunst]
 * `notify-send` (provided by [libnotify]) or `dunstify` (provided by [dunst])
 
+#### Arch Linux
+
+Arch Linux users may find PKGBUILD in [aur](https://aur.archlinux.org/packages/i3-volume/).
+
 #### ALSA mixer and PulseAudio
 Volume control can be done through either [alsa-utils], [pulseaudio-utils], or both. The example configuration uses [pulseaudio-utils]. If you want to use [alsa-utils] instead, comment out the `bindsyms` under [pulseaudio-utils] and uncomment the `bindsyms` under [alsa-utils].
 
