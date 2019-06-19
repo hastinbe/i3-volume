@@ -374,7 +374,7 @@ volume=5
 expires="1500"
 opt_get_volume=false
 
-while getopts ":ac:d:e:hi:mnps:t:u:v:y:g" o; do
+while getopts ":ac:d:e:hi:mnps:t:u:v:yg" o; do
     case "$o" in
         a)
             opt_use_amixer=true
