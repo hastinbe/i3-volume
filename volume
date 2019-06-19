@@ -44,6 +44,10 @@ get_volume_pulseaudio() {
                       /^[ \t]+volume: / && insink {gsub("%", ""); print $5; exit}'
 }
 
+get_if_muted_pulseaudio() {
+    pacmd list-sinks $sink | grep muted | grep yes
+}
+
 # Get the volume as a percentage.
 #
 # Arguments
@@ -456,7 +460,13 @@ if ${opt_notification}; then
 fi
 
 if ${opt_get_volume}; then
-  echo $(get_volume)
+  muted=$(get_if_muted_pulseaudio)
+  if [ -z "$muted" ]
+  then
+    echo $(get_volume)%
+  else
+    echo "MUTED"
+  fi
 fi
 
 if [ -n "${signal}" ]; then
