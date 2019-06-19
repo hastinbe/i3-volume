@@ -368,8 +368,9 @@ sink=""
 statusline=""
 volume=5
 expires="1500"
+opt_get_volume=false
 
-while getopts ":ac:d:e:hi:mnps:t:u:v:y" o; do
+while getopts ":ac:d:e:hi:mnps:t:u:v:y:g" o; do
     case "$o" in
         a)
             opt_use_amixer=true
@@ -413,6 +414,9 @@ while getopts ":ac:d:e:hi:mnps:t:u:v:y" o; do
         y)
             opt_use_dunstify=true
             ;;
+        g)
+            opt_get_volume=true
+            ;;
         h | *)
             usage
             ;;
@@ -449,6 +453,10 @@ if ${opt_notification}; then
     else
         notify_volume
     fi
+fi
+
+if ${opt_get_volume}; then
+  echo $(get_volume)
 fi
 
 if [ -n "${signal}" ]; then
