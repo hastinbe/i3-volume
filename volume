@@ -264,10 +264,19 @@ get_volume_icon() {
     local vol="$1"
     local icon
 
-    if [ "$vol" -ge 70 ]; then icon="audio-volume-high"
-    elif [ "$vol" -ge 40 ]; then icon="audio-volume-medium"
-    elif [ "$vol" -gt 0 ]; then icon="audio-volume-low"
-    else icon="audio-volume-low"
+    if $opt_use_legacy_icons; then
+        if [ "$vol" -ge 70 ]; then icon="audio-volume-high"
+        elif [ "$vol" -ge 40 ]; then icon="audio-volume-medium"
+        elif [ "$vol" -gt 0 ]; then icon="audio-volume-low"
+        else icon="audio-volume-low"
+        fi
+    else
+        if [ "$vol" -gt 100 ]; then icon="audio-volume-overamplified-symbolic"
+        elif [ "$vol" -ge 70 ]; then icon="audio-volume-high-symbolic"
+        elif [ "$vol" -ge 40 ]; then icon="audio-volume-medium-symbolic"
+        elif [ "$vol" -gt 0 ]; then icon="audio-volume-low-symbolic"
+        else icon="audio-volume-low-symbolic"
+        fi
     fi
 
     echo "${icon}"
@@ -275,10 +284,18 @@ get_volume_icon() {
 
 # Display a notification indicating the volume is muted.
 notify_muted() {
-    if $opt_use_dunstify; then
-        dunstify -i audio-volume-muted -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -r 1000
+    local icon
+
+    if $opt_use_legacy_icons; then
+        icon="audio-volume-muted"
     else
-        notify-send -i audio-volume-muted -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted"
+        icon="audio-volume-muted-symbolic"
+    fi
+
+    if $opt_use_dunstify; then
+        dunstify -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -r 1000
+    else
+        notify-send -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted"
     fi
 }
 
@@ -340,6 +357,7 @@ Options:
   -d <amount>       decrease volume
   -e <expires>      expiration time of notifications, in milliseconds
   -i <amount>       increase volume
+  -l                use legacy icons
   -m                toggle mute
   -n                show notifications
   -p                show text volume progress bar
@@ -362,6 +380,7 @@ opt_set_volume=false
 opt_show_volume_progress=false
 opt_use_amixer=false
 opt_use_dunstify=false
+opt_use_legacy_icons=false
 card=""
 signal=""
 sink=""
@@ -387,6 +406,9 @@ while getopts ":ac:d:e:hi:mnps:t:u:v:y" o; do
         i)
             opt_increase_volume=true
             volume="${OPTARG}"
+            ;;
+        l)
+            opt_use_legacy_icons=true
             ;;
         m)
             opt_mute_volume=true
