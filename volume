@@ -388,7 +388,7 @@ statusline=""
 volume=5
 expires="1500"
 
-while getopts ":ac:d:e:hi:mnps:t:u:v:y" o; do
+while getopts ":ac:d:e:hi:lmnps:t:u:v:y" o; do
     case "$o" in
         a)
             opt_use_amixer=true
