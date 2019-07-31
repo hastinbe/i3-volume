@@ -271,11 +271,11 @@ get_volume_icon() {
         else icon="audio-volume-low"
         fi
     else
-        if [ "$vol" -gt 100 ]; then icon="audio-volume-overamplified-symbolic"
-        elif [ "$vol" -ge 70 ]; then icon="audio-volume-high-symbolic"
-        elif [ "$vol" -ge 40 ]; then icon="audio-volume-medium-symbolic"
-        elif [ "$vol" -gt 0 ]; then icon="audio-volume-low-symbolic"
-        else icon="audio-volume-low-symbolic"
+        if [ "$vol" -gt 100 ]; then icon="audio-volume-overamplified-symbolic.symbolic"
+        elif [ "$vol" -ge 70 ]; then icon="audio-volume-high-symbolic.symbolic"
+        elif [ "$vol" -ge 40 ]; then icon="audio-volume-medium-symbolic.symbolic"
+        elif [ "$vol" -gt 0 ]; then icon="audio-volume-low-symbolic.symbolic"
+        else icon="audio-volume-low-symbolic.symbolic"
         fi
     fi
 
@@ -289,7 +289,7 @@ notify_muted() {
     if $opt_use_legacy_icons; then
         icon="audio-volume-muted"
     else
-        icon="audio-volume-muted-symbolic"
+        icon="audio-volume-muted-symbolic.symbolic"
     fi
 
     if $opt_use_dunstify; then
