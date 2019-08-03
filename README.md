@@ -7,81 +7,35 @@ Volume control and volume notifications for [i3wm]
 ## Installation
 
 #### Requirements
-* [i3wm] - A better tiling and dynamic window manager
-* [alsa-utils] (if not using [pulseaudio-utils]) - Advanced Linux Sound Architecture utils
-* [pulseaudio-utils] (if not using [alsa-utils]) - Sound system for POSIX OSes
+* [i3wm]
+* [alsa-utils] or [pulseaudio-utils]
 
 #### Optional
-* A [libnotify] compatible notification daemon such as [notify-osd] or [dunst]
+* [notify-osd], [dunst], or any [libnotify] compatible notification daemon
 * `notify-send` (provided by [libnotify]) or `dunstify` (provided by [dunst])
 
 #### Arch Linux
-
-Arch Linux users may find PKGBUILD in [aur](https://aur.archlinux.org/packages/i3-volume/).
+Arch Linux users may find PKGBUILD in [aur].
 
 #### ALSA mixer and PulseAudio
-Volume control can be done through either [alsa-utils], [pulseaudio-utils], or both. The example configuration uses [pulseaudio-utils]. If you want to use [alsa-utils] instead, comment out the `bindsyms` under [pulseaudio-utils] and uncomment the `bindsyms` under [alsa-utils].
+Volume control can be done through either [alsa-utils], [pulseaudio-utils], or both. Use one of the example configuration to get started.
 
 #### Notifications
-Notifications are provided by [libnotify]. Any [libnotify] compatible notification daemon can be used for notifications. The most common are [notify-osd] and [dunst]. To disable notifications remove the `-n` option from the `bindsyms` in the example configuration below.
+Notifications are provided by [libnotify]. Any [libnotify] compatible notification daemon can be used for notifications. The most common are [notify-osd] and [dunst].
 
-If you are using [dunst], you may optionally choose to use `dunstify` instead of `notify-send` by adding the `-y` option to the `bindsyms` in the example configuration below.
+If you are using [dunst], you may optionally choose to use `dunstify` instead of `notify-send` by adding the `-y` option.
 
-Expiration time of notifications can be changed using the `-e <time_in_milliseconds>` option. Default is 1500 ms.
+Expiration time of notifications can be changed using the `-e <time_in_milliseconds>` option. Default is 1500 ms. (Ubuntu's Notify OSD and GNOME Shell both ignore the expiration parameter.)
 
 ### Guide
 Clone this repository: `git clone https://github.com/hastinbe/i3-volume.git ~/i3-volume`
 
-Edit the following example and append it to your ~/.config/i3/config:
+Append the contents of the sample configuration files `i3volume-alsa.conf` or `i3volume-pulseaudio.conf` to your i3 config, such as `~/.config/i3/config`
 
-```
-## Volume control
-
-# Path to volume control, without trailing slash
-set $volumepath ~/i3-volume
-
-# Command for the status line (used with -t, requires -u)
-#   ie: i3blocks, i3status
-set $statuscmd i3status
-
-# Signal used to update the status line (used with -u, requires -t)
-#   i3blocks uses SIGRTMIN+10 by default
-#   i3status uses SIGUSR1 by default
-set $statussig SIGUSR1
-
-# Amount to increase/decrease volume as a percentage (used with -i, -d)
-set $volumestep 5
-
-# alsa-utils settings when not using pulseaudio-utils
-#
-# To configure a default card, see https://www.alsa-project.org/main/index.php/Asoundrc
-#
-# Card number to control. (used with -a and -c)
-#   If not specified, i3-volume will let `amixer` use a default.
-#   List cards: aplay -l
-#set $alsacard 1
-
-# Uncomment to use alsa-utils (append "-c $alsacard" without quotes to override default card)
-#bindsym XF86AudioRaiseVolume exec $volumepath/volume -anp -i $volumestep -t $statuscmd -u $statussig
-#bindsym XF86AudioLowerVolume exec $volumepath/volume -anp -d $volumestep -t $statuscmd -u $statussig
-#bindsym XF86AudioMute        exec $volumepath/volume -amn -t $statuscmd -u $statussig
-
-# pulseaudio-utils settings when not using alsa-utils
-#
-# Symbolic name for sink (numeric index not supported) (used with -s $sinkname)
-#   Recommended: comment out this setting and omit the -s option to use default sink
-#   List sink names: pacmd list-sinks | awk -F "[<>]" '/^\s+name: <.*>/{print $2}'
-#set $sinkname alsa_output.pci-0000_00_1b.0.analog-stereo
-
-# Using pulseaudio-utils (append "-s $sinkname" without quotes to override default sink)
-bindsym XF86AudioRaiseVolume exec $volumepath/volume -np -i $volumestep -t $statuscmd -u $statussig
-bindsym XF86AudioLowerVolume exec $volumepath/volume -np -d $volumestep -t $statuscmd -u $statussig
-bindsym XF86AudioMute        exec $volumepath/volume -mn -t $statuscmd -u $statussig
-```
 Reload i3 configuration by pressing `mod+Shift+r`
 
 ## Usage
-Use your keyboard volume keys to increase, decrease, or mute your volume. If you have a volume indicator in your status line it will be updated to reflect the volume change (requires `-t $statuscmd` and `-u $statussig` to be set). When notifications are enabled (`-n` flag) a popup will display the volume level.
+Use your keyboard volume keys to increase, decrease, or mute your volume. If you have a volume indicator in your status line it will be updated to reflect the volume change. When notifications are enabled a popup will display the volume level.
 
 Example of notifications using [notify-osd]:
 
@@ -95,12 +49,12 @@ Example of notifications using [notify-osd]:
 `Note` only one notification daemon can be running at the same time. [dunst] can't be running for notifications to go through [notify-osd] and vice-versa.
 
 ## License
-
 `i3-volume` is released under [GNU General Public License v2][license]
 
 Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 
 [alsa-utils]: https://alsa.opensrc.org/Alsa-utils
+[aur]: https://aur.archlinux.org/packages/i3-volume/
 [dunst]: https://dunst-project.org
 [i3wm]: https://i3wm.org
 [libnotify]: https://developer.gnome.org/libnotify
