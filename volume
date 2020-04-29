@@ -65,7 +65,18 @@ get_volume_amixer() {
 #
 # Arguments:
 #   Step        (integer) Percentage to increase by.
+#   Max Volume  (optional) (integer|percentage) Maximum volume limit.
 raise_volume() {
+    local max_vol="$2"
+
+    if [ -n "$max_vol" ]; then
+        local vol=$(get_volume)
+
+        if [ "$vol" -ge "$max_vol" ]; then
+            return
+        fi
+    fi
+
     if $opt_use_amixer; then
         raise_volume_amixer "$card" "$1"
     else
@@ -113,7 +124,7 @@ lower_volume() {
 #
 # Arguments:
 #   Sink name   (string)  Symbolic name of sink.
-#   Step        (integer) Percentage to decrease by.
+#   Step        (integer|percentage) Percentage to decrease by.
 lower_volume_pulseaudio() {
     local sink="$1"
     local step="${2:-5}"
@@ -137,7 +148,18 @@ lower_volume_amixer() {
 #
 # Arguments:
 #   Step        (integer) Percentage to decrease by.
+#   Max Volume  (optional) (integer|percentage) Maximum volume limit.
 set_volume() {
+    local max_vol="$2"
+
+    if [ -n "$max_vol" ]; then
+        local vol=$(get_volume)
+
+        if [ "$vol" -ge "$max_vol" ]; then
+            return
+        fi
+    fi
+
     if $opt_use_amixer; then
         set_volume_amixer "$card" "$1"
     else
@@ -365,6 +387,7 @@ Options:
   -t <process_name> name of status line process. must be used with -u
   -u <signal>       update status line using signal. must be used with -t
   -v <value>        set volume
+  -x <value>        set maximum volume
   -y                use dunstify instead of notify-send
   -h                display this help and exit
 " 1>&2
@@ -387,8 +410,9 @@ sink=""
 statusline=""
 volume=5
 expires="1500"
+max_volume=""
 
-while getopts ":ac:d:e:hi:lmnps:t:u:v:y" o; do
+while getopts ":ac:d:e:hi:lmnps:t:u:v:x:y" o; do
     case "$o" in
         a)
             opt_use_amixer=true
@@ -432,6 +456,9 @@ while getopts ":ac:d:e:hi:lmnps:t:u:v:y" o; do
             opt_set_volume=true
             volume="${OPTARG}"
             ;;
+        x)
+            max_volume="${OPTARG}"
+            ;;
         y)
             opt_use_dunstify=true
             ;;
@@ -449,7 +476,7 @@ if ! $opt_use_amixer; then
 fi
 
 if ${opt_increase_volume}; then
-    raise_volume $volume
+    raise_volume $volume $max_volume
 fi
 
 if ${opt_decrease_volume}; then
@@ -457,7 +484,7 @@ if ${opt_decrease_volume}; then
 fi
 
 if ${opt_set_volume}; then
-    set_volume $volume
+    set_volume $volume $max_volume
 fi
 
 if ${opt_mute_volume}; then
