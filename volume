@@ -286,18 +286,19 @@ get_volume_icon() {
     local vol="$1"
     local icon
 
-    if $opt_use_legacy_icons; then
-        if [ "$vol" -ge 70 ]; then icon="audio-volume-high"
-        elif [ "$vol" -ge 40 ]; then icon="audio-volume-medium"
-        elif [ "$vol" -gt 0 ]; then icon="audio-volume-low"
-        else icon="audio-volume-low"
+    if $opt_use_fullcolor_icons; then
+        if [ "$vol" -ge 70 ]; then icon=${icons[1]}
+        elif [ "$vol" -ge 40 ]; then icon=${icons[3]}
+        elif [ "$vol" -gt 0 ]; then icon=${icons[2]}
+        else icon=${icons[2]}
         fi
     else
-        if [ "$vol" -gt 100 ]; then icon="audio-volume-overamplified-symbolic.symbolic"
-        elif [ "$vol" -ge 70 ]; then icon="audio-volume-high-symbolic.symbolic"
-        elif [ "$vol" -ge 40 ]; then icon="audio-volume-medium-symbolic.symbolic"
-        elif [ "$vol" -gt 0 ]; then icon="audio-volume-low-symbolic.symbolic"
-        else icon="audio-volume-low-symbolic.symbolic"
+        # Get overamplified icon if available, otherwise default to high volume icon
+        if [ "$vol" -gt 100 ]; then icon=${icons_symbolic[4]:-${icons_symbolic[1]}}
+        elif [ "$vol" -ge 70 ]; then icon=${icons_symbolic[1]}
+        elif [ "$vol" -ge 40 ]; then icon=${icons_symbolic[3]}
+        elif [ "$vol" -gt 0 ]; then icon=${icons_symbolic[2]}
+        else icon=${icons_symbolic[2]}
         fi
     fi
 
@@ -308,10 +309,10 @@ get_volume_icon() {
 notify_muted() {
     local icon
 
-    if $opt_use_legacy_icons; then
-        icon="audio-volume-muted"
+    if $opt_use_fullcolor_icons; then
+        icon=icon=${icons[0]}
     else
-        icon="audio-volume-muted-symbolic.symbolic"
+        icon=${icons_symbolic[0]}
     fi
 
     if $opt_use_dunstify; then
@@ -368,6 +369,13 @@ get_progress_bar() {
     printf '█%.0s' $(eval echo "{1..$progress}")
 }
 
+# Add a suffix to symbolic icon names.
+apply_symbolic_icon_suffix() {
+    for i in "${!icons_symbolic[@]}"; do
+        icons_symbolic[$i]="${icons_symbolic[$i]}${symbolic_icon_suffix}"
+    done
+}
+
 # Display program usage.
 usage() {
     echo "Usage: $0 [options]
@@ -379,11 +387,12 @@ Options:
   -d <amount>       decrease volume
   -e <expires>      expiration time of notifications, in milliseconds
   -i <amount>       increase volume
-  -l                use legacy icons
+  -l                use fullcolor instead of symbolic icons
   -m                toggle mute
   -n                show notifications
   -p                show text volume progress bar
   -s <sink_name>    symbolic name of sink (pulseaudio only)
+  -S <suffix>       add a suffix to symbolic icon names
   -t <process_name> name of status line process. must be used with -u
   -u <signal>       update status line using signal. must be used with -t
   -v <value>        set volume
@@ -393,6 +402,27 @@ Options:
 " 1>&2
     exit 1
 }
+
+###########################################################
+# Non-command line option variables
+###########################################################
+
+icons=(
+    audio-volume-muted
+    audio-volume-high
+    audio-volume-low
+    audio-volume-medium
+)
+
+icons_symbolic=(
+    audio-volume-muted-symbolic
+    audio-volume-high-symbolic
+    audio-volume-low-symbolic
+    audio-volume-medium-symbolic
+)
+
+###########################################################
+# Command line option variables
 ###########################################################
 
 opt_decrease_volume=false
@@ -403,7 +433,7 @@ opt_set_volume=false
 opt_show_volume_progress=false
 opt_use_amixer=false
 opt_use_dunstify=false
-opt_use_legacy_icons=false
+opt_use_fullcolor_icons=false
 card=""
 signal=""
 sink=""
@@ -411,8 +441,9 @@ statusline=""
 volume=5
 expires="1500"
 max_volume=""
+symbolic_icon_suffix=""
 
-while getopts ":ac:d:e:hi:lmnps:t:u:v:x:y" o; do
+while getopts ":ac:d:e:hi:lmnps:S:t:u:v:x:y" o; do
     case "$o" in
         a)
             opt_use_amixer=true
@@ -432,7 +463,7 @@ while getopts ":ac:d:e:hi:lmnps:t:u:v:x:y" o; do
             volume="${OPTARG}"
             ;;
         l)
-            opt_use_legacy_icons=true
+            opt_use_fullcolor_icons=true
             ;;
         m)
             opt_mute_volume=true
@@ -445,6 +476,9 @@ while getopts ":ac:d:e:hi:lmnps:t:u:v:x:y" o; do
             ;;
         s)
             sink="${OPTARG}"
+            ;;
+        S)
+            symbolic_icon_suffix="${OPTARG}"
             ;;
         t)
             statusline="${OPTARG}"
@@ -489,6 +523,10 @@ fi
 
 if ${opt_mute_volume}; then
     toggle_mute $sink
+fi
+
+if [ -n "${symbolic_icon_suffix}" ]; then
+    apply_symbolic_icon_suffix
 fi
 
 # The options below this line must be last
