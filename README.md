@@ -17,20 +17,10 @@ Volume control and volume notifications for [i3wm]
 #### Arch Linux
 Arch Linux users may find PKGBUILD in [aur].
 
-#### ALSA mixer and PulseAudio
-Volume control can be done through either [alsa-utils], [pulseaudio-utils], or both. Use one of the example configuration to get started.
-
-#### Notifications
-Notifications are provided by [libnotify]. Any [libnotify] compatible notification daemon can be used for notifications. The most common are [notify-osd] and [dunst].
-
-If you are using [dunst], you may optionally choose to use `dunstify` instead of `notify-send` by adding the `-y` option.
-
-Expiration time of notifications can be changed using the `-e <time_in_milliseconds>` option. Default is 1500 ms. (Ubuntu's Notify OSD and GNOME Shell both ignore the expiration parameter.)
-
 ### Guide
 Clone this repository: `git clone https://github.com/hastinbe/i3-volume.git ~/i3-volume`
 
-Append the contents of the sample configuration files `i3volume-alsa.conf` or `i3volume-pulseaudio.conf` to your i3 config, such as `~/.config/i3/config`
+Append the contents of the sample configuration files `i3volume-alsa.conf` or `i3volume-pulseaudio.conf` to your i3 config, such as with the command `cat i3volume-pulseaudio.conf >> ~/.config/i3/config`
 
 Reload i3 configuration by pressing `mod+Shift+r`
 
@@ -40,6 +30,16 @@ Use your keyboard volume keys to increase, decrease, or mute your volume. If you
 Example of notifications using [notify-osd]:
 
 ![Volume Notifications](https://github.com/hastinbe/i3-volume/blob/master/volume-notifications.png)
+
+#### ALSA mixer and PulseAudio
+Volume control can be done through either [alsa-utils], [pulseaudio-utils], or both. Use one of the example configuration files to get started.
+
+#### Notifications
+Notifications are provided by [libnotify]. Any [libnotify] compatible notification daemon can be used for notifications. The most common are [notify-osd] and [dunst].
+
+If you are using [dunst], you may optionally choose to use `dunstify` instead of `notify-send` by adding the `-y` option.
+
+Expiration time of notifications can be changed using the `-e <time_in_milliseconds>` option. Default is 1500 ms. (Ubuntu's Notify OSD and GNOME Shell both ignore the expiration parameter.)
 
 ## Common Issues
 * [alsa-utils] won't unmute if `pulseaudio` is running. You must disable pulseaudio's auto respawn and terminate the `pulseaudio` process. Or use [pulseaudio-utils] for unmuting.
