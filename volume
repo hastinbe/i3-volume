@@ -61,6 +61,18 @@ get_volume_amixer() {
     echo $volume | awk -W posix -F'[][]' '/dB/ { gsub("%", ""); print $2 }'
 }
 
+# Get the max volume as a percentage.
+#
+# Arguments
+#   Sink name   (string) Symbolic name of sink.
+get_base_volume_pulseaudio() {
+    local sink="$1"
+
+    pacmd list-sinks |
+        awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
+                      /^[ \t]+base volume: / && insink {gsub("%", ""); print $5; exit}'
+}
+
 # Increase volume relative to current volume.
 #
 # Arguments:
@@ -376,6 +388,18 @@ apply_symbolic_icon_suffix() {
     done
 }
 
+# Get the flags of the PulseAudio sink.
+#
+# Arguments
+#   Sink name   (string) Symbolic name of sink.
+get_sink_flags() {
+    local sink="$1"
+
+    pacmd list-sinks |
+        awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
+                      /^[ \t]+flags: / && insink {for(i=2;i<=NF;++i)printf $i FS; exit}'
+}
+
 # Display program usage.
 usage() {
     echo "Usage: $0 [options]
@@ -397,6 +421,7 @@ Options:
   -u <signal>       update status line using signal. must be used with -t
   -v <value>        set volume
   -x <value>        set maximum volume
+  -X <value>        set maximum amplification (if the device supports it. default: 2)
   -y                use dunstify instead of notify-send
   -h                display this help and exit
 " 1>&2
@@ -421,6 +446,13 @@ icons_symbolic=(
     audio-volume-medium-symbolic
 )
 
+sink_flags=()
+
+# Unlike in PA, PA_VOLUME_* in i3-volume are percentages instead of integers
+pa_base_volume=100
+PA_VOLUME_NORM=100
+PA_VOLUME_MUTED=0
+
 ###########################################################
 # Command line option variables
 ###########################################################
@@ -441,9 +473,10 @@ statusline=""
 volume=5
 expires="1500"
 max_volume=""
+max_amplification="2"
 symbolic_icon_suffix=""
 
-while getopts ":ac:d:e:hi:lmnps:S:t:u:v:x:y" o; do
+while getopts ":ac:d:e:hi:lmnps:S:t:u:v:x:X:y" o; do
     case "$o" in
         a)
             opt_use_amixer=true
@@ -493,6 +526,9 @@ while getopts ":ac:d:e:hi:lmnps:S:t:u:v:x:y" o; do
         x)
             max_volume="${OPTARG}"
             ;;
+        X)
+            max_amplification="${OPTARG}"
+            ;;
         y)
             opt_use_dunstify=true
             ;;
@@ -506,6 +542,19 @@ shift $((OPTIND-1)) # Shift off options and optional --
 if ! $opt_use_amixer; then
     if [ -z $sink ]; then
         sink="$(get_default_sink_name)"
+    fi
+
+    # Determine a max volume when it's not specified
+    if [ -z $max_volume ]; then
+        sink_flags+=( $(get_sink_flags "$sink") )
+        pa_base_volume=$(get_base_volume_pulseaudio "$sink")
+
+        # Does the sink support digital (software) amplification?
+        if [[ "${sink_flags[@]}" =~ "DECIBEL_VOLUME" ]]; then
+            max_volume=$(($PA_VOLUME_NORM * $max_amplification))
+        else
+            max_volume=$PA_VOLUME_NORM
+        fi
     fi
 fi
 
