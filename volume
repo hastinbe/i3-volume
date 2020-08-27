@@ -400,6 +400,89 @@ get_sink_flags() {
                       /^[ \t]+flags: / && insink {for(i=2;i<=NF;++i)printf $i FS; exit}'
 }
 
+# Outputs the current volume.
+output_volume() {
+    case "$output_mode" in
+        i3blocks)
+            output_volume_i3blocks
+            ;;
+        generic)
+            output_volume_generic
+            ;;
+        *)
+            output_volume_custom
+            ;;
+    esac
+}
+
+# Outputs the current volume.
+output_volume_generic() {
+    if is_muted; then
+        echo "MUTE"
+    else
+        echo "$(get_volume)%"
+    fi
+    exit 0
+}
+
+# Outputs the current volume using a custom format string.
+#
+# Format options:
+#   %v = volume percentage or "MUTE" when muted
+output_volume_custom() {
+    local format="$output_mode"
+
+    if is_muted; then
+        echo -ne "${format//\%v/MUTE}"
+    else
+        echo -ne "${format//\%v/$(get_volume)%}"
+    fi
+    exit 0
+}
+
+# Outputs the current volume for i3blocks.
+output_volume_i3blocks() {
+    local short_text
+    local full_text
+
+    if is_muted; then
+        short_text="<span color=\"${COLOR_MUTED}\">MUTE</span>\n"
+        full_text="<span color=\"${COLOR_MUTED}\">MUTE</span>\n"
+    else
+        local vol=$(get_volume)
+        local color=$(volume_color $vol)
+        short_text="<span color=\"$color\">${vol}%</span>\n"
+        full_text="<span color=\"$color\">${vol}%</span>\n"
+    fi
+
+    echo -ne "${full_text}${short_text}"
+
+    if [ -n "$max_volume" ] && [ "$vol" -gt "$max_volume" ]; then
+        exit 33
+    fi
+
+    exit 0
+}
+
+# Get color for the given volume
+#
+# Arguments:
+#   $1 - The volume
+#   $2 - Maximum volume
+volume_color() {
+    local vol=$1
+
+    if (( $vol >= $PA_VOLUME_MUTED && $vol < $pa_base_volume )); then
+        echo "$COLOR_MUTED_TO_BASE"
+    elif (( $vol >= $pa_base_volume && $vol <= $PA_VOLUME_NORM )); then
+        echo "$COLOR_BASE_TO_NORM"
+    elif (( $vol > $PA_VOLUME_NORM && $vol <= $max_volume )); then
+        echo "$COLOR_NORM_TO_MAX"
+    else
+        echo "$COLOR_OTHER"
+    fi
+}
+
 # Display program usage.
 usage() {
     echo "Usage: $0 [options]
@@ -414,6 +497,12 @@ Options:
   -l                use fullcolor instead of symbolic icons
   -m                toggle mute
   -n                show notifications
+  -o <generic|i3blocks|\"format\">
+                    output the volume according to the provided output format:
+                        generic  = output the volume
+                        i3blocks = output the volume for i3blocks
+                        \"format\" = output using a format string. substitutions:
+                                     %v = current volume
   -p                show text volume progress bar
   -s <sink_name>    symbolic name of sink (pulseaudio only)
   -S <suffix>       add a suffix to symbolic icon names
@@ -453,6 +542,13 @@ pa_base_volume=100
 PA_VOLUME_NORM=100
 PA_VOLUME_MUTED=0
 
+# Output volume colors
+COLOR_MUTED=${COLOR_MUTED:-"#FFFF00"}
+COLOR_MUTED_TO_BASE=${COLOR_MUTED_TO_BASE:-"#00FF00"}
+COLOR_BASE_TO_NORM=${COLOR_BASE_TO_NORM:-"#FFFF00"}
+COLOR_NORM_TO_MAX=${COLOR_NORM_TO_MAX:-"#FF0000"}
+COLOR_OTHER=${COLOR_OTHER:-"#FFFFFF"}
+
 ###########################################################
 # Command line option variables
 ###########################################################
@@ -475,8 +571,9 @@ expires="1500"
 max_volume=""
 max_amplification="2"
 symbolic_icon_suffix=""
+output_mode=""
 
-while getopts ":ac:d:e:hi:lmnps:S:t:u:v:x:X:y" o; do
+while getopts ":ac:d:e:hi:lmno:ps:S:t:u:v:x:X:y" o; do
     case "$o" in
         a)
             opt_use_amixer=true
@@ -503,6 +600,9 @@ while getopts ":ac:d:e:hi:lmnps:S:t:u:v:x:X:y" o; do
             ;;
         n)
             opt_notification=true
+            ;;
+        o)
+            output_mode="${OPTARG}"
             ;;
         p)
             opt_show_volume_progress=true
@@ -576,6 +676,10 @@ fi
 
 if [ -n "${symbolic_icon_suffix}" ]; then
     apply_symbolic_icon_suffix
+fi
+
+if [ -n "${output_mode}" ]; then
+    output_volume
 fi
 
 # The options below this line must be last
