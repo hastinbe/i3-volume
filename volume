@@ -330,7 +330,7 @@ notify_muted() {
     if $opt_use_dunstify; then
         dunstify -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -r 1000
     else
-        notify-send -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted"
+        notify-send -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -h string:x-canonical-private-synchronous:i3-volume
     fi
 }
 
@@ -348,7 +348,7 @@ notify_volume() {
     if $opt_use_dunstify; then
         dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
     else
-        notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text"
+        notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
     fi
 }
 
