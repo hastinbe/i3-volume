@@ -41,7 +41,7 @@ get_volume_pulseaudio() {
 
     pacmd list-sinks |
         awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
-                      /^[ \t]+volume: / && insink {gsub("%", ""); print $5; exit}'
+                      /^[ \t]+volume: / && insink {gsub("%,?", ""); print $5; exit}'
 }
 
 # Get the volume as a percentage.
