@@ -322,7 +322,7 @@ notify_muted() {
     local icon
 
     if $opt_use_fullcolor_icons; then
-        icon=icon=${icons[0]}
+        icon=${icons[0]}
     else
         icon=${icons_symbolic[0]}
     fi
