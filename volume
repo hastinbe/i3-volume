@@ -378,7 +378,8 @@ get_progress_bar() {
     local divisor=${3:-5}
     local progress=$((($percent > $max_percent ? $max_percent : $percent) / $divisor))
 
-    printf "%*s" $progress | sed "s/ /█/g"
+    printf -v bar "%*s" $progress
+    echo "${bar// /█}"
 }
 
 # Add a suffix to symbolic icon names.
