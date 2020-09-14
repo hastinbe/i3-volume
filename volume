@@ -533,6 +533,8 @@ icons_symbolic=(
     audio-volume-high-symbolic
     audio-volume-low-symbolic
     audio-volume-medium-symbolic
+    ## Only exists in some icon sets
+    # audio-volume-overamplified-symbolic
 )
 
 sink_flags=()
