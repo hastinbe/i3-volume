@@ -338,7 +338,7 @@ notify_muted() {
 notify_volume() {
     local vol=$(get_volume)
     local icon=$(get_volume_icon "$vol")
-    local text="Volume ${vol}%"
+    printf -v text "Volume %3s%%" $vol
 
     if $opt_show_volume_progress; then
         local progress=$(get_progress_bar "$vol")
@@ -378,7 +378,8 @@ get_progress_bar() {
     local divisor=${3:-5}
     local progress=$((($percent > $max_percent ? $max_percent : $percent) / $divisor))
 
-    printf '█%.0s' $(eval echo "{1..$progress}")
+    printf -v bar "%*s" $progress
+    echo "${bar// /█}"
 }
 
 # Add a suffix to symbolic icon names.
