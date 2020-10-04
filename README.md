@@ -68,7 +68,7 @@ Options:
   -i <amount>       increase volume
   -l                use fullcolor instead of symbolic icons
   -m                toggle mute
-  -M <mixer>        specify mixer (ex: Headphone), default Master
+  -M <mixer>        specify mixer (amixer only, default: Master)
   -n                show notifications
   -o <generic|i3blocks|"format">
                     output the volume according to the provided output format:
