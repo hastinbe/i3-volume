@@ -53,9 +53,9 @@ get_volume_amixer() {
     local volume
 
     if [ -n "$card" ]; then
-        volume=$(amixer -c "$card" -- sget Master)
+        volume=$(amixer -c "$card" -- sget $mixer)
     else
-        volume=$(amixer sget Master)
+        volume=$(amixer sget $mixer)
     fi
 
     echo $volume | awk -W posix -F'[][]' '/dB/ { gsub("%", ""); print $2 }'
@@ -201,9 +201,9 @@ set_volume_amixer() {
     local vol="$2"
 
     if [ -n "$card" ]; then
-        amixer -q -c "$card" -- set Master "$vol"
+        amixer -q -c "$card" -- set $mixer "$vol"
     else
-        amixer -q set Master "$vol"
+        amixer -q set $mixer "$vol"
     fi
 }
 
@@ -234,9 +234,9 @@ toggle_mute_amixer() {
     local card="$1"
 
     if [ -n "$card" ]; then
-        amixer -q -c "$card" -- set Master toggle
+        amixer -q -c "$card" -- set $mixer toggle
     else
-        amixer -q set Master toggle
+        amixer -q set $mixer toggle
     fi
 }
 
@@ -277,9 +277,9 @@ is_muted_amixer() {
     local output
 
     if [ -n "$card" ]; then
-        output=$(amixer -c "$card" -- sget Master)
+        output=$(amixer -c "$card" -- sget $mixer)
     else
-        output=$(amixer sget Master)
+        output=$(amixer sget $mixer)
     fi
 
     status=$(echo $output | awk -W posix -F'[][]' '/dB/ { print $6 }')
@@ -497,6 +497,7 @@ Options:
   -i <amount>       increase volume
   -l                use fullcolor instead of symbolic icons
   -m                toggle mute
+  -M <mixer>        specify mixer (ex: Headphone), default Master
   -n                show notifications
   -o <generic|i3blocks|\"format\">
                     output the volume according to the provided output format:
@@ -566,6 +567,7 @@ opt_use_amixer=false
 opt_use_dunstify=false
 opt_use_fullcolor_icons=false
 card=""
+mixer="Master"
 signal=""
 sink=""
 statusline=""
@@ -576,7 +578,7 @@ max_amplification="2"
 symbolic_icon_suffix=""
 output_mode=""
 
-while getopts ":ac:d:e:hi:lmno:ps:S:t:u:v:x:X:y" o; do
+while getopts ":ac:d:e:hi:lmM:no:ps:S:t:u:v:x:X:y" o; do
     case "$o" in
         a)
             opt_use_amixer=true
@@ -600,6 +602,9 @@ while getopts ":ac:d:e:hi:lmno:ps:S:t:u:v:x:X:y" o; do
             ;;
         m)
             opt_mute_volume=true
+            ;;
+        M)
+            mixer="${OPTARG@Q}"
             ;;
         n)
             opt_notification=true
