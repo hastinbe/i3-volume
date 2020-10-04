@@ -604,7 +604,7 @@ while getopts ":ac:d:e:hi:lmM:no:ps:S:t:u:v:x:X:y" o; do
             opt_mute_volume=true
             ;;
         M)
-            mixer="${OPTARG}"
+            mixer="${OPTARG@Q}"
             ;;
         n)
             opt_notification=true
