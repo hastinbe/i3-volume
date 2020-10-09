@@ -407,6 +407,9 @@ output_volume() {
         i3blocks)
             output_volume_i3blocks
             ;;
+        xob)
+            output_volume_xob
+            ;;
         generic)
             output_volume_generic
             ;;
@@ -465,6 +468,18 @@ output_volume_i3blocks() {
     exit 0
 }
 
+# Outputs the current volume for xob.
+output_volume_xob() {
+    local vol=$(get_volume)
+
+    if is_muted; then
+        echo "${vol}!"
+    else
+        echo "${vol}"
+    fi
+    exit 0
+}
+
 # Get color for the given volume
 #
 # Arguments:
@@ -499,10 +514,11 @@ Options:
   -m                toggle mute
   -M <mixer>        specify mixer (ex: Headphone), default Master
   -n                show notifications
-  -o <generic|i3blocks|\"format\">
+  -o <generic|i3blocks|xob|\"format\">
                     output the volume according to the provided output format:
                         generic  = output the volume
                         i3blocks = output the volume for i3blocks
+                        xob      = output the volume for xob
                         \"format\" = output using a format string. substitutions:
                                      %v = current volume
   -p                show text volume progress bar

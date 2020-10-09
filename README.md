@@ -70,7 +70,7 @@ Options:
   -m                toggle mute
   -M <mixer>        specify mixer (amixer only, default: Master)
   -n                show notifications
-  -o <generic|i3blocks|"format">
+  -o <generic|i3blocks|xob|"format">
                     output the volume according to the provided output format:
                         generic  = output the volume
                         i3blocks = output the volume for i3blocks
