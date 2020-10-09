@@ -686,10 +686,6 @@ if [ -n "${symbolic_icon_suffix}" ]; then
     apply_symbolic_icon_suffix
 fi
 
-if [ -n "${output_mode}" ]; then
-    output_volume
-fi
-
 # The options below this line must be last
 if ${opt_notification}; then
     if is_muted; then
@@ -708,4 +704,8 @@ else
     if [ -n "${statusline}" ]; then
         usage
     fi
+fi
+
+if [ -n "${output_mode}" ]; then
+    output_volume
 fi
