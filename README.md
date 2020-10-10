@@ -6,56 +6,26 @@ Volume control with notifications, and a volume statusline indicator. Written fo
 
 ## Installation
 
-### Requirements
-* awk (POSIX compatible)
-* [pulseaudio-utils] - if using PulseAudio
-* [alsa-utils] - if using amixer
+Read our [installation instructions](https://github.com/hastinbe/i3-volume/wiki/Installation) for general usage with [i3wm].
 
-### Optional / Recommended
-* [notify-osd] - Canonical's on-screen-display notification agent
-* [dunst] - a lightweight replacement for the notification daemons provided by most desktop environments
-* [i3wm] - a tiling window manager designed for X11
-* [i3blocks] - a feed generator for text based status bars
+### Usage
 
-### Arch Linux
-Arch Linux users may find PKGBUILD in [aur].
-
-### Guide
-Clone this repository:
-``` bash
-git clone https://github.com/hastinbe/i3-volume.git ~/i3-volume
-```
-
-#### i3wm
-
-Volume control can be done through either [alsa-utils], [pulseaudio-utils], or both. Use one of the example configuration files below:
-
-##### PulseAudio
-
-``` bash
-cat i3volume-pulseaudio.conf >> ~/.config/i3/config
-```
-
-##### Alsamixer
-
-``` bash
-cat i3volume-alsa.conf >> ~/.config/i3/config
-```
-
-Reload [i3wm] by pressing `mod+Shift+r` and use the volume keys on your keyboard.
-
-#### Other window managers
-
-If you get `i3-volume` to work on another window manager beside [i3wm], we welcome you to contribute your experience to help others.
-
-#### Standalone
-
-See [usage](#usage).
-
-## Usage
 Use your keyboard volume keys to increase, decrease, or mute your volume. If you have a volume indicator in your status line it will be updated to reflect the volume change. When notifications are enabled a popup will display the volume level.
 
-### Command-line options
+
+#### On-Screen Notifications
+
+| [notify-osd] | [dunst] | [xob] |
+| ------------ | ------- | ----- |
+| ![notify-osd notifications](https://user-images.githubusercontent.com/195790/95647280-c3558780-0b00-11eb-987e-5924f2522bdb.png) | ![dunst notifications](https://user-images.githubusercontent.com/195790/95647273-afaa2100-0b00-11eb-8e2c-eb3eede89d7c.png) | ![xob notifications](https://user-images.githubusercontent.com/195790/95647285-d0727680-0b00-11eb-9600-56e4371b9a58.png) |
+
+Read about [notifications](https://github.com/hastinbe/i3-volume/wiki/Notifications) for more information.
+
+### Standalone
+
+`i3-volume` does not require any particular desktop environment and can be used as a standalone script.
+
+#### Command-line options
 ```
 Usage: volume [options]
 Control volume and related notifications.
@@ -88,22 +58,17 @@ Options:
   -h                display this help and exit
   ```
 
-### Notifications
+## i3blocks
 
-Notifications are provided by [libnotify]. Any [libnotify] compatible notification daemon can be used for notifications. The most common are [notify-osd] and [dunst].
+See our [example blocklet](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3blocks) to get started using `i3-volume` with [i3blocks].
 
-![Volume Notifications](assets/notifications.png)
+## xob
 
-If you are using [dunst], you may optionally choose to use `dunstify` instead of `notify-send` by adding the `-y` option.
+[xob] requires extra steps to use for notifications. See our [guide](https://github.com/hastinbe/i3-volume/wiki/Usage-with-xob) for how to set that up.
 
-Expiration time of notifications can be changed using the `-e <time_in_milliseconds>` option. Default is 1500 ms. (Ubuntu's Notify OSD and GNOME Shell both ignore the expiration parameter.)
+## Help
 
-## Common Issues
-* [alsa-utils] won't unmute if `pulseaudio` is running. You must disable pulseaudio's auto-respawn and terminate the `pulseaudio` process. Or use [pulseaudio-utils] for unmuting.
-* [dunst] isn't displaying icons in notifications. `icon_position` needs to be set to either `left` or `right` (default is `off`) in your `~/.config/dunst/dunstrc`.
-* [dunst] icons are too small. Change `icon_path` in your `~/.config/dunst/dunstrc` to a path containing larger icons, such as `/usr/share/icons/gnome/32x32/status/:/usr/share/icons/gnome/32x32/devices/`. Alternatively try increasing `max_icon_size`
-
-**Note** only one notification daemon can be running at the same time. [dunst] can't be running for notifications to go through [notify-osd] and vice-versa.
+Having a problem? Try reading our [common issues](https://github.com/hastinbe/i3-volume/wiki/Common-Issues) or open an [issue](https://github.com/hastinbe/i3-volume/issues/new).
 
 ## License
 `i3-volume` is released under [GNU General Public License v2][license]
@@ -111,9 +76,9 @@ Expiration time of notifications can be changed using the `-e <time_in_milliseco
 Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 
 [alsa-utils]: https://alsa.opensrc.org/Alsa-utils
-[aur]: https://aur.archlinux.org/packages/i3-volume/
 [dunst]: https://dunst-project.org
 [i3blocks]: https://github.com/vivien/i3blocks
+[i3status]: https://github.com/i3/i3status
 [i3wm]: https://i3wm.org
 [libnotify]: https://developer.gnome.org/libnotify
 [license]: https://www.gnu.org/licenses/gpl-2.0.en.html
@@ -121,3 +86,5 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 [logo]: assets/logo.svg
 [notify-osd]: https://launchpad.net/notify-osd
 [pulseaudio-utils]: https://www.freedesktop.org/wiki/Software/PulseAudio/
+[wiki]: https://github.com/hastinbe/i3-volume/wiki
+[xob]: https://github.com/florentc/xob
