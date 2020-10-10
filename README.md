@@ -20,7 +20,7 @@ Use your keyboard volume keys to increase, decrease, or mute your volume. If you
 | ![notify-osd notifications](https://user-images.githubusercontent.com/195790/95647280-c3558780-0b00-11eb-987e-5924f2522bdb.png) | ![dunst notifications](https://user-images.githubusercontent.com/195790/95647273-afaa2100-0b00-11eb-8e2c-eb3eede89d7c.png) | ![xob notifications](https://user-images.githubusercontent.com/195790/95647285-d0727680-0b00-11eb-9600-56e4371b9a58.png) |
 
 | [xosd] |
-| ------ | --- | --- |
+| ------ |
 | ![xosd notifications](https://user-images.githubusercontent.com/195790/95656224-60371580-0b3f-11eb-9463-54698dadfd44.png) |
 
 Read about [notifications](https://github.com/hastinbe/i3-volume/wiki/Notifications) for more information.
