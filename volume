@@ -330,7 +330,13 @@ notify_muted() {
     if $opt_use_dunstify; then
         dunstify -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -r 1000
     else
-        notify-send -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -h string:x-canonical-private-synchronous:i3-volume
+        if [ "$notification_method" = "xosd" ]; then
+            local delay=$(($expires / 1000))
+            osd_cat --align center -b percentage -P 0 -d $delay -p top -A center -c "$COLOR_MUTED" -T "Volume muted" -O 2 -u "$COLOR_XOSD_OUTLINE"
+        else
+            # libnotify
+            notify-send -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -h string:x-canonical-private-synchronous:i3-volume
+        fi
     fi
 }
 
@@ -348,7 +354,14 @@ notify_volume() {
     if $opt_use_dunstify; then
         dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
     else
-        notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
+        if [ "$notification_method" = "xosd" ]; then
+            local color=$(volume_color $vol)
+            local delay=$(($expires / 1000))
+            osd_cat --align center -b percentage -P "$vol" -d $delay -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE"
+        else
+            #libnotify
+            notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
+        fi
     fi
 }
 
@@ -505,32 +518,32 @@ usage() {
 Control volume and related notifications.
 
 Options:
-  -a                use alsa-utils instead of pulseaudio-utils for volume control
-  -c <card>         card number to control (amixer only)
-  -d <amount>       decrease volume
-  -e <expires>      expiration time of notifications, in milliseconds
-  -i <amount>       increase volume
-  -l                use fullcolor instead of symbolic icons
-  -m                toggle mute
-  -M <mixer>        specify mixer (ex: Headphone), default Master
-  -n                show notifications
-  -o <generic|i3blocks|xob|\"format\">
-                    output the volume according to the provided output format:
-                        generic  = output the volume
-                        i3blocks = output the volume for i3blocks
-                        xob      = output the volume for xob
-                        \"format\" = output using a format string. substitutions:
-                                     %v = current volume
-  -p                show text volume progress bar
-  -s <sink_name>    symbolic name of sink (pulseaudio only)
-  -S <suffix>       add a suffix to symbolic icon names
-  -t <process_name> name of status line process. must be used with -u
-  -u <signal>       update status line using signal. must be used with -t
-  -v <value>        set volume
-  -x <value>        set maximum volume
-  -X <value>        set maximum amplification (if the device supports it. default: 2)
-  -y                use dunstify instead of notify-send
-  -h                display this help and exit
+  -a                                    use alsa-utils instead of pulseaudio-utils for volume control
+  -c <card>                             card number to control (amixer only)
+  -d <amount>                           decrease volume
+  -e <expires>                          expiration time of notifications, in milliseconds
+  -i <amount>                           increase volume
+  -l                                    use fullcolor instead of symbolic icons
+  -m                                    toggle mute
+  -M <mixer>                            specify mixer (ex: Headphone), default Master
+  -n                                    show notifications
+  -N <libnotify|xosd>                   notification method (default: libnotify)
+  -o <generic|i3blocks|xob|\"format\">    output the volume according to the provided output format:
+                                            generic  = output the volume
+                                            i3blocks = output the volume for i3blocks
+                                            xob      = output the volume for xob
+                                            \"format\" = output using a format string. substitutions:
+                                                        %v = current volume
+  -p                                    show text volume progress bar
+  -s <sink_name>                        symbolic name of sink (pulseaudio only)
+  -S <suffix>                           add a suffix to symbolic icon names
+  -t <process_name>                     name of status line process. must be used with -u
+  -u <signal>                           update status line using signal. must be used with -t
+  -v <value>                            set volume
+  -x <value>                            set maximum volume
+  -X <value>                            set maximum amplification (if the device supports it. default: 2)
+  -y                                    use dunstify instead of notify-send
+  -h                                    display this help and exit
 " 1>&2
     exit 1
 }
@@ -568,6 +581,7 @@ COLOR_MUTED_TO_BASE=${COLOR_MUTED_TO_BASE:-"#00FF00"}
 COLOR_BASE_TO_NORM=${COLOR_BASE_TO_NORM:-"#FFFF00"}
 COLOR_NORM_TO_MAX=${COLOR_NORM_TO_MAX:-"#FF0000"}
 COLOR_OTHER=${COLOR_OTHER:-"#FFFFFF"}
+COLOR_XOSD_OUTLINE=${COLOR_XOSD_OUTLINE:-"#222222"}
 
 ###########################################################
 # Command line option variables
@@ -593,8 +607,9 @@ max_volume=""
 max_amplification="2"
 symbolic_icon_suffix=""
 output_mode=""
+notification_method="libnotify"
 
-while getopts ":ac:d:e:hi:lmM:no:ps:S:t:u:v:x:X:y" o; do
+while getopts ":ac:d:e:hi:lmM:nN:o:ps:S:t:u:v:x:X:y" o; do
     case "$o" in
         a)
             opt_use_amixer=true
@@ -624,6 +639,9 @@ while getopts ":ac:d:e:hi:lmM:no:ps:S:t:u:v:x:X:y" o; do
             ;;
         n)
             opt_notification=true
+            ;;
+        N)
+            notification_method="${OPTARG}"
             ;;
         o)
             output_mode="${OPTARG}"

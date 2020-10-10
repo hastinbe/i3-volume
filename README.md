@@ -19,6 +19,10 @@ Use your keyboard volume keys to increase, decrease, or mute your volume. If you
 | ------------ | ------- | ----- |
 | ![notify-osd notifications](https://user-images.githubusercontent.com/195790/95647280-c3558780-0b00-11eb-987e-5924f2522bdb.png) | ![dunst notifications](https://user-images.githubusercontent.com/195790/95647273-afaa2100-0b00-11eb-8e2c-eb3eede89d7c.png) | ![xob notifications](https://user-images.githubusercontent.com/195790/95647285-d0727680-0b00-11eb-9600-56e4371b9a58.png) |
 
+| [xosd] |
+| ------ | --- | --- |
+| ![xosd notifications](https://user-images.githubusercontent.com/195790/95656224-60371580-0b3f-11eb-9463-54698dadfd44.png) |
+
 Read about [notifications](https://github.com/hastinbe/i3-volume/wiki/Notifications) for more information.
 
 ### Standalone
@@ -31,31 +35,32 @@ Usage: volume [options]
 Control volume and related notifications.
 
 Options:
-  -a                use alsa-utils instead of pulseaudio-utils for volume control
-  -c <card>         card number to control (amixer only)
-  -d <amount>       decrease volume
-  -e <expires>      expiration time of notifications, in milliseconds
-  -i <amount>       increase volume
-  -l                use fullcolor instead of symbolic icons
-  -m                toggle mute
-  -M <mixer>        specify mixer (amixer only, default: Master)
-  -n                show notifications
-  -o <generic|i3blocks|xob|"format">
-                    output the volume according to the provided output format:
-                        generic  = output the volume
-                        i3blocks = output the volume for i3blocks
-                        "format" = output using a format string. substitutions:
-                                     %v = current volume
-  -p                show text volume progress bar
-  -s <sink_name>    symbolic name of sink (pulseaudio only)
-  -S <suffix>       add a suffix to symbolic icon names
-  -t <process_name> name of status line process. must be used with -u
-  -u <signal>       update status line using signal. must be used with -t
-  -v <value>        set volume
-  -x <value>        set maximum volume
-  -X <value>        set maximum amplification (if the device supports it. default: 2)
-  -y                use dunstify instead of notify-send
-  -h                display this help and exit
+  -a                                    use alsa-utils instead of pulseaudio-utils for volume control
+  -c <card>                             card number to control (amixer only)
+  -d <amount>                           decrease volume
+  -e <expires>                          expiration time of notifications, in milliseconds
+  -i <amount>                           increase volume
+  -l                                    use fullcolor instead of symbolic icons
+  -m                                    toggle mute
+  -M <mixer>                            specify mixer (ex: Headphone), default Master
+  -n                                    show notifications
+  -N <libnotify|xosd>                   notification method (default: libnotify)
+  -o <generic|i3blocks|xob|"format">    output the volume according to the provided output format:
+                                            generic  = output the volume
+                                            i3blocks = output the volume for i3blocks
+                                            xob      = output the volume for xob
+                                            "format" = output using a format string. substitutions:
+                                                        %v = current volume
+  -p                                    show text volume progress bar
+  -s <sink_name>                        symbolic name of sink (pulseaudio only)
+  -S <suffix>                           add a suffix to symbolic icon names
+  -t <process_name>                     name of status line process. must be used with -u
+  -u <signal>                           update status line using signal. must be used with -t
+  -v <value>                            set volume
+  -x <value>                            set maximum volume
+  -X <value>                            set maximum amplification (if the device supports it. default: 2)
+  -y                                    use dunstify instead of notify-send
+  -h                                    display this help and exit
   ```
 
 ## i3blocks
@@ -65,6 +70,10 @@ See our [example blocklet](https://github.com/hastinbe/i3-volume/wiki/Usage-with
 ## xob
 
 [xob] requires extra steps to use for notifications. See our [guide](https://github.com/hastinbe/i3-volume/wiki/Usage-with-xob) for how to set that up.
+
+## xosd
+
+[xosd] notifications can be used by specifying the `-N xosd` option to your volume commands. [See an example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-XOSD).
 
 ## Help
 
@@ -88,3 +97,4 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 [pulseaudio-utils]: https://www.freedesktop.org/wiki/Software/PulseAudio/
 [wiki]: https://github.com/hastinbe/i3-volume/wiki
 [xob]: https://github.com/florentc/xob
+[xosd]: https://sourceforge.net/projects/libxosd/
