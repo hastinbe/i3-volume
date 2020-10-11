@@ -17,11 +17,11 @@ Use your keyboard volume keys to increase, decrease, or mute your volume. If you
 
 | [notify-osd] | [dunst] | [xob] |
 | ------------ | ------- | ----- |
-| ![notify-osd notifications](https://user-images.githubusercontent.com/195790/95647280-c3558780-0b00-11eb-987e-5924f2522bdb.png) | ![dunst notifications](https://user-images.githubusercontent.com/195790/95647273-afaa2100-0b00-11eb-8e2c-eb3eede89d7c.png) | ![xob notifications](https://user-images.githubusercontent.com/195790/95647285-d0727680-0b00-11eb-9600-56e4371b9a58.png) |
+| ![notify-osd notifications](https://github.com/hastinbe/i3-volume/wiki/images/notify-osd.png) | ![dunst notifications](https://github.com/hastinbe/i3-volume/wiki/images/dunst.png) | ![xob notifications](https://github.com/hastinbe/i3-volume/wiki/images/xob.png) |
 
 | [xosd] | [herbe] |
 | ------ | ------- |
-| ![xosd notifications](https://user-images.githubusercontent.com/195790/95656224-60371580-0b3f-11eb-9463-54698dadfd44.png) | ![herbe notifications](https://user-images.githubusercontent.com/195790/95669559-c6aa4b00-0bb4-11eb-8516-6beb500222f3.png) |
+| ![xosd notifications](https://github.com/hastinbe/i3-volume/wiki/images/xosd.png) | ![herbe notifications](https://github.com/hastinbe/i3-volume/wiki/images/herbe.png) |
 
 Read about [notifications](https://github.com/hastinbe/i3-volume/wiki/Notifications) for more information.
 
