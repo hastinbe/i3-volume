@@ -330,7 +330,7 @@ notify_muted() {
     case "$notification_method" in
         xosd)
             local delay=$(($expires / 1000))
-            osd_cat --align center -b percentage -P 0 -d $delay -p top -A center -c "$COLOR_MUTED" -T "Volume muted" -O 2 -u "$COLOR_XOSD_OUTLINE"
+            osd_cat --align center -b percentage -P 0 -d $delay -p top -A center -c "$COLOR_MUTED" -T "Volume muted" -O 2 -u "$COLOR_XOSD_OUTLINE" &
             ;;
 
         # There is a patch with a notify-send script for herbe, not in the current version at this time but would make this option irrelevant. See https://github.com/dudik/herbe/pull/10
