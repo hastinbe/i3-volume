@@ -357,7 +357,7 @@ notify_volume() {
         if [ "$notification_method" = "xosd" ]; then
             local color=$(volume_color $vol)
             local delay=$(($expires / 1000))
-            osd_cat --align center -b percentage -P "$vol" -d $delay -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE"
+            osd_cat --align center -b percentage -P "$vol" -d $delay -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" &
         else
             #libnotify
             notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
