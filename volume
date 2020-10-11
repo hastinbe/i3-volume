@@ -327,17 +327,26 @@ notify_muted() {
         icon=${icons_symbolic[0]}
     fi
 
-    if $opt_use_dunstify; then
-        dunstify -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -r 1000
-    else
-        if [ "$notification_method" = "xosd" ]; then
+    case "$notification_method" in
+        xosd)
             local delay=$(($expires / 1000))
             osd_cat --align center -b percentage -P 0 -d $delay -p top -A center -c "$COLOR_MUTED" -T "Volume muted" -O 2 -u "$COLOR_XOSD_OUTLINE"
-        else
-            # libnotify
-            notify-send -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -h string:x-canonical-private-synchronous:i3-volume
-        fi
-    fi
+            ;;
+
+        # There is a patch with a notify-send script for herbe, not in the current version at this time but would make this option irrelevant. See https://github.com/dudik/herbe/pull/10
+        herbe)
+            # Dismiss existing/pending notifications to prevent queuing
+            pkill -SIGUSR1 herbe
+            herbe "Volume muted" &
+            ;;
+        *) # libnotify
+            if $opt_use_dunstify; then
+                dunstify -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -r 1000
+            else
+                notify-send -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -h string:x-canonical-private-synchronous:i3-volume
+            fi
+            ;;
+    esac
 }
 
 # Display a notification indicating the current volume.
@@ -351,18 +360,27 @@ notify_volume() {
         text="$text $progress"
     fi
 
-    if $opt_use_dunstify; then
-        dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
-    else
-        if [ "$notification_method" = "xosd" ]; then
+    case "$notification_method" in
+        xosd)
             local color=$(volume_color $vol)
             local delay=$(($expires / 1000))
             osd_cat --align center -b percentage -P "$vol" -d $delay -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" &
-        else
-            #libnotify
-            notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
-        fi
-    fi
+            ;;
+
+        # There is a patch with a notify-send script for herbe, not in the current version at this time but would make this option irrelevant. See https://github.com/dudik/herbe/pull/10
+        herbe)
+            # Dismiss existing/pending notifications to prevent queuing
+            pkill -SIGUSR1 herbe
+            herbe "$text" &
+            ;;
+        *) # libnotify
+            if $opt_use_dunstify; then
+                dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
+            else
+                notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
+            fi
+            ;;
+    esac
 }
 
 # Updates the status line.
@@ -527,7 +545,7 @@ Options:
   -m                                    toggle mute
   -M <mixer>                            specify mixer (ex: Headphone), default Master
   -n                                    show notifications
-  -N <libnotify|xosd>                   notification method (default: libnotify)
+  -N <libnotify|herbe|xosd>             notification method (default: libnotify)
   -o <generic|i3blocks|xob|\"format\">    output the volume according to the provided output format:
                                             generic  = output the volume
                                             i3blocks = output the volume for i3blocks

@@ -19,9 +19,9 @@ Use your keyboard volume keys to increase, decrease, or mute your volume. If you
 | ------------ | ------- | ----- |
 | ![notify-osd notifications](https://user-images.githubusercontent.com/195790/95647280-c3558780-0b00-11eb-987e-5924f2522bdb.png) | ![dunst notifications](https://user-images.githubusercontent.com/195790/95647273-afaa2100-0b00-11eb-8e2c-eb3eede89d7c.png) | ![xob notifications](https://user-images.githubusercontent.com/195790/95647285-d0727680-0b00-11eb-9600-56e4371b9a58.png) |
 
-| [xosd] |
-| ------ |
-| ![xosd notifications](https://user-images.githubusercontent.com/195790/95656224-60371580-0b3f-11eb-9463-54698dadfd44.png) |
+| [xosd] | [herbe] |
+| ------ | ------- |
+| ![xosd notifications](https://user-images.githubusercontent.com/195790/95656224-60371580-0b3f-11eb-9463-54698dadfd44.png) | ![herbe notifications](https://user-images.githubusercontent.com/195790/95669559-c6aa4b00-0bb4-11eb-8516-6beb500222f3.png) |
 
 Read about [notifications](https://github.com/hastinbe/i3-volume/wiki/Notifications) for more information.
 
@@ -44,7 +44,7 @@ Options:
   -m                                    toggle mute
   -M <mixer>                            specify mixer (ex: Headphone), default Master
   -n                                    show notifications
-  -N <libnotify|xosd>                   notification method (default: libnotify)
+  -N <libnotify|herbe|xosd>             notification method (default: libnotify)
   -o <generic|i3blocks|xob|"format">    output the volume according to the provided output format:
                                             generic  = output the volume
                                             i3blocks = output the volume for i3blocks
@@ -75,6 +75,10 @@ See our [example blocklet](https://github.com/hastinbe/i3-volume/wiki/Usage-with
 
 [xosd] notifications can be used by specifying the `-N xosd` option to your volume commands. [See an example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-XOSD).
 
+## herbe
+
+[herbe] notifications can be used by specifying the `-N herbe` option to your volume commands. [See an example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-herbe).
+
 ## Help
 
 Having a problem? Try reading our [common issues](https://github.com/hastinbe/i3-volume/wiki/Common-Issues) or open an [issue](https://github.com/hastinbe/i3-volume/issues/new).
@@ -86,6 +90,7 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 
 [alsa-utils]: https://alsa.opensrc.org/Alsa-utils
 [dunst]: https://dunst-project.org
+[herbe]: https://github.com/dudik/herbe
 [i3blocks]: https://github.com/vivien/i3blocks
 [i3status]: https://github.com/i3/i3status
 [i3wm]: https://i3wm.org
