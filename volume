@@ -341,7 +341,7 @@ notify_muted() {
 
     case "$notification_method" in
         xosd)
-            local delay=$(($expires / 1000))
+            local delay=$(ms_to_secs $expires)
             osd_cat --align center -b percentage -P 0 -d $delay -p top -A center -c "$COLOR_MUTED" -T "Volume muted" -O 2 -u "$COLOR_XOSD_OUTLINE" &
             ;;
 
@@ -375,7 +375,7 @@ notify_volume() {
     case "$notification_method" in
         xosd)
             local color=$(volume_color $vol)
-            local delay=$(($expires / 1000))
+            local delay=$(ms_to_secs $expires)
             osd_cat --align center -b percentage -P "$vol" -d $delay -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" &
             ;;
 
@@ -582,6 +582,14 @@ update_statusbar() {
     fi
 
     return 0
+}
+
+# Converts milliseconds to seconds with rounding up
+#
+# Arguments:
+#   milliseconds    (integer) An integer in milliseconds
+ms_to_secs() {
+    echo $(( ($1 + (1000 - 1)) / 1000 ))
 }
 
 # Display program usage.
