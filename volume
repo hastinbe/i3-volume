@@ -23,6 +23,18 @@ get_default_sink_name() {
     pacmd stat | awk -F": " '/^Default sink name: /{print $2}'
 }
 
+# Get the index of a sink name
+#
+# Arguments
+#   Sink name   (string) Symbolic name of sink.
+get_sink_index() {
+    local sink="$1"
+
+    pacmd list-sinks |
+        awk -W posix '/^[ \t*]+index: /{idx = $3}
+                      /^[ \t]+name: / {insink = $2 == "<'$sink'>"; if (insink) { print idx }; exit}'
+}
+
 # Get the volume as a percentage.
 get_volume() {
     if $opt_use_amixer; then
@@ -530,6 +542,25 @@ volume_color() {
     fi
 }
 
+# Listens for PulseAudio events
+listen() {
+    local index=$(get_sink_index $sink)
+
+    while read -r event; do
+        if $opt_notification; then
+            if is_muted; then
+                notify_muted
+            else
+                notify_volume
+            fi
+        fi
+
+        if [ -n "$signal" ] && [ -n "$statusline" ]; then
+            update_statusline "$signal" "$statusline"
+        fi
+    done < <(pactl subscribe | stdbuf -oL grep -e "Event 'change' on sink #${index}")
+}
+
 # Display program usage.
 usage() {
     echo "Usage: $0 [options]
@@ -542,6 +573,7 @@ Options:
   -e <expires>                          expiration time of notifications, in milliseconds
   -i <amount>                           increase volume
   -l                                    use fullcolor instead of symbolic icons
+  -L                                    listen for changes to a PulseAudio sink (pulseaudio only)
   -m                                    toggle mute
   -M <mixer>                            specify mixer (ex: Headphone), default Master
   -n                                    show notifications
@@ -607,6 +639,7 @@ COLOR_XOSD_OUTLINE=${COLOR_XOSD_OUTLINE:-"#222222"}
 
 opt_decrease_volume=false
 opt_increase_volume=false
+opt_listen=false
 opt_mute_volume=false
 opt_notification=false
 opt_set_volume=false
@@ -627,7 +660,7 @@ symbolic_icon_suffix=""
 output_mode=""
 notification_method="libnotify"
 
-while getopts ":ac:d:e:hi:lmM:nN:o:ps:S:t:u:v:x:X:y" o; do
+while getopts ":ac:d:e:hi:lLmM:nN:o:ps:S:t:u:v:x:X:y" o; do
     case "$o" in
         a)
             opt_use_amixer=true
@@ -648,6 +681,9 @@ while getopts ":ac:d:e:hi:lmM:nN:o:ps:S:t:u:v:x:X:y" o; do
             ;;
         l)
             opt_use_fullcolor_icons=true
+            ;;
+        L)
+            opt_listen=true
             ;;
         m)
             opt_mute_volume=true
@@ -739,25 +775,29 @@ if [ -n "${symbolic_icon_suffix}" ]; then
 fi
 
 # The options below this line must be last
-if ${opt_notification}; then
-    if is_muted; then
-        notify_muted
-    else
-        notify_volume
-    fi
-fi
-
-if [ -n "${signal}" ]; then
-    if [ -z "${statusline}" ]; then
-        usage
-    fi
-    update_statusline "${signal}" "${statusline}"
+if ${opt_listen}; then
+    listen
 else
-    if [ -n "${statusline}" ]; then
-        usage
+    if ${opt_notification}; then
+        if is_muted; then
+            notify_muted
+        else
+            notify_volume
+        fi
     fi
-fi
 
-if [ -n "${output_mode}" ]; then
-    output_volume
+    if [ -n "${signal}" ]; then
+        if [ -z "${statusline}" ]; then
+            usage
+        fi
+        update_statusline "${signal}" "${statusline}"
+    else
+        if [ -n "${statusline}" ]; then
+            usage
+        fi
+    fi
+
+    if [ -n "${output_mode}" ]; then
+        output_volume
+    fi
 fi
