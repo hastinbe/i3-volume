@@ -96,7 +96,7 @@ raise_volume() {
     if [ -n "$max_vol" ]; then
         local vol=$(get_volume)
 
-        if [ "$vol" -ge "$max_vol" ]; then
+        if (( $vol >= $max_vol )); then
             return
         fi
     fi
@@ -179,7 +179,7 @@ set_volume() {
     if [ -n "$max_vol" ]; then
         local vol=$(get_volume)
 
-        if [ "$vol" -ge "$max_vol" ]; then
+        if (( $vol >= $max_vol )); then
             return
         fi
     fi
@@ -311,17 +311,17 @@ get_volume_icon() {
     local icon
 
     if $opt_use_fullcolor_icons; then
-        if [ "$vol" -ge 70 ]; then icon=${icons[1]}
-        elif [ "$vol" -ge 40 ]; then icon=${icons[3]}
-        elif [ "$vol" -gt 0 ]; then icon=${icons[2]}
+        if (( $vol >= 70 )); then icon=${icons[1]}
+        elif (( $vol >= 40 )); then icon=${icons[3]}
+        elif (( $vol > 0 )); then icon=${icons[2]}
         else icon=${icons[2]}
         fi
     else
         # Get overamplified icon if available, otherwise default to high volume icon
-        if [ "$vol" -gt 100 ]; then icon=${icons_symbolic[4]:-${icons_symbolic[1]}}
-        elif [ "$vol" -ge 70 ]; then icon=${icons_symbolic[1]}
-        elif [ "$vol" -ge 40 ]; then icon=${icons_symbolic[3]}
-        elif [ "$vol" -gt 0 ]; then icon=${icons_symbolic[2]}
+        if (( $vol > 100 )); then icon=${icons_symbolic[4]:-${icons_symbolic[1]}}
+        elif (( $vol >= 70 )); then icon=${icons_symbolic[1]}
+        elif (( $vol >= 40 )); then icon=${icons_symbolic[3]}
+        elif (( $vol > 0 )); then icon=${icons_symbolic[2]}
         else icon=${icons_symbolic[2]}
         fi
     fi
