@@ -41,6 +41,7 @@ Options:
   -e <expires>                          expiration time of notifications, in milliseconds
   -i <amount>                           increase volume
   -l                                    use fullcolor instead of symbolic icons
+  -L                                    listen for changes to a PulseAudio sink (pulseaudio only)
   -m                                    toggle mute
   -M <mixer>                            specify mixer (ex: Headphone), default Master
   -n                                    show notifications
@@ -62,6 +63,10 @@ Options:
   -y                                    use dunstify instead of notify-send
   -h                                    display this help and exit
   ```
+
+#### Listen mode (PulseAudio only)
+
+Listen mode (`-L`) causes `i3-volume` to listen for changes on your PulseAudio sink. When configured, these events will update your status bar and dispatch on-screen display notifications to reflect the change.
 
 ## Interoperability
 
