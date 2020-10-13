@@ -326,7 +326,7 @@ get_volume_icon() {
         fi
     fi
 
-    echo "${icon}"
+    echo "$icon"
 }
 
 # Display a notification indicating the volume is muted.
@@ -494,8 +494,8 @@ output_volume_i3blocks() {
     local exitcode=0
 
     if is_muted; then
-        short_text="<span color=\"${COLOR_MUTED}\">MUTE</span>\n"
-        full_text="<span color=\"${COLOR_MUTED}\">MUTE</span>\n"
+        short_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
+        full_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
     else
         local vol=$(get_volume)
         local color=$(volume_color $vol)
@@ -519,7 +519,7 @@ output_volume_xob() {
     if is_muted; then
         echo "${vol}!"
     else
-        echo "${vol}"
+        echo "$vol"
     fi
     exit 0
 }
@@ -550,7 +550,7 @@ listen() {
     while read -r event; do
         do_notification
         update_statusbar
-    done < <(pactl subscribe | stdbuf -oL grep -e "Event 'change' on sink #${index}")
+    done < <(pactl subscribe | stdbuf -oL grep -e "Event 'change' on sink #$index")
 }
 
 # Sends notifications
@@ -689,18 +689,18 @@ while getopts ":ac:d:e:hi:lLmM:nN:o:ps:S:t:u:v:x:X:y" o; do
             opt_use_amixer=true
             ;;
         c)
-            card="${OPTARG}"
+            card="$OPTARG"
             ;;
         d)
             opt_decrease_volume=true
-            volume="${OPTARG}"
+            volume="$OPTARG"
             ;;
         e)
-            expires="${OPTARG}"
+            expires="$OPTARG"
             ;;
         i)
             opt_increase_volume=true
-            volume="${OPTARG}"
+            volume="$OPTARG"
             ;;
         l)
             opt_use_fullcolor_icons=true
@@ -718,35 +718,35 @@ while getopts ":ac:d:e:hi:lLmM:nN:o:ps:S:t:u:v:x:X:y" o; do
             opt_notification=true
             ;;
         N)
-            notification_method="${OPTARG}"
+            notification_method="$OPTARG"
             ;;
         o)
-            output_mode="${OPTARG}"
+            output_mode="$OPTARG"
             ;;
         p)
             opt_show_volume_progress=true
             ;;
         s)
-            sink="${OPTARG}"
+            sink="$OPTARG"
             ;;
         S)
-            symbolic_icon_suffix="${OPTARG}"
+            symbolic_icon_suffix="$OPTARG"
             ;;
         t)
-            statusline="${OPTARG}"
+            statusline="$OPTARG"
             ;;
         u)
-            signal="${OPTARG}"
+            signal="$OPTARG"
             ;;
         v)
             opt_set_volume=true
-            volume="${OPTARG}"
+            volume="$OPTARG"
             ;;
         x)
-            max_volume="${OPTARG}"
+            max_volume="$OPTARG"
             ;;
         X)
-            max_amplification="${OPTARG}"
+            max_amplification="$OPTARG"
             ;;
         y)
             opt_use_dunstify=true
@@ -777,35 +777,35 @@ if ! $opt_use_amixer; then
     fi
 fi
 
-if ${opt_increase_volume}; then
+if $opt_increase_volume; then
     raise_volume $volume $max_volume
 fi
 
-if ${opt_decrease_volume}; then
+if $opt_decrease_volume; then
     lower_volume $volume
 fi
 
-if ${opt_set_volume}; then
+if $opt_set_volume; then
     set_volume $volume $max_volume
 fi
 
-if ${opt_mute_volume}; then
+if $opt_mute_volume; then
     toggle_mute $sink
 fi
 
-if [ -n "${symbolic_icon_suffix}" ]; then
+if [ -n "$symbolic_icon_suffix" ]; then
     apply_symbolic_icon_suffix
 fi
 
 # The options below this line must be last
-if ${opt_listen}; then
+if $opt_listen; then
     listen
 else
     do_notification
 
     update_statusbar || usage
 
-    if [ -n "${output_mode}" ]; then
+    if [ -n "$output_mode" ]; then
         output_volume
     fi
 fi
