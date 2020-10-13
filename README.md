@@ -63,21 +63,17 @@ Options:
   -h                                    display this help and exit
   ```
 
-## i3blocks
+## Interoperability
 
-See our [example blocklet](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3blocks) to get started using `i3-volume` with [i3blocks].
+`i3-volume` is capable of working with many other programs. The following lists a few with examples:
 
-## xob
-
-[xob] requires extra steps to use for notifications. See our [guide](https://github.com/hastinbe/i3-volume/wiki/Usage-with-xob) for how to set that up.
-
-## xosd
-
-[xosd] notifications can be used by specifying the `-N xosd` option to your volume commands. [See an example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-XOSD).
-
-## herbe
-
-[herbe] notifications can be used by specifying the `-N herbe` option to your volume commands. [See an example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-herbe).
+| Program | Note |
+| ---------- | ----- |
+| **[i3blocks]** | See our [example blocklet](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3blocks) |
+| **[xob]** | Requires extra steps for notifications. [Guide](https://github.com/hastinbe/i3-volume/wiki/Usage-with-xob) |
+| **[xosd]** | Notifications require the `-N xosd` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-XOSD)
+| **[herbe]** | Notifications require the `-N herbe` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-herbe)
+| **[sxhkd]** | For keybindings with or without [i3wm], often used with [bspwm]. [Example](https://github.com/hastinbe/i3-volume/wiki/Keybindings#sxkhd)
 
 ## Help
 
@@ -89,6 +85,7 @@ Having a problem? Try reading our [common issues](https://github.com/hastinbe/i3
 Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 
 [alsa-utils]: https://alsa.opensrc.org/Alsa-utils
+[bspwm]: https://github.com/baskerville/bspwm
 [dunst]: https://dunst-project.org
 [herbe]: https://github.com/dudik/herbe
 [i3blocks]: https://github.com/vivien/i3blocks
@@ -100,6 +97,7 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 [logo]: assets/logo.svg
 [notify-osd]: https://launchpad.net/notify-osd
 [pulseaudio-utils]: https://www.freedesktop.org/wiki/Software/PulseAudio/
+[sxhkd]: https://github.com/baskerville/sxhkd
 [wiki]: https://github.com/hastinbe/i3-volume/wiki
 [xob]: https://github.com/florentc/xob
 [xosd]: https://sourceforge.net/projects/libxosd/
