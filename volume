@@ -547,18 +547,40 @@ listen() {
     local index=$(get_sink_index $sink)
 
     while read -r event; do
-        if $opt_notification; then
-            if is_muted; then
-                notify_muted
-            else
-                notify_volume
-            fi
-        fi
-
-        if [ -n "$signal" ] && [ -n "$statusline" ]; then
-            update_statusline "$signal" "$statusline"
-        fi
+        do_notification
+        update_statusbar
     done < <(pactl subscribe | stdbuf -oL grep -e "Event 'change' on sink #${index}")
+}
+
+# Sends notifications
+do_notification() {
+    if $opt_notification; then
+        if is_muted; then
+            notify_muted
+        else
+            notify_volume
+        fi
+    fi
+}
+
+# Updates the status bars
+#
+# Returns
+#   0 when no problem occurred
+#   1 when one $of signal or $statusline are set but not both
+update_statusbar() {
+    if [ -n "$signal" ]; then
+        if [ -z "$statusline" ]; then
+            return 1
+        fi
+        update_statusline "$signal" "$statusline"
+    else
+        if [ -n "$statusline" ]; then
+            return 1
+        fi
+    fi
+
+    return 0
 }
 
 # Display program usage.
@@ -778,24 +800,9 @@ fi
 if ${opt_listen}; then
     listen
 else
-    if ${opt_notification}; then
-        if is_muted; then
-            notify_muted
-        else
-            notify_volume
-        fi
-    fi
+    do_notification
 
-    if [ -n "${signal}" ]; then
-        if [ -z "${statusline}" ]; then
-            usage
-        fi
-        update_statusline "${signal}" "${statusline}"
-    else
-        if [ -n "${statusline}" ]; then
-            usage
-        fi
-    fi
+    update_statusbar || usage
 
     if [ -n "${output_mode}" ]; then
         output_volume
