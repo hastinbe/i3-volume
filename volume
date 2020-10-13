@@ -491,6 +491,7 @@ output_volume_custom() {
 output_volume_i3blocks() {
     local short_text
     local full_text
+    local exitcode=0
 
     if is_muted; then
         short_text="<span color=\"${COLOR_MUTED}\">MUTE</span>\n"
@@ -498,17 +499,17 @@ output_volume_i3blocks() {
     else
         local vol=$(get_volume)
         local color=$(volume_color $vol)
+
         short_text="<span color=\"$color\">${vol}%</span>\n"
         full_text="<span color=\"$color\">${vol}%</span>\n"
+
+        if [ -n $max_volume ] && (( $vol > $max_volume )); then
+            exitcode=33
+        fi
     fi
 
-    echo -ne "${full_text}${short_text}"
-
-    if [ -n "$max_volume" ] && [ "$vol" -gt "$max_volume" ]; then
-        exit 33
-    fi
-
-    exit 0
+    echo -ne "$full_text$short_text"
+    exit $exitcode
 }
 
 # Outputs the current volume for xob.
