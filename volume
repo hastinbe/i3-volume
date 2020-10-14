@@ -615,6 +615,26 @@ update_statusbar() {
     return 0
 }
 
+# Initializes settings for using PulseAudio
+init_pulseaudio() {
+    if [ -z $sink ]; then
+        sink="$(get_default_sink_name)"
+    fi
+
+    # Determine a max volume when it's not specified
+    if [ -z $max_volume ]; then
+        sink_flags+=( $(get_sink_flags "$sink") )
+        pa_base_volume=$(get_base_volume_pulseaudio "$sink")
+
+        # Does the sink support digital (software) amplification?
+        if [[ "${sink_flags[@]}" =~ "DECIBEL_VOLUME" ]]; then
+            max_volume=$(($PA_VOLUME_NORM * $max_amplification))
+        else
+            max_volume=$PA_VOLUME_NORM
+        fi
+    fi
+}
+
 # Converts milliseconds to seconds with rounding up
 #
 # Arguments:
@@ -799,22 +819,7 @@ shift $((OPTIND-1)) # Shift off options and optional --
 
 # Default to PA when amixer is not specified
 if ! $opt_use_amixer; then
-    if [ -z $sink ]; then
-        sink="$(get_default_sink_name)"
-    fi
-
-    # Determine a max volume when it's not specified
-    if [ -z $max_volume ]; then
-        sink_flags+=( $(get_sink_flags "$sink") )
-        pa_base_volume=$(get_base_volume_pulseaudio "$sink")
-
-        # Does the sink support digital (software) amplification?
-        if [[ "${sink_flags[@]}" =~ "DECIBEL_VOLUME" ]]; then
-            max_volume=$(($PA_VOLUME_NORM * $max_amplification))
-        else
-            max_volume=$PA_VOLUME_NORM
-        fi
-    fi
+    init_pulseaudio
 fi
 
 if $opt_increase_volume; then
