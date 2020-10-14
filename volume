@@ -869,7 +869,7 @@ if $opt_set_volume; then
 fi
 
 if $opt_mute_volume; then
-    toggle_mute $sink
+    toggle_mute
 fi
 
 if [ -n "$symbolic_icon_suffix" ]; then
