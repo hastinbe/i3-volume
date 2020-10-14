@@ -403,7 +403,7 @@ notify_volume_xosd() {
         percentage=$vol
     fi
 
-    osd_cat --align center -b percentage -P "$percentage" -d $delay -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" &
+    osd_cat --align center -b percentage -P "$percentage" -d $delay -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" & disown
 }
 
 
@@ -420,7 +420,7 @@ notify_volume_herbe() {
     # Dismiss existing/pending notifications to prevent queuing
     pkill -SIGUSR1 herbe
 
-    herbe "$text" &
+    herbe "$text" & disown
 }
 
 # Updates the status line.
