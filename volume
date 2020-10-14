@@ -528,8 +528,39 @@ output_volume_xob() {
 #
 # Arguments:
 #   $1 - The volume
-#   $2 - Maximum volume
 volume_color() {
+    local vol=$1
+
+    if $opt_use_amixer; then
+        volume_color_amixer $vol
+    else
+        volume_color_pulseaudio $vol
+    fi
+}
+
+# Get color for the given volume for amixer
+#
+# Arguments:
+#   $1 - The volume
+volume_color_amixer() {
+    local vol=$1
+
+    if (( $vol >= 0 && $vol < 100 )); then
+        echo "$COLOR_MUTED_TO_BASE"
+    elif (( $vol == 100 )); then
+        echo "$COLOR_BASE_TO_NORM"
+    elif (( $vol > 100 && $vol <= $max_volume )); then
+        echo "$COLOR_NORM_TO_MAX"
+    else
+        echo "$COLOR_OTHER"
+    fi
+}
+
+# Get color for the given volume for PulseAudio
+#
+# Arguments:
+#   $1 - The volume
+volume_color_pulseaudio() {
     local vol=$1
 
     if (( $vol >= $PA_VOLUME_MUTED && $vol < $pa_base_volume )); then
@@ -766,6 +797,7 @@ while getopts ":ac:d:e:hi:lLmM:nN:o:ps:S:t:u:v:x:X:y" o; do
 done
 shift $((OPTIND-1)) # Shift off options and optional --
 
+# Default to PA when amixer is not specified
 if ! $opt_use_amixer; then
     if [ -z $sink ]; then
         sink="$(get_default_sink_name)"
