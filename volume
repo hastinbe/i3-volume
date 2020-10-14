@@ -498,7 +498,6 @@ output_volume_generic() {
     else
         echo "$(get_volume)%"
     fi
-    exit 0
 }
 
 # Outputs the current volume using a custom format string.
@@ -513,14 +512,12 @@ output_volume_custom() {
     else
         echo -ne "${format//\%v/$(get_volume)%}"
     fi
-    exit 0
 }
 
 # Outputs the current volume for i3blocks.
 output_volume_i3blocks() {
     local short_text
     local full_text
-    local exitcode=0
 
     if is_muted; then
         short_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
@@ -538,7 +535,6 @@ output_volume_i3blocks() {
     fi
 
     echo -ne "$full_text$short_text"
-    exit $exitcode
 }
 
 # Outputs the current volume for xob.
@@ -550,7 +546,6 @@ output_volume_xob() {
     else
         echo "$vol"
     fi
-    exit 0
 }
 
 # Get color for the given volume
@@ -640,7 +635,7 @@ update_statusbar() {
     return 0
 }
 
-# Initializes settings for using PulseAudio
+# Initialize settings for using PulseAudio
 init_pulseaudio() {
     if [ -z $sink ]; then
         sink="$(get_default_sink_name)"
@@ -708,6 +703,8 @@ Options:
 ###########################################################
 # Non-command line option variables
 ###########################################################
+
+exitcode=0
 
 icons=(
     audio-volume-muted
@@ -880,3 +877,5 @@ else
         output_volume
     fi
 fi
+
+exit ${exitcode:-0}
