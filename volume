@@ -329,70 +329,98 @@ get_volume_icon() {
     echo "$icon"
 }
 
-# Display a notification indicating the volume is muted.
-notify_muted() {
+# Display a notification indicating muted or current volume.
+notify_volume() {
+    local vol=$(get_volume)
     local icon
 
-    if $opt_use_fullcolor_icons; then
-        icon=${icons[0]}
+    if is_muted; then
+        text="Volume muted"
+
+        if $opt_use_fullcolor_icons; then
+            icon=${icons[0]}
+        else
+            icon=${icons_symbolic[0]}
+        fi
     else
-        icon=${icons_symbolic[0]}
+        printf -v text "Volume %3s%%" $vol
+
+        icon=$(get_volume_icon "$vol")
+
+        if $opt_show_volume_progress; then
+            local progress=$(get_progress_bar "$vol")
+            text="$text $progress"
+        fi
     fi
 
     case "$notification_method" in
         xosd)
-            local delay=$(ms_to_secs $expires)
-            osd_cat --align center -b percentage -P 0 -d $delay -p top -A center -c "$COLOR_MUTED" -T "Volume muted" -O 2 -u "$COLOR_XOSD_OUTLINE" &
+            notify_volume_xosd "$vol" "$text"
             ;;
-
-        # There is a patch with a notify-send script for herbe, not in the current version at this time but would make this option irrelevant. See https://github.com/dudik/herbe/pull/10
         herbe)
-            # Dismiss existing/pending notifications to prevent queuing
-            pkill -SIGUSR1 herbe
-            herbe "Volume muted" &
+            notify_volume_herbe "$text"
             ;;
-        *) # libnotify
-            if $opt_use_dunstify; then
-                dunstify -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -r 1000
-            else
-                notify-send -i $icon -t $expires -h int:value:0 -h string:synchronous:volume "Volume muted" -h string:x-canonical-private-synchronous:i3-volume
-            fi
+        *)
+            notify_volume_libnotify "$vol" "$icon" "$text"
             ;;
     esac
 }
 
-# Display a notification indicating the current volume.
-notify_volume() {
-    local vol=$(get_volume)
-    local icon=$(get_volume_icon "$vol")
-    printf -v text "Volume %3s%%" $vol
+# Send notifcation for libnotify-compatible notification daemons.
+#
+# Arguments:
+#   Volume      (integer) An integer indicating the volume.
+#   Icon        (string) Icon to display.
+#   Text        (string) Notification text.
+notify_volume_libnotify() {
+    local vol="$1"
+    local icon="$2"
+    local text="${@:3}"
 
-    if $opt_show_volume_progress; then
-        local progress=$(get_progress_bar "$vol")
-        text="$text $progress"
+    if $opt_use_dunstify; then
+        dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
+    else
+        notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
+    fi
+}
+
+# Send notification to XOSD.
+#
+# Arguments:
+#   Volume      (integer) An integer indicating the volume.
+#   Text        (string) Notification text.
+notify_volume_xosd() {
+    local vol="$1"
+    local text="${@:2}"
+    local delay=$(ms_to_secs $expires)
+    local percentage
+
+    if is_muted; then
+        color=$COLOR_MUTED
+        percentage=0
+    else
+        color=$(volume_color $vol)
+        percentage=$vol
     fi
 
-    case "$notification_method" in
-        xosd)
-            local color=$(volume_color $vol)
-            local delay=$(ms_to_secs $expires)
-            osd_cat --align center -b percentage -P "$vol" -d $delay -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" &
-            ;;
+    osd_cat --align center -b percentage -P "$percentage" -d $delay -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" &
+}
 
-        # There is a patch with a notify-send script for herbe, not in the current version at this time but would make this option irrelevant. See https://github.com/dudik/herbe/pull/10
-        herbe)
-            # Dismiss existing/pending notifications to prevent queuing
-            pkill -SIGUSR1 herbe
-            herbe "$text" &
-            ;;
-        *) # libnotify
-            if $opt_use_dunstify; then
-                dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
-            else
-                notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
-            fi
-            ;;
-    esac
+
+# Send notification to herbe.
+#
+# Arguments:
+#   Text        (string) Notification text.
+#
+# Note: a patch with a notify-send script for herbe, not in the current version at this
+#       time but would make this irrelevant. See https://github.com/dudik/herbe/pull/10
+notify_volume_herbe() {
+    local text="$@"
+
+    # Dismiss existing/pending notifications to prevent queuing
+    pkill -SIGUSR1 herbe
+
+    herbe "$text" &
 }
 
 # Updates the status line.
@@ -403,6 +431,7 @@ notify_volume() {
 update_statusline() {
     local signal="$1"
     local proc="$2"
+
     pkill "-$signal" "$proc"
 }
 
@@ -587,11 +616,7 @@ listen() {
 # Sends notifications
 do_notification() {
     if $opt_notification; then
-        if is_muted; then
-            notify_muted
-        else
-            notify_volume
-        fi
+        notify_volume
     fi
 }
 
@@ -718,6 +743,7 @@ COLOR_XOSD_OUTLINE=${COLOR_XOSD_OUTLINE:-"#222222"}
 ###########################################################
 # Command line option variables
 ###########################################################
+declare -l notification_method
 
 opt_decrease_volume=false
 opt_increase_volume=false
