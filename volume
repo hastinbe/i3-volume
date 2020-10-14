@@ -18,6 +18,12 @@
 #  Author: Beau Hastings <beau@saweet.net>
 #  URL: https://github.com/hastinbe/i3-volume
 
+# Executes `pacmd list-sinks` or return its output if called previously
+pacmd_list_sinks() {
+    [ -z "$PACMD_LIST_SINKS_OUTPUT" ] && PACMD_LIST_SINKS_OUTPUT=$(pacmd list-sinks)
+    echo "$PACMD_LIST_SINKS_OUTPUT"
+}
+
 # Get default sink name
 get_default_sink_name() {
     pacmd stat | awk -F": " '/^Default sink name: /{print $2}'
@@ -30,7 +36,7 @@ get_default_sink_name() {
 get_sink_index() {
     local sink="$1"
 
-    pacmd list-sinks |
+    pacmd_list_sinks |
         awk -W posix '/^[ \t*]+index: /{idx = $3}
                       /^[ \t]+name: / {insink = $2 == "<'$sink'>"; if (insink) { print idx }; exit}'
 }
@@ -51,7 +57,7 @@ get_volume() {
 get_volume_pulseaudio() {
     local sink="$1"
 
-    pacmd list-sinks |
+    pacmd_list_sinks |
         awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
                       /^[ \t]+volume: / && insink {gsub("%,?", ""); print $5; exit}'
 }
@@ -80,7 +86,7 @@ get_volume_amixer() {
 get_base_volume_pulseaudio() {
     local sink="$1"
 
-    pacmd list-sinks |
+    pacmd_list_sinks |
         awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
                       /^[ \t]+base volume: / && insink {gsub("%", ""); print $5; exit}'
 }
@@ -468,7 +474,7 @@ apply_symbolic_icon_suffix() {
 get_sink_flags() {
     local sink="$1"
 
-    pacmd list-sinks |
+    pacmd_list_sinks |
         awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
                       /^[ \t]+flags: / && insink {for(i=2;i<=NF;++i)printf $i FS; exit}'
 }
@@ -637,6 +643,8 @@ update_statusbar() {
 
 # Initialize settings for using PulseAudio
 init_pulseaudio() {
+    PACMD_LIST_SINKS_OUTPUT=$(pacmd list-sinks)
+
     if [ -z $sink ]; then
         sink="$(get_default_sink_name)"
     fi
@@ -728,6 +736,9 @@ sink_flags=()
 pa_base_volume=100
 PA_VOLUME_NORM=100
 PA_VOLUME_MUTED=0
+
+# Cached output of `pacmd list-sinks`; so we don't have to call it each time we need it
+PACMD_LIST_SINKS_OUTPUT=""
 
 # Output volume colors
 COLOR_MUTED=${COLOR_MUTED:-"#FFFF00"}
