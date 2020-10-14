@@ -24,6 +24,11 @@ pacmd_list_sinks() {
     echo "$PACMD_LIST_SINKS_OUTPUT"
 }
 
+# Invalidates the `pacmd list-sinks` "cache"
+invalidate_pacmd_list_sinks() {
+    unset PACMD_LIST_SINKS_OUTPUT
+}
+
 # Get default sink name
 get_default_sink_name() {
     pacmd stat | awk -F": " '/^Default sink name: /{print $2}'
@@ -206,6 +211,8 @@ set_volume_pulseaudio() {
     local sink="$1"
     local vol="$2"
 
+    invalidate_pacmd_list_sinks
+
     pactl set-sink-volume "$sink" "$vol" || pactl set-sink-volume "$sink" -- "$vol"
 }
 
@@ -240,6 +247,8 @@ toggle_mute() {
 #   Sink name   (string) Symbolic name of sink.
 toggle_mute_pulseaudio() {
     local sink="$1"
+
+    invalidate_pacmd_list_sinks
 
     pactl set-sink-mute "$sink" toggle
 }
@@ -277,9 +286,10 @@ is_muted() {
 is_muted_pulseaudio() {
     local sink="$1"
 
-    muted=$(pacmd list-sinks |
+    muted=$(pacmd_list_sinks |
                    awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
                                  /^[ \t]+muted: / && insink {print $2; exit}')
+
     [ "$muted" = "yes" ]
 }
 
