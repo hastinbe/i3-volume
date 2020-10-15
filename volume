@@ -76,9 +76,9 @@ get_volume_amixer() {
     local volume
 
     if [ -n "$card" ]; then
-        volume=$(amixer -c "$card" -- sget $mixer)
+        volume=$(amixer -c "$card" -- sget $mixer) || exit 1
     else
-        volume=$(amixer sget $mixer)
+        volume=$(amixer sget $mixer) || exit 1
     fi
 
     echo $volume | awk -W posix -F'[][]' '/dB/ { gsub("%", ""); print $2 }'
@@ -305,9 +305,9 @@ is_muted_amixer() {
     local output
 
     if [ -n "$card" ]; then
-        output=$(amixer -c "$card" -- sget $mixer)
+        output=$(amixer -c "$card" -- sget $mixer) || exit 1
     else
-        output=$(amixer sget $mixer)
+        output=$(amixer sget $mixer) || exit 1
     fi
 
     status=$(echo $output | awk -W posix -F'[][]' '/dB/ { print $6 }')
@@ -653,7 +653,7 @@ update_statusbar() {
 
 # Initialize settings for using PulseAudio
 init_pulseaudio() {
-    PACMD_LIST_SINKS_OUTPUT=$(pacmd list-sinks)
+    PACMD_LIST_SINKS_OUTPUT=$(pacmd list-sinks) || exit 1
 
     if [ -z $sink ]; then
         sink="$(get_default_sink_name)"
