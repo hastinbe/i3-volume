@@ -20,7 +20,7 @@
 
 # Executes `pacmd list-sinks` or return its output if called previously
 pacmd_list_sinks() {
-    [ -z "$PACMD_LIST_SINKS_OUTPUT" ] && PACMD_LIST_SINKS_OUTPUT=$(pacmd list-sinks)
+    [[ $opt_listen || -z "$PACMD_LIST_SINKS_OUTPUT" ]] && PACMD_LIST_SINKS_OUTPUT=$(pacmd list-sinks)
     echo "$PACMD_LIST_SINKS_OUTPUT"
 }
 
@@ -618,7 +618,7 @@ volume_color_pulseaudio() {
 listen() {
     local index=$(get_sink_index $sink)
 
-    while read -r event; do
+    while IFS= read -r event; do
         do_notification
         update_statusbar
     done < <(pactl subscribe | stdbuf -oL grep -e "Event 'change' on sink #$index")
