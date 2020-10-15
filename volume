@@ -546,7 +546,7 @@ output_volume_i3blocks() {
         full_text="<span color=\"$color\">${vol}%</span>\n"
 
         if [ -n $max_volume ] && (( $vol > $max_volume )); then
-            exitcode=33
+            exitcode=$EXIT_I3BLOCKS_URGENT
         fi
     fi
 
@@ -722,7 +722,11 @@ Options:
 # Non-command line option variables
 ###########################################################
 
-exitcode=0
+# Exit codes
+EXIT_SUCCESS=0
+EXIT_I3BLOCKS_URGENT=33
+
+exitcode=$EXIT_SUCCESS
 
 icons=(
     audio-volume-muted
@@ -896,7 +900,9 @@ else
 
     if [ -n "$output_mode" ]; then
         output_volume
+
+        exit ${exitcode:-$EXIT_SUCCESS}
     fi
 fi
 
-exit ${exitcode:-0}
+exit ${exitcode:-$EXIT_SUCCESS}
