@@ -290,7 +290,7 @@ is_muted_pulseaudio() {
                    awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
                                  /^[ \t]+muted: / && insink {print $2; exit}')
 
-    [ "$muted" = "yes" ]
+    [[ $muted = yes ]]
 }
 
 # Check if card is muted.
@@ -312,7 +312,7 @@ is_muted_amixer() {
 
     status=$(echo $output | awk -W posix -F'[][]' '/dB/ { print $6 }')
 
-    [ "$status" = "off" ]
+    [[ $status = off ]]
 }
 
 # Gets an icon for the provided volume.
