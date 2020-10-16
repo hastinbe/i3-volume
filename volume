@@ -116,20 +116,21 @@ get_base_volume_pulseaudio() {
 #   Step        (integer) Percentage to increase by.
 #   Max Volume  (optional) (integer|percentage) Maximum volume limit.
 raise_volume() {
+    local step=$1
     local max_vol=$2
 
     if not_empty "$max_vol"; then
         local vol=$(get_volume)
 
-        if (( $vol >= $max_vol )); then
+        if (( $vol + $step > $max_vol )); then
             return
         fi
     fi
 
     if $opt_use_amixer; then
-        raise_volume_amixer "$card" "$1"
+        raise_volume_amixer "$card" "$step"
     else
-        raise_volume_pulseaudio "$sink" "$1"
+        raise_volume_pulseaudio "$sink" "$step"
     fi
 }
 
@@ -205,7 +206,7 @@ set_volume() {
     if not_empty "$max_vol"; then
         local vol=$(get_volume)
 
-        if (( $vol >= $max_vol )); then
+        if (( $vol + $step > $max_vol )); then
             return
         fi
     fi
@@ -228,7 +229,7 @@ set_volume_pulseaudio() {
 
     invalidate_pacmd_list_sinks
 
-    echo pactl set-sink-volume "$sink" "$vol" || pactl set-sink-volume "$sink" -- "$vol"
+    pactl set-sink-volume "$sink" "$vol" || pactl set-sink-volume "$sink" -- "$vol"
 }
 
 # Set volume using amixer.
