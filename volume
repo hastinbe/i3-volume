@@ -28,6 +28,11 @@ not_empty() {
     [[ -n $1 ]]
 }
 
+# Helper that is `true` if a variable is set
+isset() {
+    [[ -v $1 ]]
+}
+
 # Executes `pacmd list-sinks` or return its output if called previously
 pacmd_list_sinks() {
     if $opt_listen || empty "$PACMD_LIST_SINKS_OUTPUT"; then
