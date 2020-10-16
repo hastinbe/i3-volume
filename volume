@@ -51,7 +51,7 @@ get_default_sink_name() {
 # Arguments
 #   Sink name   (string) Symbolic name of sink.
 get_sink_index() {
-    local sink=$1
+    local -r sink=$1
 
     pacmd_list_sinks |
         awk -W posix '/^[ \t*]+index: /{idx = $3}
@@ -72,7 +72,7 @@ get_volume() {
 # Arguments
 #   Sink name   (string) Symbolic name of sink.
 get_volume_pulseaudio() {
-    local sink=$1
+    local -r sink=$1
 
     pacmd_list_sinks |
         awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
@@ -85,8 +85,8 @@ get_volume_pulseaudio() {
 #   Card        (integer) Card number to control.
 #   Mixer       (string) Name of the mixer.
 get_volume_amixer() {
-    local card=$1
-    local mixer=$2
+    local -r card=$1
+    local -r mixer=$2
     local volume
 
     if not_empty "$card"; then
@@ -103,7 +103,7 @@ get_volume_amixer() {
 # Arguments
 #   Sink name   (string) Symbolic name of sink.
 get_base_volume_pulseaudio() {
-    local sink=$1
+    local -r sink=$1
 
     pacmd_list_sinks |
         awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
@@ -116,11 +116,11 @@ get_base_volume_pulseaudio() {
 #   Step        (integer) Percentage to increase by.
 #   Max Volume  (optional) (integer|percentage) Maximum volume limit.
 raise_volume() {
-    local step=$1
-    local max_vol=$2
+    local -r step=$1
+    local -r max_vol=$2
 
     if not_empty "$max_vol"; then
-        local vol=$(get_volume)
+        local -r vol=$(get_volume)
 
         if (( $vol + $step > $max_vol )); then
             return
@@ -140,8 +140,8 @@ raise_volume() {
 #   Sink name   (string)  Symbolic name of sink.
 #   Step        (integer) Percentage to increase by.
 raise_volume_pulseaudio() {
-    local sink=$1
-    local step=${2:-5}
+    local -r sink=$1
+    local -r step=${2:-5}
 
     set_volume_pulseaudio "$sink" "+${step}%"
 }
@@ -152,8 +152,8 @@ raise_volume_pulseaudio() {
 #   Card        (integer) Card number to control.
 #   Step        (integer) Percentage to increase by.
 raise_volume_amixer() {
-    local card=$1
-    local step=${2:-5}
+    local -r card=$1
+    local -r step=${2:-5}
 
     set_volume_amixer "$card" "${step}%+"
 }
@@ -176,8 +176,8 @@ lower_volume() {
 #   Sink name   (string)  Symbolic name of sink.
 #   Step        (integer|percentage) Percentage to decrease by.
 lower_volume_pulseaudio() {
-    local sink=$1
-    local step=${2:-5}
+    local -r sink=$1
+    local -r step=${2:-5}
 
     set_volume_pulseaudio "$sink" "-${step}%"
 }
@@ -188,8 +188,8 @@ lower_volume_pulseaudio() {
 #   Card        (integer) Card number to control.
 #   Step        (integer) Percentage to decrease by.
 lower_volume_amixer() {
-    local card=$1
-    local step=${2:-5}
+    local -r card=$1
+    local -r step=${2:-5}
 
     set_volume_amixer "$card" "${step}%-"
 }
@@ -200,8 +200,8 @@ lower_volume_amixer() {
 #   Volume      (integer|linear factor|percentage|decibel)
 #   Max Volume  (optional) (integer|percentage) Maximum volume limit.
 set_volume() {
-    local vol=$1
-    local max_vol=$2
+    local -r vol=$1
+    local -r max_vol=$2
 
     if not_empty "$max_vol" && (( $vol > $max_vol )); then
         return
@@ -220,8 +220,8 @@ set_volume() {
 #   Sink name   (string) Symbolic name of sink.
 #   Volume      (integer|linear factor|percentage|decibel)
 set_volume_pulseaudio() {
-    local sink=$1
-    local vol=$2
+    local -r sink=$1
+    local -r vol=$2
 
     invalidate_pacmd_list_sinks
 
@@ -234,8 +234,8 @@ set_volume_pulseaudio() {
 #   Card        (integer) Card number to control.
 #   Volume      (integer|linear factor|percentage|decibel)
 set_volume_amixer() {
-    local card=$1
-    local vol=$2
+    local -r card=$1
+    local -r vol=$2
 
     if not_empty "$card"; then
         amixer -q -c "$card" -- set $mixer "$vol"
@@ -258,7 +258,7 @@ toggle_mute() {
 # Arguments:
 #   Sink name   (string) Symbolic name of sink.
 toggle_mute_pulseaudio() {
-    local sink=$1
+    local -r sink=$1
 
     invalidate_pacmd_list_sinks
 
@@ -270,7 +270,7 @@ toggle_mute_pulseaudio() {
 # Arguments:
 #   Card        (integer) Card number to control.
 toggle_mute_amixer() {
-    local card=$1
+    local -r card=$1
 
     if not_empty "$card"; then
         amixer -q -c "$card" -- set $mixer toggle
@@ -296,7 +296,7 @@ is_muted() {
 # Returns:
 #   0 when true, 1 when false.
 is_muted_pulseaudio() {
-    local sink=$1
+    local -r sink=$1
 
     muted=$(pacmd_list_sinks |
                    awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
@@ -313,7 +313,7 @@ is_muted_pulseaudio() {
 # Returns:
 #   0 when true, 1 when false.
 is_muted_amixer() {
-    local card="$1"
+    local -r card="$1"
     local output
 
     if not_empty "$card"; then
@@ -335,7 +335,7 @@ is_muted_amixer() {
 # Returns:
 #   The volume icon name.
 get_volume_icon() {
-    local vol=$1
+    local -r vol=$1
     local icon
 
     if $opt_use_fullcolor_icons; then
@@ -359,7 +359,7 @@ get_volume_icon() {
 
 # Display a notification indicating muted or current volume.
 notify_volume() {
-    local vol=$(get_volume)
+    local -r vol=$(get_volume)
     local icon
 
     if is_muted; then
@@ -376,7 +376,7 @@ notify_volume() {
         icon=$(get_volume_icon "$vol")
 
         if $opt_show_volume_progress; then
-            local progress=$(get_progress_bar "$vol")
+            local -r progress=$(get_progress_bar "$vol")
             text="$text $progress"
         fi
     fi
@@ -401,9 +401,9 @@ notify_volume() {
 #   Icon        (string) Icon to display.
 #   Text        (string) Notification text.
 notify_volume_libnotify() {
-    local vol=$1
-    local icon=$2
-    local text=${@:3}
+    local -r vol=$1
+    local -r icon=$2
+    local -r text=${@:3}
 
     if $opt_use_dunstify; then
         dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
@@ -418,9 +418,9 @@ notify_volume_libnotify() {
 #   Volume      (integer) An integer indicating the volume.
 #   Text        (string) Notification text.
 notify_volume_xosd() {
-    local vol=$1
-    local text=${@:2}
-    local delay=$(ms_to_secs $expires)
+    local -r vol=$1
+    local -r text=${@:2}
+    local -r delay=$(ms_to_secs $expires)
     local percentage
 
     if is_muted; then
@@ -443,7 +443,7 @@ notify_volume_xosd() {
 # Note: a patch with a notify-send script for herbe, not in the current version at this
 #       time but would make this irrelevant. See https://github.com/dudik/herbe/pull/10
 notify_volume_herbe() {
-    local text=$@
+    local -r text=$@
 
     # Dismiss existing/pending notifications to prevent queuing
     pkill -SIGUSR1 herbe
@@ -457,8 +457,8 @@ notify_volume_herbe() {
 #   signal  (string) The signal used to update the status line.
 #   proc    (string) The name of the status line process.
 update_statusline() {
-    local signal=$1
-    local proc=$2
+    local -r signal=$1
+    local -r proc=$2
 
     pkill "-$signal" "$proc"
 }
@@ -473,10 +473,10 @@ update_statusline() {
 # Returns:
 #   The progress bar.
 get_progress_bar() {
-    local percent=$1
-    local max_percent=${2:-100}
-    local divisor=${3:-5}
-    local progress=$((($percent > $max_percent ? $max_percent : $percent) / $divisor))
+    local -r percent=$1
+    local -r max_percent=${2:-100}
+    local -r divisor=${3:-5}
+    local -r progress=$((($percent > $max_percent ? $max_percent : $percent) / $divisor))
 
     printf -v bar "%*s" $progress
     echo "${bar// /█}"
@@ -494,7 +494,7 @@ apply_symbolic_icon_suffix() {
 # Arguments
 #   Sink name   (string) Symbolic name of sink.
 get_sink_flags() {
-    local sink=$1
+    local -r sink=$1
 
     pacmd_list_sinks |
         awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
@@ -533,7 +533,7 @@ output_volume_generic() {
 # Format options:
 #   %v = volume percentage or "MUTE" when muted
 output_volume_custom() {
-    local format=$output_mode
+    local -r format=$output_mode
 
     if is_muted; then
         echo -ne "${format//\%v/MUTE}"
@@ -551,8 +551,8 @@ output_volume_i3blocks() {
         short_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
         full_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
     else
-        local vol=$(get_volume)
-        local color=$(volume_color $vol)
+        local -r vol=$(get_volume)
+        local -r color=$(volume_color $vol)
 
         short_text="<span color=\"$color\">${vol}%</span>\n"
         full_text="<span color=\"$color\">${vol}%</span>\n"
@@ -567,7 +567,7 @@ output_volume_i3blocks() {
 
 # Outputs the current volume for xob.
 output_volume_xob() {
-    local vol=$(get_volume)
+    local -r vol=$(get_volume)
 
     if is_muted; then
         echo "${vol}!"
@@ -581,7 +581,7 @@ output_volume_xob() {
 # Arguments:
 #   $1 - The volume
 volume_color() {
-    local vol=$1
+    local -r vol=$1
 
     if $opt_use_amixer; then
         volume_color_amixer $vol
@@ -595,7 +595,7 @@ volume_color() {
 # Arguments:
 #   $1 - The volume
 volume_color_amixer() {
-    local vol=$1
+    local -r vol=$1
 
     if (( $vol >= 0 && $vol < 100 )); then
         echo "$COLOR_MUTED_TO_BASE"
@@ -613,7 +613,7 @@ volume_color_amixer() {
 # Arguments:
 #   $1 - The volume
 volume_color_pulseaudio() {
-    local vol=$1
+    local -r vol=$1
 
     if (( $vol >= $PA_VOLUME_MUTED && $vol < $pa_base_volume )); then
         echo "$COLOR_MUTED_TO_BASE"
@@ -628,7 +628,7 @@ volume_color_pulseaudio() {
 
 # Listens for PulseAudio events
 listen() {
-    local index=$(get_sink_index $sink)
+    local -r index=$(get_sink_index $sink)
 
     while IFS= read -r event; do
         do_notification
@@ -736,8 +736,8 @@ EOF
 ###########################################################
 
 # Exit codes
-EXIT_SUCCESS=0
-EXIT_I3BLOCKS_URGENT=33
+readonly EXIT_SUCCESS=0
+readonly EXIT_I3BLOCKS_URGENT=33
 
 exitcode=$EXIT_SUCCESS
 
@@ -761,19 +761,19 @@ sink_flags=()
 
 # Unlike in PA, PA_VOLUME_* in i3-volume are percentages instead of integers
 pa_base_volume=100
-PA_VOLUME_NORM=100
-PA_VOLUME_MUTED=0
+readonly PA_VOLUME_NORM=100
+readonly PA_VOLUME_MUTED=0
 
 # Cached output of `pacmd list-sinks`; so we don't have to call it each time we need it
 PACMD_LIST_SINKS_OUTPUT=""
 
 # Output volume colors
-COLOR_MUTED=${COLOR_MUTED:-"#FFFF00"}
-COLOR_MUTED_TO_BASE=${COLOR_MUTED_TO_BASE:-"#00FF00"}
-COLOR_BASE_TO_NORM=${COLOR_BASE_TO_NORM:-"#FFFF00"}
-COLOR_NORM_TO_MAX=${COLOR_NORM_TO_MAX:-"#FF0000"}
-COLOR_OTHER=${COLOR_OTHER:-"#FFFFFF"}
-COLOR_XOSD_OUTLINE=${COLOR_XOSD_OUTLINE:-"#222222"}
+readonly COLOR_MUTED=${COLOR_MUTED:-"#FFFF00"}
+readonly COLOR_MUTED_TO_BASE=${COLOR_MUTED_TO_BASE:-"#00FF00"}
+readonly COLOR_BASE_TO_NORM=${COLOR_BASE_TO_NORM:-"#FFFF00"}
+readonly COLOR_NORM_TO_MAX=${COLOR_NORM_TO_MAX:-"#FF0000"}
+readonly COLOR_OTHER=${COLOR_OTHER:-"#FFFFFF"}
+readonly COLOR_XOSD_OUTLINE=${COLOR_XOSD_OUTLINE:-"#222222"}
 
 ###########################################################
 # Command line option variables
