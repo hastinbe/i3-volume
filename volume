@@ -18,13 +18,22 @@
 #  Author: Beau Hastings <beau@saweet.net>
 #  URL: https://github.com/hastinbe/i3-volume
 
+# Helper that is `true` if a string is empty
+empty() {
+    [[ -z $1 ]]
+}
+
+# Helper that is `true` if a string is not empty
+not_empty() {
+    [[ -n $1 ]]
+}
+
 # Executes `pacmd list-sinks` or return its output if called previously
 pacmd_list_sinks() {
-    if [[ $opt_listen || -z "$PACMD_LIST_SINKS_OUTPUT" ]]; then
+    if $opt_listen || empty "$PACMD_LIST_SINKS_OUTPUT"; then
         PACMD_LIST_SINKS_OUTPUT=$(pacmd list-sinks)
     fi
     echo "$PACMD_LIST_SINKS_OUTPUT"
-
 }
 
 # Invalidates the `pacmd list-sinks` "cache"
@@ -78,7 +87,7 @@ get_volume_amixer() {
     local card="$1"
     local volume
 
-    if [ -n "$card" ]; then
+    if not_empty "$card"; then
         volume=$(amixer -c "$card" -- sget $mixer) || exit 1
     else
         volume=$(amixer sget $mixer) || exit 1
@@ -107,7 +116,7 @@ get_base_volume_pulseaudio() {
 raise_volume() {
     local max_vol=$2
 
-    if [ -n "$max_vol" ]; then
+    if not_empty "$max_vol"; then
         local vol=$(get_volume)
 
         if (( $vol >= $max_vol )); then
@@ -190,7 +199,7 @@ lower_volume_amixer() {
 set_volume() {
     local max_vol=$2
 
-    if [ -n "$max_vol" ]; then
+    if not_empty "$max_vol"; then
         local vol=$(get_volume)
 
         if (( $vol >= $max_vol )); then
@@ -228,7 +237,7 @@ set_volume_amixer() {
     local card=$1
     local vol=$2
 
-    if [ -n "$card" ]; then
+    if not_empty "$card"; then
         amixer -q -c "$card" -- set $mixer "$vol"
     else
         amixer -q set $mixer "$vol"
@@ -263,7 +272,7 @@ toggle_mute_pulseaudio() {
 toggle_mute_amixer() {
     local card=$1
 
-    if [ -n "$card" ]; then
+    if not_empty "$card"; then
         amixer -q -c "$card" -- set $mixer toggle
     else
         amixer -q set $mixer toggle
@@ -307,7 +316,7 @@ is_muted_amixer() {
     local card="$1"
     local output
 
-    if [ -n "$card" ]; then
+    if not_empty "$card"; then
         output=$(amixer -c "$card" -- sget $mixer) || exit 1
     else
         output=$(amixer sget $mixer) || exit 1
@@ -548,7 +557,7 @@ output_volume_i3blocks() {
         short_text="<span color=\"$color\">${vol}%</span>\n"
         full_text="<span color=\"$color\">${vol}%</span>\n"
 
-        if [ -n $max_volume ] && (( $vol > $max_volume )); then
+        if not_empty $max_volume && (( $vol > $max_volume )); then
             exitcode=$EXIT_I3BLOCKS_URGENT
         fi
     fi
@@ -640,13 +649,13 @@ do_notification() {
 #   0 when no problem occurred
 #   1 when one $of signal or $statusline are set but not both
 update_statusbar() {
-    if [ -n "$signal" ]; then
-        if [ -z "$statusline" ]; then
+    if not_empty "$signal"; then
+        if empty "$statusline"; then
             return 1
         fi
         update_statusline "$signal" "$statusline"
     else
-        if [ -n "$statusline" ]; then
+        if not_empty "$statusline"; then
             return 1
         fi
     fi
@@ -658,12 +667,12 @@ update_statusbar() {
 init_pulseaudio() {
     PACMD_LIST_SINKS_OUTPUT=$(pacmd list-sinks) || exit 1
 
-    if [ -z $sink ]; then
+    if empty "$sink"; then
         sink="$(get_default_sink_name)"
     fi
 
     # Determine a max volume when it's not specified
-    if [ -z $max_volume ]; then
+    if empty "$max_volume"; then
         sink_flags+=( $(get_sink_flags "$sink") )
         pa_base_volume=$(get_base_volume_pulseaudio "$sink")
 
@@ -889,7 +898,7 @@ if $opt_mute_volume; then
     toggle_mute
 fi
 
-if [ -n "$symbolic_icon_suffix" ]; then
+if not_empty "$symbolic_icon_suffix"; then
     apply_symbolic_icon_suffix
 fi
 
@@ -901,7 +910,7 @@ else
 
     update_statusbar || usage
 
-    if [ -n "$output_mode" ]; then
+    if not_empty "$output_mode"; then
         output_volume
 
         exit ${exitcode:-$EXIT_SUCCESS}
