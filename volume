@@ -699,7 +699,8 @@ ms_to_secs() {
 
 # Display program usage.
 usage() {
-    echo "Usage: $0 [options]
+    cat <<- EOF 1>&2
+Usage: $0 [options]
 Control volume and related notifications.
 
 Options:
@@ -715,9 +716,9 @@ Options:
   -n                                    show notifications
   -N <libnotify|herbe|xosd>             notification method (default: libnotify)
   -o <generic|i3blocks|xob|\"format\">    output the volume according to the provided output format:
-                                            generic  = output the volume
-                                            i3blocks = output the volume for i3blocks
-                                            xob      = output the volume for xob
+                                            generic    = output the volume
+                                            i3blocks   = output the volume for i3blocks
+                                            xob        = output the volume for xob
                                             \"format\" = output using a format string. substitutions:
                                                         %v = current volume
   -p                                    show text volume progress bar
@@ -730,7 +731,7 @@ Options:
   -X <value>                            set maximum amplification (if the device supports it. default: 2)
   -y                                    use dunstify instead of notify-send
   -h                                    display this help and exit
-" 1>&2
+EOF
     exit 1
 }
 
