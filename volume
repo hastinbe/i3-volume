@@ -197,24 +197,20 @@ lower_volume_amixer() {
 # Set volume.
 #
 # Arguments:
-#   Step        (integer) Percentage to decrease by.
+#   Volume      (integer|linear factor|percentage|decibel)
 #   Max Volume  (optional) (integer|percentage) Maximum volume limit.
 set_volume() {
-    local step=$1
+    local vol=$1
     local max_vol=$2
 
-    if not_empty "$max_vol"; then
-        local vol=$(get_volume)
-
-        if (( $vol + $step > $max_vol )); then
-            return
-        fi
+    if not_empty "$max_vol" && (( $vol > $max_vol )); then
+        return
     fi
 
     if $opt_use_amixer; then
-        set_volume_amixer "$card" "${step}%"
+        set_volume_amixer "$card" "${vol}%"
     else
-        set_volume_pulseaudio "$sink" "${step}%"
+        set_volume_pulseaudio "$sink" "${vol}%"
     fi
 }
 
