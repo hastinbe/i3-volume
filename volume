@@ -66,9 +66,9 @@ get_sink_index() {
 # Get the volume as a percentage.
 get_volume() {
     if $OPT_USE_AMIXER; then
-        get_volume_amixer $CARD $MIXER
+        get_volume_amixer "$CARD" "$MIXER"
     else
-        get_volume_pulseaudio $SINK
+        get_volume_pulseaudio "$SINK"
     fi
 }
 
@@ -243,9 +243,9 @@ set_volume_amixer() {
     local -r vol=$2
 
     if not_empty "$card"; then
-        amixer -q -c "$card" -- set $MIXER "$vol"
+        amixer -q -c "$card" -- set "$MIXER" "$vol"
     else
-        amixer -q set $MIXER "$vol"
+        amixer -q set "$MIXER" "$vol"
     fi
 }
 
@@ -278,9 +278,9 @@ toggle_mute_amixer() {
     local -r card=$1
 
     if not_empty "$card"; then
-        amixer -q -c "$card" -- set $MIXER toggle
+        amixer -q -c "$card" -- set "$MIXER" toggle
     else
-        amixer -q set $MIXER toggle
+        amixer -q set "$MIXER" toggle
     fi
 }
 
@@ -322,9 +322,9 @@ is_muted_amixer() {
     local output
 
     if not_empty "$card"; then
-        output=$(amixer -c "$card" -- sget $MIXER) || exit 1
+        output=$(amixer -c "$card" -- sget "$MIXER") || exit 1
     else
-        output=$(amixer sget $MIXER) || exit 1
+        output=$(amixer sget "$MIXER") || exit 1
     fi
 
     status=$(echo $output | awk -W posix -F'[][]' '/dB/ { print $6 }')
@@ -378,10 +378,10 @@ notify_volume() {
     else
         printf -v text "Volume %3s%%" $vol
 
-        icon=$(get_volume_icon "$vol")
+        icon=$(get_volume_icon $vol)
 
         if $OPT_SHOW_VOLUME_PROGRESS; then
-            local -r progress=$(get_progress_bar "$vol")
+            local -r progress=$(get_progress_bar $vol)
             text="$text $progress"
         fi
     fi
@@ -572,7 +572,7 @@ output_volume_i3blocks() {
 
 # Outputs the current volume for xob.
 output_volume_xob() {
-    local -r vol=$(get_volume)
+    local -ir vol=$(get_volume)
 
     if is_muted; then
         echo "${vol}!"
@@ -586,7 +586,7 @@ output_volume_xob() {
 # Arguments:
 #   $1 - The volume
 volume_color() {
-    local -r vol=$1
+    local -ir vol=$1
 
     if $OPT_USE_AMIXER; then
         volume_color_amixer $vol
@@ -600,7 +600,7 @@ volume_color() {
 # Arguments:
 #   $1 - The volume
 volume_color_amixer() {
-    local -r vol=$1
+    local -ir vol=$1
 
     if (( $vol >= 0 && $vol < 100 )); then
         echo "$COLOR_MUTED_TO_BASE"
@@ -618,7 +618,7 @@ volume_color_amixer() {
 # Arguments:
 #   $1 - The volume
 volume_color_pulseaudio() {
-    local -r vol=$1
+    local -ir vol=$1
 
     if (( $vol >= $PA_VOLUME_MUTED && $vol < $PA_BASE_VOLUME )); then
         echo "$COLOR_MUTED_TO_BASE"
