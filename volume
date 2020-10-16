@@ -411,9 +411,9 @@ notify_volume_libnotify() {
     local -r text=${@:3}
 
     if $OPT_USE_DUNSTIFY; then
-        dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
+        dunstify -i "$icon" -t $EXPIRES -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
     else
-        notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
+        notify-send -i "$icon" -t $EXPIRES -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
     fi
 }
 
@@ -425,7 +425,7 @@ notify_volume_libnotify() {
 notify_volume_xosd() {
     local -r vol=$1
     local -r text=${@:2}
-    local -r delay=$(ms_to_secs $expires)
+    local -r delay=$(ms_to_secs $EXPIRES)
     local percentage
 
     if is_muted; then
