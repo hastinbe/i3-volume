@@ -35,7 +35,7 @@ isset() {
 
 # Executes `pacmd list-sinks` or return its output if called previously
 pacmd_list_sinks() {
-    if $opt_listen || empty "$PACMD_LIST_SINKS_OUTPUT"; then
+    if $OPT_LISTEN || empty "$PACMD_LIST_SINKS_OUTPUT"; then
         PACMD_LIST_SINKS_OUTPUT=$(pacmd list-sinks)
     fi
     echo "$PACMD_LIST_SINKS_OUTPUT"
@@ -65,10 +65,10 @@ get_sink_index() {
 
 # Get the volume as a percentage.
 get_volume() {
-    if $opt_use_amixer; then
-        get_volume_amixer $card $mixer
+    if $OPT_USE_AMIXER; then
+        get_volume_amixer $CARD $MIXER
     else
-        get_volume_pulseaudio $sink
+        get_volume_pulseaudio $SINK
     fi
 }
 
@@ -132,10 +132,10 @@ raise_volume() {
         fi
     fi
 
-    if $opt_use_amixer; then
-        raise_volume_amixer "$card" "$step"
+    if $OPT_USE_AMIXER; then
+        raise_volume_amixer "$CARD" "$step"
     else
-        raise_volume_pulseaudio "$sink" "$step"
+        raise_volume_pulseaudio "$SINK" "$step"
     fi
 }
 
@@ -168,10 +168,10 @@ raise_volume_amixer() {
 # Arguments:
 #   Step        (integer) Percentage to decrease by.
 lower_volume() {
-    if $opt_use_amixer; then
-        lower_volume_amixer "$card" "$1"
+    if $OPT_USE_AMIXER; then
+        lower_volume_amixer "$CARD" "$1"
     else
-        lower_volume_pulseaudio "$sink" "$1"
+        lower_volume_pulseaudio "$SINK" "$1"
     fi
 }
 
@@ -212,10 +212,10 @@ set_volume() {
         return
     fi
 
-    if $opt_use_amixer; then
-        set_volume_amixer "$card" "${vol}%"
+    if $OPT_USE_AMIXER; then
+        set_volume_amixer "$CARD" "${vol}%"
     else
-        set_volume_pulseaudio "$sink" "${vol}%"
+        set_volume_pulseaudio "$SINK" "${vol}%"
     fi
 }
 
@@ -243,18 +243,18 @@ set_volume_amixer() {
     local -r vol=$2
 
     if not_empty "$card"; then
-        amixer -q -c "$card" -- set $mixer "$vol"
+        amixer -q -c "$card" -- set $MIXER "$vol"
     else
-        amixer -q set $mixer "$vol"
+        amixer -q set $MIXER "$vol"
     fi
 }
 
 # Toggle mute.
 toggle_mute() {
-    if $opt_use_amixer; then
-        toggle_mute_amixer "$card"
+    if $OPT_USE_AMIXER; then
+        toggle_mute_amixer "$CARD"
     else
-        toggle_mute_pulseaudio "$sink"
+        toggle_mute_pulseaudio "$SINK"
     fi
 }
 
@@ -278,18 +278,18 @@ toggle_mute_amixer() {
     local -r card=$1
 
     if not_empty "$card"; then
-        amixer -q -c "$card" -- set $mixer toggle
+        amixer -q -c "$card" -- set $MIXER toggle
     else
-        amixer -q set $mixer toggle
+        amixer -q set $MIXER toggle
     fi
 }
 
 # Check if muted.
 is_muted() {
-    if $opt_use_amixer; then
-        return $(is_muted_amixer "$card")
+    if $OPT_USE_AMIXER; then
+        return $(is_muted_amixer "$CARD")
     else
-        return $(is_muted_pulseaudio "$sink")
+        return $(is_muted_pulseaudio "$SINK")
     fi
 }
 
@@ -322,9 +322,9 @@ is_muted_amixer() {
     local output
 
     if not_empty "$card"; then
-        output=$(amixer -c "$card" -- sget $mixer) || exit 1
+        output=$(amixer -c "$card" -- sget $MIXER) || exit 1
     else
-        output=$(amixer sget $mixer) || exit 1
+        output=$(amixer sget $MIXER) || exit 1
     fi
 
     status=$(echo $output | awk -W posix -F'[][]' '/dB/ { print $6 }')
@@ -343,19 +343,19 @@ get_volume_icon() {
     local -r vol=$1
     local icon
 
-    if $opt_use_fullcolor_icons; then
-        if (( $vol >= 70 )); then icon=${icons[1]}
-        elif (( $vol >= 40 )); then icon=${icons[3]}
-        elif (( $vol > 0 )); then icon=${icons[2]}
-        else icon=${icons[2]}
+    if $OPT_USE_FULLCOLOR_ICONS; then
+        if (( $vol >= 70 )); then icon=${ICONS[1]}
+        elif (( $vol >= 40 )); then icon=${ICONS[3]}
+        elif (( $vol > 0 )); then icon=${ICONS[2]}
+        else icon=${ICONS[2]}
         fi
     else
         # Get overamplified icon if available, otherwise default to high volume icon
-        if (( $vol > 100 )); then icon=${icons_symbolic[4]:-${icons_symbolic[1]}}
-        elif (( $vol >= 70 )); then icon=${icons_symbolic[1]}
-        elif (( $vol >= 40 )); then icon=${icons_symbolic[3]}
-        elif (( $vol > 0 )); then icon=${icons_symbolic[2]}
-        else icon=${icons_symbolic[2]}
+        if (( $vol > 100 )); then icon=${ICONS_SYMBOLIC[4]:-${ICONS_SYMBOLIC[1]}}
+        elif (( $vol >= 70 )); then icon=${ICONS_SYMBOLIC[1]}
+        elif (( $vol >= 40 )); then icon=${ICONS_SYMBOLIC[3]}
+        elif (( $vol > 0 )); then icon=${ICONS_SYMBOLIC[2]}
+        else icon=${ICONS_SYMBOLIC[2]}
         fi
     fi
 
@@ -370,23 +370,23 @@ notify_volume() {
     if is_muted; then
         text="Volume muted"
 
-        if $opt_use_fullcolor_icons; then
-            icon=${icons[0]}
+        if $OPT_USE_FULLCOLOR_ICONS; then
+            icon=${ICONS[0]}
         else
-            icon=${icons_symbolic[0]}
+            icon=${ICONS_SYMBOLIC[0]}
         fi
     else
         printf -v text "Volume %3s%%" $vol
 
         icon=$(get_volume_icon "$vol")
 
-        if $opt_show_volume_progress; then
+        if $OPT_SHOW_VOLUME_PROGRESS; then
             local -r progress=$(get_progress_bar "$vol")
             text="$text $progress"
         fi
     fi
 
-    case "$notification_method" in
+    case "$NOTIFICATION_METHOD" in
         xosd)
             notify_volume_xosd "$vol" "$text"
             ;;
@@ -410,7 +410,7 @@ notify_volume_libnotify() {
     local -r icon=$2
     local -r text=${@:3}
 
-    if $opt_use_dunstify; then
+    if $OPT_USE_DUNSTIFY; then
         dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
     else
         notify-send -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
@@ -488,9 +488,9 @@ get_progress_bar() {
 }
 
 # Add a suffix to symbolic icon names.
-apply_symbolic_icon_suffix() {
-    for i in "${!icons_symbolic[@]}"; do
-        icons_symbolic[$i]="${icons_symbolic[$i]}${symbolic_icon_suffix}"
+apply_SYMBOLIC_ICON_SUFFIX() {
+    for i in "${!ICONS_SYMBOLIC[@]}"; do
+        ICONS_SYMBOLIC[$i]="${ICONS_SYMBOLIC[$i]}${SYMBOLIC_ICON_SUFFIX}"
     done
 }
 
@@ -508,7 +508,7 @@ get_sink_flags() {
 
 # Outputs the current volume.
 output_volume() {
-    case "$output_mode" in
+    case "$OUTPUT_MODE" in
         i3blocks)
             output_volume_i3blocks
             ;;
@@ -527,7 +527,7 @@ output_volume() {
 # Outputs the current volume.
 output_volume_generic() {
     if is_muted; then
-        echo "MUTE"
+        echo MUTE
     else
         echo "$(get_volume)%"
     fi
@@ -538,7 +538,7 @@ output_volume_generic() {
 # Format options:
 #   %v = volume percentage or "MUTE" when muted
 output_volume_custom() {
-    local -r format=$output_mode
+    local -r format=$OUTPUT_MODE
 
     if is_muted; then
         echo -ne "${format//\%v/MUTE}"
@@ -562,7 +562,7 @@ output_volume_i3blocks() {
         short_text="<span color=\"$color\">${vol}%</span>\n"
         full_text="<span color=\"$color\">${vol}%</span>\n"
 
-        if not_empty $max_volume && (( $vol > $max_volume )); then
+        if isset $MAX_VOLUME && (( $vol > $MAX_VOLUME )); then
             EXITCODE=$EXIT_I3BLOCKS_URGENT
         fi
     fi
@@ -588,7 +588,7 @@ output_volume_xob() {
 volume_color() {
     local -r vol=$1
 
-    if $opt_use_amixer; then
+    if $OPT_USE_AMIXER; then
         volume_color_amixer $vol
     else
         volume_color_pulseaudio $vol
@@ -606,7 +606,7 @@ volume_color_amixer() {
         echo "$COLOR_MUTED_TO_BASE"
     elif (( $vol == 100 )); then
         echo "$COLOR_BASE_TO_NORM"
-    elif (( $vol > 100 && $vol <= $max_volume )); then
+    elif (( $vol > 100 && $vol <= $MAX_VOLUME )); then
         echo "$COLOR_NORM_TO_MAX"
     else
         echo "$COLOR_OTHER"
@@ -624,7 +624,7 @@ volume_color_pulseaudio() {
         echo "$COLOR_MUTED_TO_BASE"
     elif (( $vol >= $PA_BASE_VOLUME && $vol <= $PA_VOLUME_NORM )); then
         echo "$COLOR_BASE_TO_NORM"
-    elif (( $vol > $PA_VOLUME_NORM && $vol <= $max_volume )); then
+    elif (( $vol > $PA_VOLUME_NORM && $vol <= $MAX_VOLUME )); then
         echo "$COLOR_NORM_TO_MAX"
     else
         echo "$COLOR_OTHER"
@@ -643,7 +643,7 @@ listen() {
 
 # Sends notifications
 do_notification() {
-    if $opt_notification; then
+    if $OPT_NOTIFICATION; then
         notify_volume
     fi
 }
@@ -654,13 +654,13 @@ do_notification() {
 #   0 when no problem occurred
 #   1 when one $of signal or $statusline are set but not both
 update_statusbar() {
-    if not_empty "$signal"; then
-        if empty "$statusline"; then
+    if not_empty "$SIGNAL"; then
+        if empty "$STATUSLINE"; then
             return 1
         fi
-        update_statusline "$signal" "$statusline"
+        update_statusline "$SIGNAL" "$STATUSLINE"
     else
-        if not_empty "$statusline"; then
+        if not_empty "$STATUSLINE"; then
             return 1
         fi
     fi
@@ -672,20 +672,20 @@ update_statusbar() {
 init_pulseaudio() {
     PACMD_LIST_SINKS_OUTPUT=$(pacmd list-sinks) || exit 1
 
-    if empty "$sink"; then
-        sink="$(get_default_sink_name)"
+    if empty "$SINK"; then
+        SINK="$(get_default_sink_name)"
     fi
 
     # Determine a max volume when it's not specified
-    if empty "$max_volume"; then
-        SINK_FLAGS+=( $(get_sink_flags "$sink") )
-        PA_BASE_VOLUME=$(get_base_volume_pulseaudio "$sink")
+    if isset $MAX_VOLUME; then
+        SINK_FLAGS+=( $(get_sink_flags "$SINK") )
+        PA_BASE_VOLUME=$(get_base_volume_pulseaudio "$SINK")
 
         # Does the sink support digital (software) amplification?
         if [[ "${SINK_FLAGS[@]}" =~ "DECIBEL_VOLUME" ]]; then
-            max_volume=$(($PA_VOLUME_NORM * $max_amplification))
+            MAX_VOLUME=$(($PA_VOLUME_NORM * $MAX_AMPLIFICATION))
         else
-            max_volume=$PA_VOLUME_NORM
+            MAX_VOLUME=$PA_VOLUME_NORM
         fi
     fi
 }
@@ -753,7 +753,7 @@ declare -a ICONS=(
     audio-volume-medium
 )
 
-declare -a icons_symbolic=(
+declare -a ICONS_SYMBOLIC=(
     audio-volume-muted-symbolic
     audio-volume-high-symbolic
     audio-volume-low-symbolic
@@ -783,98 +783,98 @@ readonly COLOR_XOSD_OUTLINE=${COLOR_XOSD_OUTLINE:-"#222222"}
 ###########################################################
 # Command line option variables
 ###########################################################
-declare -l notification_method
+declare -l NOTIFICATION_METHOD
 
-opt_decrease_volume=false
-opt_increase_volume=false
-opt_listen=false
-opt_mute_volume=false
-opt_notification=false
-opt_set_volume=false
-opt_show_volume_progress=false
-opt_use_amixer=false
-opt_use_dunstify=false
-opt_use_fullcolor_icons=false
-card=""
-mixer="Master"
-signal=""
-sink=""
-statusline=""
-declare -i volume=5
-declare -i expires=1500
-max_volume=""
-declare -i max_amplification=2
-symbolic_icon_suffix=""
-output_mode=""
-notification_method="libnotify"
+OPT_DECREASE_VOLUME=false
+OPT_INCREASE_VOLUME=false
+OPT_LISTEN=false
+OPT_MUTE_VOLUME=false
+OPT_NOTIFICATION=false
+OPT_SET_VOLUME=false
+OPT_SHOW_VOLUME_PROGRESS=false
+OPT_USE_AMIXER=false
+OPT_USE_DUNSTIFY=false
+OPT_USE_FULLCOLOR_ICONS=false
+CARD=""
+MIXER="Master"
+SIGNAL=""
+SINK=""
+STATUSLINE=""
+declare -i VOLUME=5
+declare -i EXPIRES=1500
+declare -i MAX_VOLUME
+declare -i MAX_AMPLIFICATION=2
+SYMBOLIC_ICON_SUFFIX=""
+OUTPUT_MODE=""
+NOTIFICATION_METHOD="libnotify"
 
 while getopts ":ac:d:e:hi:lLmM:nN:o:ps:S:t:u:v:x:X:y" o; do
     case "$o" in
         a)
-            opt_use_amixer=true
+            OPT_USE_AMIXER=true
             ;;
         c)
-            card=$OPTARG
+            CARD=$OPTARG
             ;;
         d)
-            opt_decrease_volume=true
-            volume=$OPTARG
+            OPT_DECREASE_VOLUME=true
+            VOLUME=$OPTARG
             ;;
         e)
-            expires=$OPTARG
+            EXPIRES=$OPTARG
             ;;
         i)
-            opt_increase_volume=true
-            volume=$OPTARG
+            OPT_INCREASE_VOLUME=true
+            VOLUME=$OPTARG
             ;;
         l)
-            opt_use_fullcolor_icons=true
+            OPT_USE_FULLCOLOR_ICONS=true
             ;;
         L)
-            opt_listen=true
+            OPT_LISTEN=true
             ;;
         m)
-            opt_mute_volume=true
+            OPT_MUTE_VOLUME=true
             ;;
         M)
-            mixer=${OPTARG@Q}
+            MIXER=${OPTARG@Q}
             ;;
         n)
-            opt_notification=true
+            OPT_NOTIFICATION=true
             ;;
         N)
-            notification_method=$OPTARG
+            NOTIFICATION_METHOD=$OPTARG
             ;;
         o)
-            output_mode=$OPTARG
+            OUTPUT_MODE=$OPTARG
             ;;
         p)
-            opt_show_volume_progress=true
+            OPT_SHOW_VOLUME_PROGRESS=true
             ;;
         s)
-            sink=$OPTARG
+            SINK=$OPTARG
             ;;
         S)
-            symbolic_icon_suffix=$OPTARG
+            SYMBOLIC_ICON_SUFFIX=$OPTARG
             ;;
         t)
-            statusline=$OPTARG
+            STATUSLINE=$OPTARG
             ;;
         u)
-            signal=$OPTARG
+            SIGNAL=$OPTARG
             ;;
         v)
-            opt_set_volume=true
-            volume=$OPTARG
+            OPT_SET_VOLUME=true
+            VOLUME=$OPTARG
             ;;
         x)
-            max_volume=$OPTARG
+            MAX_VOLUME=$OPTARG
             ;;
         X)
-            max_amplification=$OPTARG
+            MAX_AMPLIFICATION=$OPTARG
             ;;
         y)
-            opt_use_dunstify=true
+            OPT_USE_DUNSTIFY=true
             ;;
         h | *)
             usage
@@ -884,39 +884,39 @@ done
 shift $((OPTIND-1)) # Shift off options and optional --
 
 # Default to PA when amixer is not specified
-if ! $opt_use_amixer; then
+if ! $OPT_USE_AMIXER; then
     init_pulseaudio
 fi
 
-if $opt_increase_volume; then
-    raise_volume $volume $max_volume
+if $OPT_INCREASE_VOLUME; then
+    raise_volume $VOLUME $MAX_VOLUME
 fi
 
-if $opt_decrease_volume; then
-    lower_volume $volume
+if $OPT_DECREASE_VOLUME; then
+    lower_volume $VOLUME
 fi
 
-if $opt_set_volume; then
-    set_volume $volume $max_volume
+if $OPT_SET_VOLUME; then
+    set_volume $VOLUME $MAX_VOLUME
 fi
 
-if $opt_mute_volume; then
+if $OPT_MUTE_VOLUME; then
     toggle_mute
 fi
 
-if not_empty "$symbolic_icon_suffix"; then
-    apply_symbolic_icon_suffix
+if not_empty "$SYMBOLIC_ICON_SUFFIX"; then
+    apply_SYMBOLIC_ICON_SUFFIX
 fi
 
 # The options below this line must be last
-if $opt_listen; then
+if $OPT_LISTEN; then
     listen
 else
     do_notification
 
     update_statusbar || usage
 
-    if not_empty "$output_mode"; then
+    if not_empty "$OUTPUT_MODE"; then
         output_volume
 
         exit ${EXITCODE:-$EXIT_SUCCESS}
