@@ -558,7 +558,7 @@ output_volume_i3blocks() {
         full_text="<span color=\"$color\">${vol}%</span>\n"
 
         if not_empty $max_volume && (( $vol > $max_volume )); then
-            exitcode=$EXIT_I3BLOCKS_URGENT
+            EXITCODE=$EXIT_I3BLOCKS_URGENT
         fi
     fi
 
@@ -615,9 +615,9 @@ volume_color_amixer() {
 volume_color_pulseaudio() {
     local -r vol=$1
 
-    if (( $vol >= $PA_VOLUME_MUTED && $vol < $pa_base_volume )); then
+    if (( $vol >= $PA_VOLUME_MUTED && $vol < $PA_BASE_VOLUME )); then
         echo "$COLOR_MUTED_TO_BASE"
-    elif (( $vol >= $pa_base_volume && $vol <= $PA_VOLUME_NORM )); then
+    elif (( $vol >= $PA_BASE_VOLUME && $vol <= $PA_VOLUME_NORM )); then
         echo "$COLOR_BASE_TO_NORM"
     elif (( $vol > $PA_VOLUME_NORM && $vol <= $max_volume )); then
         echo "$COLOR_NORM_TO_MAX"
@@ -673,11 +673,11 @@ init_pulseaudio() {
 
     # Determine a max volume when it's not specified
     if empty "$max_volume"; then
-        sink_flags+=( $(get_sink_flags "$sink") )
-        pa_base_volume=$(get_base_volume_pulseaudio "$sink")
+        SINK_FLAGS+=( $(get_sink_flags "$sink") )
+        PA_BASE_VOLUME=$(get_base_volume_pulseaudio "$sink")
 
         # Does the sink support digital (software) amplification?
-        if [[ "${sink_flags[@]}" =~ "DECIBEL_VOLUME" ]]; then
+        if [[ "${SINK_FLAGS[@]}" =~ "DECIBEL_VOLUME" ]]; then
             max_volume=$(($PA_VOLUME_NORM * $max_amplification))
         else
             max_volume=$PA_VOLUME_NORM
@@ -736,19 +736,19 @@ EOF
 ###########################################################
 
 # Exit codes
-readonly EXIT_SUCCESS=0
-readonly EXIT_I3BLOCKS_URGENT=33
+declare -ir EXIT_SUCCESS=0
+declare -ir EXIT_I3BLOCKS_URGENT=33
 
-exitcode=$EXIT_SUCCESS
+declare -i EXITCODE=$EXIT_SUCCESS
 
-icons=(
+declare -a ICONS=(
     audio-volume-muted
     audio-volume-high
     audio-volume-low
     audio-volume-medium
 )
 
-icons_symbolic=(
+declare -a icons_symbolic=(
     audio-volume-muted-symbolic
     audio-volume-high-symbolic
     audio-volume-low-symbolic
@@ -757,12 +757,12 @@ icons_symbolic=(
     # audio-volume-overamplified-symbolic
 )
 
-sink_flags=()
+declare -a SINK_FLAGS=()
 
 # Unlike in PA, PA_VOLUME_* in i3-volume are percentages instead of integers
-pa_base_volume=100
-readonly PA_VOLUME_NORM=100
-readonly PA_VOLUME_MUTED=0
+declare -i PA_BASE_VOLUME=100
+declare -ir PA_VOLUME_NORM=100
+declare -ir PA_VOLUME_MUTED=0
 
 # Cached output of `pacmd list-sinks`; so we don't have to call it each time we need it
 PACMD_LIST_SINKS_OUTPUT=""
@@ -795,10 +795,10 @@ mixer="Master"
 signal=""
 sink=""
 statusline=""
-volume=5
-expires=1500
+declare -i volume=5
+declare -i expires=1500
 max_volume=""
-max_amplification=2
+declare -i max_amplification=2
 symbolic_icon_suffix=""
 output_mode=""
 notification_method="libnotify"
@@ -914,8 +914,8 @@ else
     if not_empty "$output_mode"; then
         output_volume
 
-        exit ${exitcode:-$EXIT_SUCCESS}
+        exit ${EXITCODE:-$EXIT_SUCCESS}
     fi
 fi
 
-exit ${exitcode:-$EXIT_SUCCESS}
+exit ${EXITCODE:-$EXIT_SUCCESS}
