@@ -42,7 +42,7 @@ get_default_sink_name() {
 # Arguments
 #   Sink name   (string) Symbolic name of sink.
 get_sink_index() {
-    local sink="$1"
+    local sink=$1
 
     pacmd_list_sinks |
         awk -W posix '/^[ \t*]+index: /{idx = $3}
@@ -63,7 +63,7 @@ get_volume() {
 # Arguments
 #   Sink name   (string) Symbolic name of sink.
 get_volume_pulseaudio() {
-    local sink="$1"
+    local sink=$1
 
     pacmd_list_sinks |
         awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
@@ -92,7 +92,7 @@ get_volume_amixer() {
 # Arguments
 #   Sink name   (string) Symbolic name of sink.
 get_base_volume_pulseaudio() {
-    local sink="$1"
+    local sink=$1
 
     pacmd_list_sinks |
         awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
@@ -105,7 +105,7 @@ get_base_volume_pulseaudio() {
 #   Step        (integer) Percentage to increase by.
 #   Max Volume  (optional) (integer|percentage) Maximum volume limit.
 raise_volume() {
-    local max_vol="$2"
+    local max_vol=$2
 
     if [ -n "$max_vol" ]; then
         local vol=$(get_volume)
@@ -128,8 +128,8 @@ raise_volume() {
 #   Sink name   (string)  Symbolic name of sink.
 #   Step        (integer) Percentage to increase by.
 raise_volume_pulseaudio() {
-    local sink="$1"
-    local step="${2:-5}"
+    local sink=$1
+    local step=${2:-5}
 
     set_volume_pulseaudio "$sink" "+${step}%"
 }
@@ -140,8 +140,8 @@ raise_volume_pulseaudio() {
 #   Card        (integer) Card number to control.
 #   Step        (integer) Percentage to increase by.
 raise_volume_amixer() {
-    local card="$1"
-    local step="${2:-5}"
+    local card=$1
+    local step=${2:-5}
 
     set_volume_amixer "$card" "${step}%+"
 }
@@ -164,8 +164,8 @@ lower_volume() {
 #   Sink name   (string)  Symbolic name of sink.
 #   Step        (integer|percentage) Percentage to decrease by.
 lower_volume_pulseaudio() {
-    local sink="$1"
-    local step="${2:-5}"
+    local sink=$1
+    local step=${2:-5}
 
     set_volume_pulseaudio "$sink" "-${step}%"
 }
@@ -176,8 +176,8 @@ lower_volume_pulseaudio() {
 #   Card        (integer) Card number to control.
 #   Step        (integer) Percentage to decrease by.
 lower_volume_amixer() {
-    local card="$1"
-    local step="${2:-5}"
+    local card=$1
+    local step=${2:-5}
 
     set_volume_amixer "$card" "${step}%-"
 }
@@ -188,7 +188,7 @@ lower_volume_amixer() {
 #   Step        (integer) Percentage to decrease by.
 #   Max Volume  (optional) (integer|percentage) Maximum volume limit.
 set_volume() {
-    local max_vol="$2"
+    local max_vol=$2
 
     if [ -n "$max_vol" ]; then
         local vol=$(get_volume)
@@ -211,8 +211,8 @@ set_volume() {
 #   Sink name   (string) Symbolic name of sink.
 #   Volume      (integer|linear factor|percentage|decibel)
 set_volume_pulseaudio() {
-    local sink="$1"
-    local vol="$2"
+    local sink=$1
+    local vol=$2
 
     invalidate_pacmd_list_sinks
 
@@ -225,8 +225,8 @@ set_volume_pulseaudio() {
 #   Card        (integer) Card number to control.
 #   Volume      (integer|linear factor|percentage|decibel)
 set_volume_amixer() {
-    local card="$1"
-    local vol="$2"
+    local card=$1
+    local vol=$2
 
     if [ -n "$card" ]; then
         amixer -q -c "$card" -- set $mixer "$vol"
@@ -249,7 +249,7 @@ toggle_mute() {
 # Arguments:
 #   Sink name   (string) Symbolic name of sink.
 toggle_mute_pulseaudio() {
-    local sink="$1"
+    local sink=$1
 
     invalidate_pacmd_list_sinks
 
@@ -261,7 +261,7 @@ toggle_mute_pulseaudio() {
 # Arguments:
 #   Card        (integer) Card number to control.
 toggle_mute_amixer() {
-    local card="$1"
+    local card=$1
 
     if [ -n "$card" ]; then
         amixer -q -c "$card" -- set $mixer toggle
@@ -287,7 +287,7 @@ is_muted() {
 # Returns:
 #   0 when true, 1 when false.
 is_muted_pulseaudio() {
-    local sink="$1"
+    local sink=$1
 
     muted=$(pacmd_list_sinks |
                    awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
@@ -326,7 +326,7 @@ is_muted_amixer() {
 # Returns:
 #   The volume icon name.
 get_volume_icon() {
-    local vol="$1"
+    local vol=$1
     local icon
 
     if $opt_use_fullcolor_icons; then
@@ -392,9 +392,9 @@ notify_volume() {
 #   Icon        (string) Icon to display.
 #   Text        (string) Notification text.
 notify_volume_libnotify() {
-    local vol="$1"
-    local icon="$2"
-    local text="${@:3}"
+    local vol=$1
+    local icon=$2
+    local text=${@:3}
 
     if $opt_use_dunstify; then
         dunstify -i "$icon" -t $expires -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
@@ -409,8 +409,8 @@ notify_volume_libnotify() {
 #   Volume      (integer) An integer indicating the volume.
 #   Text        (string) Notification text.
 notify_volume_xosd() {
-    local vol="$1"
-    local text="${@:2}"
+    local vol=$1
+    local text=${@:2}
     local delay=$(ms_to_secs $expires)
     local percentage
 
@@ -434,7 +434,7 @@ notify_volume_xosd() {
 # Note: a patch with a notify-send script for herbe, not in the current version at this
 #       time but would make this irrelevant. See https://github.com/dudik/herbe/pull/10
 notify_volume_herbe() {
-    local text="$@"
+    local text=$@
 
     # Dismiss existing/pending notifications to prevent queuing
     pkill -SIGUSR1 herbe
@@ -448,8 +448,8 @@ notify_volume_herbe() {
 #   signal  (string) The signal used to update the status line.
 #   proc    (string) The name of the status line process.
 update_statusline() {
-    local signal="$1"
-    local proc="$2"
+    local signal=$1
+    local proc=$2
 
     pkill "-$signal" "$proc"
 }
@@ -464,7 +464,7 @@ update_statusline() {
 # Returns:
 #   The progress bar.
 get_progress_bar() {
-    local percent="$1"
+    local percent=$1
     local max_percent=${2:-100}
     local divisor=${3:-5}
     local progress=$((($percent > $max_percent ? $max_percent : $percent) / $divisor))
@@ -485,7 +485,7 @@ apply_symbolic_icon_suffix() {
 # Arguments
 #   Sink name   (string) Symbolic name of sink.
 get_sink_flags() {
-    local sink="$1"
+    local sink=$1
 
     pacmd_list_sinks |
         awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"}
@@ -524,7 +524,7 @@ output_volume_generic() {
 # Format options:
 #   %v = volume percentage or "MUTE" when muted
 output_volume_custom() {
-    local format="$output_mode"
+    local format=$output_mode
 
     if is_muted; then
         echo -ne "${format//\%v/MUTE}"
@@ -786,9 +786,9 @@ signal=""
 sink=""
 statusline=""
 volume=5
-expires="1500"
+expires=1500
 max_volume=""
-max_amplification="2"
+max_amplification=2
 symbolic_icon_suffix=""
 output_mode=""
 notification_method="libnotify"
@@ -799,18 +799,18 @@ while getopts ":ac:d:e:hi:lLmM:nN:o:ps:S:t:u:v:x:X:y" o; do
             opt_use_amixer=true
             ;;
         c)
-            card="$OPTARG"
+            card=$OPTARG
             ;;
         d)
             opt_decrease_volume=true
-            volume="$OPTARG"
+            volume=$OPTARG
             ;;
         e)
-            expires="$OPTARG"
+            expires=$OPTARG
             ;;
         i)
             opt_increase_volume=true
-            volume="$OPTARG"
+            volume=$OPTARG
             ;;
         l)
             opt_use_fullcolor_icons=true
@@ -822,41 +822,41 @@ while getopts ":ac:d:e:hi:lLmM:nN:o:ps:S:t:u:v:x:X:y" o; do
             opt_mute_volume=true
             ;;
         M)
-            mixer="${OPTARG@Q}"
+            mixer=${OPTARG@Q}
             ;;
         n)
             opt_notification=true
             ;;
         N)
-            notification_method="$OPTARG"
+            notification_method=$OPTARG
             ;;
         o)
-            output_mode="$OPTARG"
+            output_mode=$OPTARG
             ;;
         p)
             opt_show_volume_progress=true
             ;;
         s)
-            sink="$OPTARG"
+            sink=$OPTARG
             ;;
         S)
-            symbolic_icon_suffix="$OPTARG"
+            symbolic_icon_suffix=$OPTARG
             ;;
         t)
-            statusline="$OPTARG"
+            statusline=$OPTARG
             ;;
         u)
-            signal="$OPTARG"
+            signal=$OPTARG
             ;;
         v)
             opt_set_volume=true
-            volume="$OPTARG"
+            volume=$OPTARG
             ;;
         x)
-            max_volume="$OPTARG"
+            max_volume=$OPTARG
             ;;
         X)
-            max_amplification="$OPTARG"
+            max_amplification=$OPTARG
             ;;
         y)
             opt_use_dunstify=true
