@@ -197,6 +197,7 @@ lower_volume_amixer() {
 #   Step        (integer) Percentage to decrease by.
 #   Max Volume  (optional) (integer|percentage) Maximum volume limit.
 set_volume() {
+    local step=$1
     local max_vol=$2
 
     if not_empty "$max_vol"; then
@@ -208,9 +209,9 @@ set_volume() {
     fi
 
     if $opt_use_amixer; then
-        set_volume_amixer "$card" "$1"
+        set_volume_amixer "$card" "${step}%"
     else
-        set_volume_pulseaudio "$sink" "$1"
+        set_volume_pulseaudio "$sink" "${step}%"
     fi
 }
 
@@ -225,7 +226,7 @@ set_volume_pulseaudio() {
 
     invalidate_pacmd_list_sinks
 
-    pactl set-sink-volume "$sink" "$vol" || pactl set-sink-volume "$sink" -- "$vol"
+    echo pactl set-sink-volume "$sink" "$vol" || pactl set-sink-volume "$sink" -- "$vol"
 }
 
 # Set volume using amixer.
