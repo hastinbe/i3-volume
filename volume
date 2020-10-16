@@ -488,7 +488,7 @@ get_progress_bar() {
 }
 
 # Add a suffix to symbolic icon names.
-apply_SYMBOLIC_ICON_SUFFIX() {
+apply_symbolic_icon_suffix() {
     for i in "${!ICONS_SYMBOLIC[@]}"; do
         ICONS_SYMBOLIC[$i]="${ICONS_SYMBOLIC[$i]}${SYMBOLIC_ICON_SUFFIX}"
     done
@@ -905,7 +905,7 @@ if $OPT_MUTE_VOLUME; then
 fi
 
 if not_empty "$SYMBOLIC_ICON_SUFFIX"; then
-    apply_SYMBOLIC_ICON_SUFFIX
+    apply_symbolic_icon_suffix
 fi
 
 # The options below this line must be last
