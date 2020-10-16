@@ -61,7 +61,7 @@ get_sink_index() {
 # Get the volume as a percentage.
 get_volume() {
     if $opt_use_amixer; then
-        get_volume_amixer $card
+        get_volume_amixer $card $mixer
     else
         get_volume_pulseaudio $sink
     fi
@@ -83,14 +83,16 @@ get_volume_pulseaudio() {
 #
 # Arguments
 #   Card        (integer) Card number to control.
+#   Mixer       (string) Name of the mixer.
 get_volume_amixer() {
-    local card="$1"
+    local card=$1
+    local mixer=$2
     local volume
 
     if not_empty "$card"; then
-        volume=$(amixer -c "$card" -- sget $mixer) || exit 1
+        volume=$(amixer -c "$card" -- sget "$mixer") || exit 1
     else
-        volume=$(amixer sget $mixer) || exit 1
+        volume=$(amixer sget "$mixer") || exit 1
     fi
 
     echo $volume | awk -W posix -F'[][]' '/dB/ { gsub("%", ""); print $2 }'
