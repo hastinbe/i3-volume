@@ -19,9 +19,9 @@ Use your keyboard volume keys to increase, decrease, or mute your volume. If you
 | ------------ | ------- | ----- |
 | ![notify-osd notifications](https://github.com/hastinbe/i3-volume/wiki/images/notify-osd.png) | ![dunst notifications](https://github.com/hastinbe/i3-volume/wiki/images/dunst.png) | ![xob notifications](https://github.com/hastinbe/i3-volume/wiki/images/xob.png) |
 
-| [xosd] | [herbe] |
-| ------ | ------- |
-| ![xosd notifications](https://github.com/hastinbe/i3-volume/wiki/images/xosd.png) | ![herbe notifications](https://github.com/hastinbe/i3-volume/wiki/images/herbe.png) |
+| [xosd] | [herbe] | [volnoti] |
+| ------ | ------- | --------- |
+| ![xosd notifications](https://github.com/hastinbe/i3-volume/wiki/images/xosd.png) | ![herbe notifications](https://github.com/hastinbe/i3-volume/wiki/images/herbe.png) | ![volnoti notifications](https://github.com/hastinbe/i3-volume/wiki/images/volnoti.png)
 
 Read about [notifications](https://github.com/hastinbe/i3-volume/wiki/Notifications) for more information.
 
@@ -31,42 +31,66 @@ Read about [notifications](https://github.com/hastinbe/i3-volume/wiki/Notificati
 
 #### Command-line options
 ```
-Usage: volume [options]
+Usage: ./volume [<options>] <command> [<args>]
 Control volume and related notifications.
 
+Commands:
+  up <value>            increase volume
+  down <value>          decrease volume
+  set <value>           set volume
+  mute                  toggle mute
+  listen                listen for changes to a PulseAudio sink
+  output <format>       output volume in a supported format
+                        custom format substitutions:
+                            %v = volume
+                            example: "My current volume is %v"
+  outputs               show available output formats
+  notifications         show available notification methods
+  help                  display help
+
 Options:
-  -a                                    use alsa-utils instead of pulseaudio-utils for volume control
-  -c <card>                             card number to control (amixer only)
-  -d <amount>                           decrease volume
-  -e <expires>                          expiration time of notifications, in milliseconds
-  -i <amount>                           increase volume
-  -l                                    use fullcolor instead of symbolic icons
-  -L                                    listen for changes to a PulseAudio sink (pulseaudio only)
-  -m                                    toggle mute
-  -M <mixer>                            specify mixer (ex: Headphone), default Master
-  -n                                    show notifications
-  -N <libnotify|herbe|xosd>             notification method (default: libnotify)
-  -o <generic|i3blocks|xob|"format">    output the volume according to the provided output format:
-                                            generic  = output the volume
-                                            i3blocks = output the volume for i3blocks
-                                            xob      = output the volume for xob
-                                            "format" = output using a format string. substitutions:
-                                                        %v = current volume
-  -p                                    show text volume progress bar
-  -s <sink_name>                        symbolic name of sink (pulseaudio only)
-  -S <suffix>                           add a suffix to symbolic icon names
-  -t <process_name>                     name of status line process. must be used with -u
-  -u <signal>                           update status line using signal. must be used with -t
-  -v <value>                            set volume
-  -x <value>                            set maximum volume
-  -X <value>                            set maximum amplification (if the device supports it. default: 2)
-  -y                                    use dunstify instead of notify-send
-  -h                                    display this help and exit
-  ```
+  -a                    use amixer
+  -n                    enable notifications
+  -t <process_name>     process name of status bar (requires -u)
+  -u <signal>           signal to update status bar (requires -t)
+  -x <value>            maximum volume
+  -X <value>            maximum amplification; if supported (default: 2)
+  -h                    display help
+
+amixer Options:
+  -c <card>             card number to control
+  -m <mixer>            set mixer (default: Master)
+
+PulseAudio Options:
+  -s <sink>             symbolic name of sink
+
+Notification Options:
+  -N <method>           notification method (default: libnotify)
+  -p                    enable progress bar
+  -e <expires>          expiration time of notifications in ms
+  -l                    use fullcolor instead of symbolic icons
+  -S <suffix>           append suffix to symbolic icon names
+  -y                    use dunstify (default: notify-send)
+```
 
 #### Listen mode (PulseAudio only)
 
 Listen mode (`-L`) causes `i3-volume` to listen for changes on your PulseAudio sink. When configured, these events will update your status bar and dispatch on-screen display notifications to reflect the change.
+
+## Migrating
+
+### Version 2.x to 3.x
+
+Version 3 introduces commands which makes it incompatible with previous versions. Your command-line usage and/or configured hotkeys need to be updated to reflect this.
+
+| Change | v2 | v3 |
+| ------ | -- | -- |
+| `-d` is now the `down` command | `volume -d 5` | `volume down 5` |
+| `-i` is now the `up` command | `volume -i 5` | `volume up 5` |
+| `-m` is now the `mute` command | `volume -m` | `volume mute` |
+| `-o` is now the `output` command | `volume -o i3blocks` | `volume output i3blocks` |
+| `-v` is now the `set` command | `volume -v 5` | `volume set 5` |
+| `-M` is now the `-m` option | `volume -M Master` | `volume -m Master` |
 
 ## Interoperability
 
@@ -78,6 +102,7 @@ Listen mode (`-L`) causes `i3-volume` to listen for changes on your PulseAudio s
 | **[xob]** | Requires extra steps for notifications. [Guide](https://github.com/hastinbe/i3-volume/wiki/Usage-with-xob) |
 | **[xosd]** | Notifications require the `-N xosd` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-XOSD)
 | **[herbe]** | Notifications require the `-N herbe` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-herbe)
+| **[volnoti]** | Notifications require the `-N volnoti` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-volnoti)
 | **[sxhkd]** | For keybindings with or without [i3wm], often used with [bspwm]. [Example](https://github.com/hastinbe/i3-volume/wiki/Keybindings#sxkhd)
 
 ## Help
@@ -103,6 +128,7 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 [notify-osd]: https://launchpad.net/notify-osd
 [pulseaudio-utils]: https://www.freedesktop.org/wiki/Software/PulseAudio/
 [sxhkd]: https://github.com/baskerville/sxhkd
+[volnoti]: https://github.com/davidbrazdil/volnoti
 [wiki]: https://github.com/hastinbe/i3-volume/wiki
 [xob]: https://github.com/florentc/xob
 [xosd]: https://sourceforge.net/projects/libxosd/
