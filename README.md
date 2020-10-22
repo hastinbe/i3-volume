@@ -75,7 +75,7 @@ Notification Options:
 
 #### Listen mode (PulseAudio only)
 
-Listen mode (`-L`) causes `i3-volume` to listen for changes on your PulseAudio sink. When configured, these events will update your status bar and dispatch on-screen display notifications to reflect the change.
+Listen mode (`listen` comand) causes `i3-volume` to listen for changes on your PulseAudio sink. When configured, these events will update your status bar and dispatch on-screen display notifications to reflect the change.
 
 ## Migrating
 
@@ -90,6 +90,7 @@ Version 3 introduces commands which makes it incompatible with previous versions
 | `-m` is now the `mute` command | `volume -m` | `volume mute` |
 | `-o` is now the `output` command | `volume -o i3blocks` | `volume output i3blocks` |
 | `-v` is now the `set` command | `volume -v 5` | `volume set 5` |
+| `-L` is now the `listen` command | `volume -L` | `volume listen` |
 | `-M` is now the `-m` option | `volume -M Master` | `volume -m Master` |
 
 ## Interoperability
