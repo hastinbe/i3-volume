@@ -53,7 +53,7 @@ increase_volume() {
     if not_empty "$max_volume"; then
         local -r vol=$(get_volume)
 
-        if (( $vol + $step > $max_volume )); then
+        if (( vol + step > max_volume )); then
             return
         fi
     fi
@@ -88,7 +88,7 @@ set_volume() {
     local -r vol=${1:?$(error 'Volume is required')}
     local -r max_volume=$2
 
-    if not_empty "$max_volume" && (( $vol > $max_volume )); then
+    if not_empty "$max_volume" && (( vol > max_volume )); then
         return
     fi
 
@@ -109,9 +109,11 @@ toggle_mute() {
 
 is_muted() {
     if $USE_AMIXER; then
-        return $(amixer_is_muted "$CARD")
+        amixer_is_muted "$CARD"
+        return $?
     else
-        return $(pa_is_muted "$SINK")
+        pa_is_muted "$SINK"
+        return $?
     fi
 }
 
@@ -127,17 +129,17 @@ get_volume_icon() {
     local icon
 
     if $USE_FULLCOLOR_ICONS; then
-        if (( $vol >= 70 )); then icon=${ICONS[1]}
-        elif (( $vol >= 40 )); then icon=${ICONS[3]}
-        elif (( $vol > 0 )); then icon=${ICONS[2]}
+        if (( vol >= 70 )); then icon=${ICONS[1]}
+        elif (( vol >= 40 )); then icon=${ICONS[3]}
+        elif (( vol > 0 )); then icon=${ICONS[2]}
         else icon=${ICONS[2]}
         fi
     else
         # Get overamplified icon if available, otherwise default to high volume icon
-        if (( $vol > 100 )); then icon=${ICONS_SYMBOLIC[4]:-${ICONS_SYMBOLIC[1]}}
-        elif (( $vol >= 70 )); then icon=${ICONS_SYMBOLIC[1]}
-        elif (( $vol >= 40 )); then icon=${ICONS_SYMBOLIC[3]}
-        elif (( $vol > 0 )); then icon=${ICONS_SYMBOLIC[2]}
+        if (( vol > 100 )); then icon=${ICONS_SYMBOLIC[4]:-${ICONS_SYMBOLIC[1]}}
+        elif (( vol >= 70 )); then icon=${ICONS_SYMBOLIC[1]}
+        elif (( vol >= 40 )); then icon=${ICONS_SYMBOLIC[3]}
+        elif (( vol > 0 )); then icon=${ICONS_SYMBOLIC[2]}
         else icon=${ICONS_SYMBOLIC[2]}
         fi
     fi
@@ -159,12 +161,12 @@ notify_volume() {
             icon=${ICONS_SYMBOLIC[0]}
         fi
     else
-        printf -v text "Volume %3s%%" $vol
+        printf -v text "Volume %3s%%" "$vol"
 
-        icon=$(get_volume_icon $vol)
+        icon=$(get_volume_icon "$vol")
 
         if $SHOW_VOLUME_PROGRESS; then
-            local -r progress=$(progress_bar $vol)
+            local -r progress=$(progress_bar "$vol")
             text="$text $progress"
         fi
     fi
@@ -178,8 +180,8 @@ notify_volume() {
 }
 
 list_notification_methods() {
-    awk -W posix 'match($0,/^notify_volume_([[:alnum:]]+)/) {print substr($0, 15, RLENGTH-14)}' "$BASH_SOURCE" || exit $EX_USAGE
-    exit $EX_OK
+    awk -W posix 'match($0,/^notify_volume_([[:alnum:]]+)/) {print substr($0, 15, RLENGTH-14)}' "${BASH_SOURCE[0]}" || exit "$EX_USAGE"
+    exit "$EX_OK"
 }
 
 # Send notifcation for libnotify-compatible notification daemons.
@@ -191,7 +193,7 @@ list_notification_methods() {
 notify_volume_libnotify() {
     local -r vol=$1
     local -r icon=$2
-    local -r text=${@:3}
+    local -r text=${*:3}
 
     if $USE_DUNSTIFY; then
         dunstify -i "$icon" -t "$EXPIRES" -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
@@ -207,7 +209,7 @@ notify_volume_libnotify() {
 #   Text        (string) Notification text.
 notify_volume_xosd() {
     local -r vol=$1
-    local -r text=${@:2}
+    local -r text=${*:2}
     local -r delay=$(ms_to_secs "$EXPIRES")
     local percentage
 
@@ -230,7 +232,7 @@ notify_volume_xosd() {
 # Note: a patch with a notify-send script for herbe, not in the current version at this
 #       time but would make this irrelevant. See https://github.com/dudik/herbe/pull/10
 notify_volume_herbe() {
-    local -r text=$@
+    local -r text=$*
 
     # Dismiss existing/pending notifications to prevent queuing
     pkill -SIGUSR1 herbe
@@ -277,9 +279,9 @@ progress_bar() {
     local -r percent=${1:?$(error 'Percentage is required')}
     local -r max_percent=${2:=-100}
     local -r divisor=${3:=-5}
-    local -r progress=$((($percent > $max_percent ? $max_percent : $percent) / $divisor))
+    local -r progress=$(( (percent > max_percent ? max_percent : percent) / divisor ))
 
-    printf -v bar "%*s" $progress
+    printf -v bar "%*s" $progress ""
     echo "${bar// /█}"
 }
 
@@ -318,7 +320,7 @@ output_volume_default() {
 # Format options:
 #   %v = volume percentage or "MUTE" when muted
 output_volume_custom() {
-    local -r format=$@
+    local -r format=$*
 
     if is_muted; then
         echo -ne "${format//\%v/MUTE}"
@@ -337,12 +339,12 @@ output_volume_i3blocks() {
         full_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
     else
         local -r vol=$(get_volume)
-        local -r color=$(volume_color $vol)
+        local -r color=$(volume_color "$vol")
 
         short_text="<span color=\"$color\">${vol}%</span>\n"
         full_text="<span color=\"$color\">${vol}%</span>\n"
 
-        if isset $MAX_VOLUME && (( $vol > $MAX_VOLUME )); then
+        if isset "$MAX_VOLUME" && (( vol > MAX_VOLUME )); then
             EXITCODE=$EX_URGENT
         fi
     fi
@@ -362,8 +364,8 @@ output_volume_xob() {
 }
 
 list_output_formats() {
-    awk -W posix 'match($0,/^output_volume_([[:alnum:]]+)/) {print substr($0, 15, RLENGTH-14)}' "$BASH_SOURCE" || exit $EX_USAGE
-    exit $EX_OK
+    awk -W posix 'match($0,/^output_volume_([[:alnum:]]+)/) {print substr($0, 15, RLENGTH-14)}' "${BASH_SOURCE[0]}" || exit "$EX_USAGE"
+    exit "$EX_OK"
 }
 
 # Get color for the given volume
@@ -382,9 +384,9 @@ volume_color() {
 
 # Listens for PulseAudio events
 listen() {
-    local -r index=$(pa_get_sink_index $sink)
+    local -r index=$(pa_get_sink_index "$sink")
 
-    while IFS= read -r event; do
+    while IFS= read -r; do
         show_volume_notification
         update_statusbar
     done < <(pactl subscribe | stdbuf -oL grep -e "Event 'change' on sink #$index")
@@ -457,8 +459,8 @@ pa_register_funcs() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
         pa_list_sinks | \
-            awk -W posix '/^[ \t*]+index: / {idx = $3} \
-                        /^[ \t]+name: / {insink = $2 == "<'$sink'>"; if (insink) { print idx }; exit}'
+            awk -W posix '/^[ \t*]+index: / {idx = $3}
+                        /^[ \t]+name: / {insink = $2 == "<'"$sink"'>"; if (insink) { print idx }; exit}'
     }
 
     # Get the volume as a percentage.
@@ -469,7 +471,7 @@ pa_register_funcs() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
         pa_list_sinks | \
-            awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"} \
+            awk -W posix '/^[ \t]+name: /{insink = $2 == "<'"$sink"'>"}
                         /^[ \t]+volume: / && insink {gsub("%,?", ""); print $5; exit}'
     }
 
@@ -481,7 +483,7 @@ pa_register_funcs() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
         pa_list_sinks | \
-            awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"} \
+            awk -W posix '/^[ \t]+name: /{insink = $2 == "<'"$sink"'>"}
                         /^[ \t]+base volume: / && insink {gsub("%", ""); print $5; exit}'
     }
 
@@ -546,8 +548,8 @@ pa_register_funcs() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
         muted=$(pa_list_sinks | \
-                    awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"} \
-                                    /^[ \t]+muted: / && insink {print $2; exit}')
+                    awk -W posix '/^[ \t]+name: /{insink = $2 == "<'"$sink"'>"}
+                                  /^[ \t]+muted: / && insink {print $2; exit}')
 
         [[ $muted = yes ]]
     }
@@ -560,8 +562,8 @@ pa_register_funcs() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
         pa_list_sinks | \
-            awk -W posix '/^[ \t]+name: /{insink = $2 == "<'$sink'>"} \
-                        /^[ \t]+flags: / && insink {for(i=2;i<=NF;++i)printf $i FS; exit}'
+            awk -W posix '/^[ \t]+name: /{insink = $2 == "<'"$sink"'>"}
+                          /^[ \t]+flags: / && insink {for(i=2;i<=NF;++i)printf $i FS; exit}'
     }
 
     # Get color for the given volume for PulseAudio
@@ -571,11 +573,11 @@ pa_register_funcs() {
     pa_volume_color() {
         local -ir vol=${1:?$(error 'A volume is required')}
 
-        if (( $vol >= $PA_VOLUME_MUTED && $vol < $PA_BASE_VOLUME )); then
+        if (( vol >= PA_VOLUME_MUTED && vol < PA_BASE_VOLUME )); then
             echo "$COLOR_MUTED_TO_BASE"
-        elif (( $vol >= $PA_BASE_VOLUME && $vol <= $PA_VOLUME_NORM )); then
+        elif (( vol >= PA_BASE_VOLUME && vol <= PA_VOLUME_NORM )); then
             echo "$COLOR_BASE_TO_NORM"
-        elif (( $vol > $PA_VOLUME_NORM && $vol <= $MAX_VOLUME )); then
+        elif (( vol > PA_VOLUME_NORM && vol <= MAX_VOLUME )); then
             echo "$COLOR_NORM_TO_MAX"
         else
             echo "$COLOR_OTHER"
@@ -586,7 +588,7 @@ pa_register_funcs() {
     listen() {
         local -r index=$(pa_get_sink_index "$SINK")
 
-        while IFS= read -r event; do
+        while IFS= read -r; do
             show_volume_notification
             update_statusbar
         done < <(pactl subscribe | stdbuf -oL grep -e "Event 'change' on sink #$index")
@@ -604,13 +606,13 @@ pa_init() {
     fi
 
     # Determine a max volume when it's not specified
-    if ! isset $MAX_VOLUME; then
-        SINK_FLAGS+=( $(pa_get_sink_flags "$SINK") )
+    if ! isset "$MAX_VOLUME"; then
+        read -ra SINK_FLAGS < <(pa_get_sink_flags "$SINK")
         PA_BASE_VOLUME=$(pa_get_base_volume "$SINK")
 
         # Does the sink support digital (software) amplification?
-        if [[ "${SINK_FLAGS[@]}" =~ "DECIBEL_VOLUME" ]]; then
-            MAX_VOLUME=$(($PA_VOLUME_NORM * $MAX_AMPLIFICATION))
+        if [[ "${SINK_FLAGS[*]}" =~ "DECIBEL_VOLUME" ]]; then
+            MAX_VOLUME=$((PA_VOLUME_NORM * MAX_AMPLIFICATION))
         else
             MAX_VOLUME=$PA_VOLUME_NORM
         fi
@@ -630,12 +632,12 @@ amixer_register_funcs() {
         local volume
 
         if not_empty "$card"; then
-            volume=$(amixer -c "$card" -- sget "$mixer") || exit $EX_USAGE
+            volume=$(amixer -c "$card" -- sget "$mixer") || exit "$EX_USAGE"
         else
-            volume=$(amixer sget "$mixer") || exit $EX_USAGE
+            volume=$(amixer sget "$mixer") || exit "$EX_USAGE"
         fi
 
-        echo $volume | awk -W posix -F'[][]' '/dB/ { gsub("%", ""); print $2 }'
+        echo "$volume" | awk -W posix -F'[][]' '/dB/ { gsub("%", ""); print $2 }'
     }
 
     # Increase volume relative to current volume using amixer.
@@ -700,16 +702,16 @@ amixer_register_funcs() {
     # Returns:
     #   0 when true, 1 when false.
     amixer_is_muted() {
-        local -r card="$1"
+        local -r card=$1
         local output
 
         if not_empty "$card"; then
-            output=$(amixer -c "$card" -- sget "$MIXER") || exit $EX_USAGE
+            output=$(amixer -c "$card" -- sget "$MIXER") || exit "$EX_USAGE"
         else
-            output=$(amixer sget "$MIXER") || exit $EX_USAGE
+            output=$(amixer sget "$MIXER") || exit "$EX_USAGE"
         fi
 
-        status=$(echo $output | awk -W posix -F'[][]' '/dB/ { print $6 }')
+        status=$(echo "$output" | awk -W posix -F'[][]' '/dB/ { print $6 }')
 
         [[ $status = off ]]
     }
@@ -721,11 +723,11 @@ amixer_register_funcs() {
     amixer_volume_color() {
         local -ir vol=${1:?$(error 'A volume is required')}
 
-        if (( $vol >= 0 && $vol < 100 )); then
+        if (( vol >= 0 && vol < 100 )); then
             echo "$COLOR_MUTED_TO_BASE"
-        elif (( $vol == 100 )); then
+        elif (( vol == 100 )); then
             echo "$COLOR_BASE_TO_NORM"
-        elif (( $vol > 100 && $vol <= $MAX_VOLUME )); then
+        elif (( vol > 100 && vol <= MAX_VOLUME )); then
             echo "$COLOR_NORM_TO_MAX"
         else
             echo "$COLOR_OTHER"
@@ -752,9 +754,10 @@ init_script() {
 
 setup_cli_colors() {
     if [[ -t 1 ]]; then
-        local -i num_colors=$(tput colors)
+        local -i num_colors
+        num_colors=$(tput colors)
 
-        if not_empty "$num_colors" && (( $num_colors >= 8 )); then
+        if not_empty "$num_colors" && (( num_colors >= 8 )); then
             NORMAL="$(tput sgr0)"
             RED="$(tput setaf 1)"
             GREEN="$(tput setaf 2)"
@@ -807,7 +810,7 @@ ${YELLOW}Notification Options:${NORMAL}
   ${GREEN}-S <suffix>${NORMAL}           append suffix to symbolic icon names
   ${GREEN}-y${NORMAL}                    use dunstify (${MAGENTA}default: notify-send${NORMAL})
 EOF
-    exit $EX_USAGE
+    exit "$EX_USAGE"
 }
 
 # Rearrange all options to place flags first
@@ -868,10 +871,13 @@ parse_opts() {
         esac
     done
 
-    CMDARGS=${OPTARR[@]:$((OPTIND-1))}
+    read -ra CMDARGS <<< "${OPTARR[@]:$((OPTIND-1))}"
 }
 
 exec_command() {
+    IFS=' ' read -ra ARGS <<< "$1"
+    set -- "${ARGS[@]}"
+
     COMMAND=${1:?$(error 'A command is required')}
     shift
 
@@ -901,7 +907,7 @@ exec_command() {
         output)
             case "$#" in 0) usage ;; esac
             output_volume "$@"
-            exit ${EXITCODE:-$EX_OK}
+            exit "${EXITCODE:-$EX_OK}"
             ;;
         outputs)
             list_output_formats
@@ -928,7 +934,8 @@ post_command_hook() {
 
 main() {
     # Getopt parsing variables
-    declare OPTIND OPTARR CMDARGS
+    declare OPTIND
+    declare -a OPTARR CMDARGS
 
     ###########################################################
     # Non-command line option variables
@@ -994,14 +1001,10 @@ main() {
     # CLI colors
     declare \
         NORMAL \
-        BLACK \
         RED \
         GREEN \
         YELLOW \
-        BLUE \
-        MAGENTA \
-        CYAN \
-        WHITE
+        MAGENTA
 
     ###########################################################
     # Command line option variables
@@ -1024,21 +1027,20 @@ main() {
         NOTIFICATION_METHOD=libnotify
 
     declare -i \
-        VOLUME=5 \
         EXPIRES=1500 \
         MAX_VOLUME \
         MAX_AMPLIFICATION=2
 
     init_script
 
-    parse_opts $@
+    parse_opts "$@"
 
     # Requires options to be parsed first
     init_audio
 
-    exec_command ${CMDARGS[@]} && post_command_hook
+    exec_command "${CMDARGS[*]}" && post_command_hook
 
     exit ${EXITCODE:-$EX_OK}
 }
 
-main $@
+main "$@"
