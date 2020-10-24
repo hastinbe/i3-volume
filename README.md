@@ -2,7 +2,7 @@
 
 Volume control with notifications, and a volume statusline indicator. Written for use with [i3wm], but works with any window manager or as a standalone script.
 
-[![License: GPL v2][license-badge]][license]
+[![License: GPL v2][license-badge]][license] ![build][build]
 
 ## Installation
 
@@ -117,6 +117,7 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 
 [alsa-utils]: https://alsa.opensrc.org/Alsa-utils
 [bspwm]: https://github.com/baskerville/bspwm
+[build]: https://travis-ci.org/hastinbe/i3-volume.svg?branch=master
 [dunst]: https://dunst-project.org
 [herbe]: https://github.com/dudik/herbe
 [i3blocks]: https://github.com/vivien/i3blocks
