@@ -196,9 +196,9 @@ notify_volume_libnotify() {
     local -r text=${*:3}
 
     if $USE_DUNSTIFY; then
-        dunstify -i "$icon" -t "$EXPIRES" -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
+        "${DUNSTIFY_PATH%/}/dunstify" -i "$icon" -t "$EXPIRES" -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
     else
-        notify-send -i "$icon" -t "$EXPIRES" -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
+        "${NOTIFY_SEND_PATH%/}/notify-send" -i "$icon" -t "$EXPIRES" -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
     fi
 }
 
@@ -221,7 +221,7 @@ notify_volume_xosd() {
         percentage=$vol
     fi
 
-    osd_cat --align center -b percentage -P "$percentage" -d "$delay" -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" & disown
+    "${XOSD_PATH%/}/osd_cat" --align center -b percentage -P "$percentage" -d "$delay" -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" & disown
 }
 
 # Send notification to herbe.
@@ -237,7 +237,7 @@ notify_volume_herbe() {
     # Dismiss existing/pending notifications to prevent queuing
     pkill -SIGUSR1 herbe
 
-    herbe "$text" & disown
+    "${HERBE_PATH%/}/herbe" "$text" & disown
 }
 
 # Send notification to volnoti.
@@ -248,9 +248,9 @@ notify_volume_volnoti() {
     local -r vol=$1
 
     if is_muted; then
-        volnoti-show -m "$vol"
+        "${VOLNOTI_PATH%/}/volnoti-show" -m "$vol"
     else
-        volnoti-show "$vol"
+        "${VOLNOTI_PATH%/}/volnoti-show" "$vol"
     fi
 }
 
@@ -1040,7 +1040,7 @@ main() {
 
     exec_command "${CMDARGS[*]}" && post_command_hook
 
-    exit ${EXITCODE:-$EX_OK}
+    exit "${EXITCODE:-$EX_OK}"
 }
 
 main "$@"
