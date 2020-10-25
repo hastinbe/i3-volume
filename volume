@@ -843,7 +843,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:ac:e:hlM:nN:ps:S:t:u:x:X:y
+    local optstring=:ac:e:hlm:nN:ps:S:t:u:x:X:y
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
