@@ -460,7 +460,7 @@ pa_register_funcs() {
 
         pa_list_sinks | \
             awk -W posix '/^[ \t*]+index: / {idx = $3}
-                        /^[ \t]+name: / {insink = $2 == "<'"$sink"'>"; if (insink) { print idx }; exit}'
+                          /^[ \t]+name: / {insink = $2 == "<'"$sink"'>"; if (insink) { print idx }; exit}'
     }
 
     # Get the volume as a percentage.
@@ -472,7 +472,7 @@ pa_register_funcs() {
 
         pa_list_sinks | \
             awk -W posix '/^[ \t]+name: /{insink = $2 == "<'"$sink"'>"}
-                        /^[ \t]+volume: / && insink {gsub("%,?", ""); print $5; exit}'
+                          /^[ \t]+volume: / && insink {gsub("%,?", ""); print $5; exit}'
     }
 
     # Get the max volume as a percentage.
@@ -484,7 +484,7 @@ pa_register_funcs() {
 
         pa_list_sinks | \
             awk -W posix '/^[ \t]+name: /{insink = $2 == "<'"$sink"'>"}
-                        /^[ \t]+base volume: / && insink {gsub("%", ""); print $5; exit}'
+                          /^[ \t]+base volume: / && insink {gsub("%", ""); print $5; exit}'
     }
 
     # Increase volume relative to current volume using pulseaudio.
@@ -563,7 +563,7 @@ pa_register_funcs() {
 
         pa_list_sinks | \
             awk -W posix '/^[ \t]+name: /{insink = $2 == "<'"$sink"'>"}
-                          /^[ \t]+flags: / && insink {for(i=2;i<=NF;++i)printf $i FS; exit}'
+                          /^[ \t]+flags: / && insink { for(i = 2; i <= NF; ++i) printf $i FS; exit}'
     }
 
     # Get color for the given volume for PulseAudio
