@@ -547,11 +547,9 @@ pa_register_funcs() {
     pa_is_muted() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
-        muted=$(pa_list_sinks | \
-                    awk -W posix '/^[ \t]+name: /{insink = $2 == "<'"$sink"'>"}
-                                  /^[ \t]+muted: / && insink {print $2; exit}')
-
-        [[ $muted = yes ]]
+        pa_list_sinks | \
+            awk -W posix '/^[ \t]+name: / {insink = $2 == "<'"$sink"'>"}
+                          /^[ \t]+muted: / && insink && $2 ~ /^yes$/ { exitcode=1 }; END { exit !exitcode }'
     }
 
     # Get the flags of the PulseAudio sink.
@@ -629,15 +627,9 @@ amixer_register_funcs() {
     amixer_get_volume() {
         local -r card=$1
         local -r mixer=${2:-Master}
-        local volume
 
-        if not_empty "$card"; then
-            volume=$(amixer -c "$card" -- sget "$mixer") || exit "$EX_USAGE"
-        else
-            volume=$(amixer sget "$mixer") || exit "$EX_USAGE"
-        fi
-
-        echo "$volume" | awk -W posix -F'[][]' '/dB/ { gsub("%", ""); print $2 }'
+        amixer ${card:+-c "$card" --} sget "$mixer" | \
+            awk -W posix -F'[][]' '/dB/ { gsub("%", ""); print $2 }'
     }
 
     # Increase volume relative to current volume using amixer.
@@ -673,11 +665,7 @@ amixer_register_funcs() {
         local -r vol=${1:?$(error 'Volume is required')}
         local -r card=$2
 
-        if not_empty "$card"; then
-            amixer -q -c "$card" -- set "$MIXER" "$vol"
-        else
-            amixer -q set "$MIXER" "$vol"
-        fi
+        amixer -q ${card:+-c "$card" --} set "$MIXER" "$vol"
     }
 
     # Toggle mute using amixer.
@@ -687,11 +675,7 @@ amixer_register_funcs() {
     amixer_toggle_mute() {
         local -r card=$1
 
-        if not_empty "$card"; then
-            amixer -q -c "$card" -- set "$MIXER" toggle
-        else
-            amixer -q set "$MIXER" toggle
-        fi
+        amixer -q ${card:+-c "$card" --} set "$MIXER" toggle
     }
 
     # Check if card is muted.
@@ -703,17 +687,9 @@ amixer_register_funcs() {
     #   0 when true, 1 when false.
     amixer_is_muted() {
         local -r card=$1
-        local output
 
-        if not_empty "$card"; then
-            output=$(amixer -c "$card" -- sget "$MIXER") || exit "$EX_USAGE"
-        else
-            output=$(amixer sget "$MIXER") || exit "$EX_USAGE"
-        fi
-
-        status=$(echo "$output" | awk -W posix -F'[][]' '/dB/ { print $6 }')
-
-        [[ $status = off ]]
+        amixer ${card:+-c "$card" --} sget "$MIXER" | \
+            awk -W posix -F'[][]' '/dB/ && $6 ~ /^off$/ { exitcode=1 }; END { exit !exitcode }'
     }
 
     # Get color for the given volume for amixer
