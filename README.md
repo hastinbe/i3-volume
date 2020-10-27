@@ -19,9 +19,13 @@ Use your keyboard volume keys to increase, decrease, or mute your volume. If you
 | ------------ | ------- | ----- |
 | ![notify-osd notifications](https://github.com/hastinbe/i3-volume/wiki/images/notify-osd.png) | ![dunst notifications](https://github.com/hastinbe/i3-volume/wiki/images/dunst.png) | ![xob notifications](https://github.com/hastinbe/i3-volume/wiki/images/xob.png) |
 
-| [xosd] | [herbe] | [volnoti] |
+| [XOSD] | [herbe] | [volnoti] |
 | ------ | ------- | --------- |
 | ![xosd notifications](https://github.com/hastinbe/i3-volume/wiki/images/xosd.png) | ![herbe notifications](https://github.com/hastinbe/i3-volume/wiki/images/herbe.png) | ![volnoti notifications](https://github.com/hastinbe/i3-volume/wiki/images/volnoti.png)
+
+| [KOSD] |
+| ------ |
+| ![kosd notifications](https://github.com/hastinbe/i3-volume/wiki/images/kosd.png) |
 
 Read about [notifications](https://github.com/hastinbe/i3-volume/wiki/Notifications) for more information.
 
@@ -101,9 +105,10 @@ Version 3 introduces commands which makes it incompatible with previous versions
 | ---------- | ----- |
 | **[i3blocks]** | See our [example blocklet](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3blocks) |
 | **[xob]** | Requires extra steps for notifications. [Guide](https://github.com/hastinbe/i3-volume/wiki/Usage-with-xob) |
-| **[xosd]** | Notifications require the `-N xosd` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-XOSD)
+| **[XOSD]** | Notifications require the `-N xosd` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-XOSD)
 | **[herbe]** | Notifications require the `-N herbe` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-herbe)
 | **[volnoti]** | Notifications require the `-N volnoti` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-volnoti)
+| **[KOSD]** | Notifications require the `-N kosd` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-kosd)
 | **[sxhkd]** | For keybindings with or without [i3wm], often used with [bspwm]. [Example](https://github.com/hastinbe/i3-volume/wiki/Keybindings#sxkhd)
 
 ## Help
@@ -120,6 +125,7 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 [build]: https://travis-ci.org/hastinbe/i3-volume.svg?branch=master
 [dunst]: https://dunst-project.org
 [herbe]: https://github.com/dudik/herbe
+[KOSD]: https://store.kde.org/p/1127472/show/page/5
 [i3blocks]: https://github.com/vivien/i3blocks
 [i3status]: https://github.com/i3/i3status
 [i3wm]: https://i3wm.org
@@ -133,4 +139,4 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 [volnoti]: https://github.com/davidbrazdil/volnoti
 [wiki]: https://github.com/hastinbe/i3-volume/wiki
 [xob]: https://github.com/florentc/xob
-[xosd]: https://sourceforge.net/projects/libxosd/
+[XOSD]: https://sourceforge.net/projects/libxosd/

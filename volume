@@ -179,6 +179,7 @@ notify_volume() {
         xosd    ) notify_volume_xosd "$vol" "$text" ;;
         herbe   ) notify_volume_herbe "$text" ;;
         volnoti ) notify_volume_volnoti "$vol" ;;
+        kosd    ) notify_volume_kosd "$vol" ;;
         *       ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
     esac
 }
@@ -255,6 +256,20 @@ notify_volume_volnoti() {
         "${VOLNOTI_PATH:+${VOLNOTI_PATH%/}/}volnoti-show" -m "$vol"
     else
         "${VOLNOTI_PATH:+${VOLNOTI_PATH%/}/}volnoti-show" "$vol"
+    fi
+}
+
+# Send notification to KOSD.
+#
+# Arguments:
+#   Volume      (integer) An integer indicating the volume.
+notify_volume_kosd() {
+    local -r vol=$1
+
+    if is_muted; then
+        qdbus org.kde.kded /modules/kosd showVolume "$vol" 1
+    else
+        qdbus org.kde.kded /modules/kosd showVolume "$vol" 0
     fi
 }
 
