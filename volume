@@ -29,7 +29,11 @@ isset() {
 }
 
 error() {
-    echo "$RED$*$NORMAL"
+    echo "$COLOR_RED$*$COLOR_RESET"
+}
+
+has_color() {
+    (( $(tput colors 2>/dev/null || echo 0) >= 8 )) && [ -t 1 ]
 }
 
 # Get the volume as a percentage.
@@ -724,67 +728,62 @@ ms_to_secs() {
     echo $(( ($1 + (1000 - 1)) / 1000 ))
 }
 
-init_script() {
+bootstrap() {
     setup_cli_colors
 }
 
 setup_cli_colors() {
-    if [[ -t 1 ]]; then
-        local -i num_colors
-        num_colors=$(tput colors)
-
-        if not_empty "$num_colors" && (( num_colors >= 8 )); then
-            NORMAL="$(tput sgr0)"
-            RED="$(tput setaf 1)"
-            GREEN="$(tput setaf 2)"
-            YELLOW="$(tput setaf 3)"
-            MAGENTA="$(tput setaf 5)"
-        fi
+    if has_color; then
+        COLOR_RESET=$'\033[0m'
+        COLOR_RED=$'\033[0;31m'
+        COLOR_GREEN=$'\033[0;32m'
+        COLOR_YELLOW=$'\033[0;33m'
+        COLOR_MAGENTA=$'\033[0;35m'
     fi
 }
 
 usage() {
     cat <<- EOF 1>&2
-${YELLOW}Usage:${NORMAL} $0 [<options>] <command> [<args>]
+${COLOR_YELLOW}Usage:${COLOR_RESET} $0 [<options>] <command> [<args>]
 Control volume and related notifications.
 
-${YELLOW}Commands:${NORMAL}
-  ${GREEN}up <value>${NORMAL}            increase volume
-  ${GREEN}down <value>${NORMAL}          decrease volume
-  ${GREEN}set <value>${NORMAL}           set volume
-  ${GREEN}mute${NORMAL}                  toggle mute
-  ${GREEN}listen${NORMAL}                listen for changes to a PulseAudio sink
-  ${GREEN}output <format>${NORMAL}       output volume in a supported format
+${COLOR_YELLOW}Commands:${COLOR_RESET}
+  ${COLOR_GREEN}up <value>${COLOR_RESET}            increase volume
+  ${COLOR_GREEN}down <value>${COLOR_RESET}          decrease volume
+  ${COLOR_GREEN}set <value>${COLOR_RESET}           set volume
+  ${COLOR_GREEN}mute${COLOR_RESET}                  toggle mute
+  ${COLOR_GREEN}listen${COLOR_RESET}                listen for changes to a PulseAudio sink
+  ${COLOR_GREEN}output <format>${COLOR_RESET}       output volume in a supported format
                         custom format substitutions:
                             %v = volume
                             example: "My current volume is %v"
-  ${GREEN}outputs${NORMAL}               show available output formats
-  ${GREEN}notifications${NORMAL}         show available notification methods
-  ${GREEN}help${NORMAL}                  display help
+  ${COLOR_GREEN}outputs${COLOR_RESET}               show available output formats
+  ${COLOR_GREEN}notifications${COLOR_RESET}         show available notification methods
+  ${COLOR_GREEN}help${COLOR_RESET}                  display help
 
-${YELLOW}Options:${NORMAL}
-  ${GREEN}-a${NORMAL}                    use amixer
-  ${GREEN}-n${NORMAL}                    enable notifications
-  ${GREEN}-t <process_name>${NORMAL}     process name of status bar (${MAGENTA}requires -u${NORMAL})
-  ${GREEN}-u <signal>${NORMAL}           signal to update status bar (${MAGENTA}requires -t${NORMAL})
-  ${GREEN}-x <value>${NORMAL}            maximum volume
-  ${GREEN}-X <value>${NORMAL}            maximum amplification; if supported (${MAGENTA}default: 2${NORMAL})
-  ${GREEN}-h${NORMAL}                    display help
+${COLOR_YELLOW}Options:${COLOR_RESET}
+  ${COLOR_GREEN}-a${COLOR_RESET}                    use amixer
+  ${COLOR_GREEN}-n${COLOR_RESET}                    enable notifications
+  ${COLOR_GREEN}-t <process_name>${COLOR_RESET}     process name of status bar (${COLOR_MAGENTA}requires -u${COLOR_RESET})
+  ${COLOR_GREEN}-u <signal>${COLOR_RESET}           signal to update status bar (${COLOR_MAGENTA}requires -t${COLOR_RESET})
+  ${COLOR_GREEN}-x <value>${COLOR_RESET}            maximum volume
+  ${COLOR_GREEN}-X <value>${COLOR_RESET}            maximum amplification; if supported (${COLOR_MAGENTA}default: 2${COLOR_RESET})
+  ${COLOR_GREEN}-h${COLOR_RESET}                    display help
 
-${YELLOW}amixer Options:${NORMAL}
-  ${GREEN}-c <card>${NORMAL}             card number to control
-  ${GREEN}-m <mixer>${NORMAL}            set mixer (${MAGENTA}default: Master${NORMAL})
+${COLOR_YELLOW}amixer Options:${COLOR_RESET}
+  ${COLOR_GREEN}-c <card>${COLOR_RESET}             card number to control
+  ${COLOR_GREEN}-m <mixer>${COLOR_RESET}            set mixer (${COLOR_MAGENTA}default: Master${COLOR_RESET})
 
-${YELLOW}PulseAudio Options:${NORMAL}
-  ${GREEN}-s <sink>${NORMAL}             symbolic name of sink
+${COLOR_YELLOW}PulseAudio Options:${COLOR_RESET}
+  ${COLOR_GREEN}-s <sink>${COLOR_RESET}             symbolic name of sink
 
-${YELLOW}Notification Options:${NORMAL}
-  ${GREEN}-N <method>${NORMAL}           notification method (${MAGENTA}default: libnotify${NORMAL})
-  ${GREEN}-p${NORMAL}                    enable progress bar
-  ${GREEN}-e <expires>${NORMAL}          expiration time of notifications in ms
-  ${GREEN}-l${NORMAL}                    use fullcolor instead of symbolic icons
-  ${GREEN}-S <suffix>${NORMAL}           append suffix to symbolic icon names
-  ${GREEN}-y${NORMAL}                    use dunstify (${MAGENTA}default: notify-send${NORMAL})
+${COLOR_YELLOW}Notification Options:${COLOR_RESET}
+  ${COLOR_GREEN}-N <method>${COLOR_RESET}           notification method (${COLOR_MAGENTA}default: libnotify${COLOR_RESET})
+  ${COLOR_GREEN}-p${COLOR_RESET}                    enable progress bar
+  ${COLOR_GREEN}-e <expires>${COLOR_RESET}          expiration time of notifications in ms
+  ${COLOR_GREEN}-l${COLOR_RESET}                    use fullcolor instead of symbolic icons
+  ${COLOR_GREEN}-S <suffix>${COLOR_RESET}           append suffix to symbolic icon names
+  ${COLOR_GREEN}-y${COLOR_RESET}                    use dunstify (${COLOR_MAGENTA}default: notify-send${COLOR_RESET})
 EOF
     exit "$EX_USAGE"
 }
@@ -974,13 +973,12 @@ main() {
         COLOR_OTHER=${COLOR_OTHER:-#FFFFFF} \
         COLOR_XOSD_OUTLINE=${COLOR_XOSD_OUTLINE:-#222222}
 
-    # CLI colors
     declare \
-        NORMAL \
-        RED \
-        GREEN \
-        YELLOW \
-        MAGENTA
+        COLOR_RESET \
+        COLOR_RED \
+        COLOR_GREEN \
+        COLOR_YELLOW \
+        COLOR_MAGENTA
 
     ###########################################################
     # Command line option variables
@@ -1007,7 +1005,7 @@ main() {
         MAX_VOLUME \
         MAX_AMPLIFICATION=2
 
-    init_script
+    bootstrap
 
     parse_opts "$@"
 
