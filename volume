@@ -151,6 +151,30 @@ get_volume_icon() {
     echo "$icon"
 }
 
+# Gets an emoji for the provided volume.
+#
+# Arguments:
+#   Volume      (integer) An integer indicating the volume.
+#
+# Returns:
+#   The volume emoji.
+get_volume_emoji() {
+    local -r vol=${1:?$(error 'Volume is required')}
+    local icon
+
+    if is_muted; then
+        icon=${ICONS_EMOJI[0]}
+    else
+        if (( vol >= 70 )); then icon=${ICONS_EMOJI[1]}
+        elif (( vol >= 40 )); then icon=${ICONS_EMOJI[3]}
+        elif (( vol > 0 )); then icon=${ICONS_EMOJI[2]}
+        else icon=${ICONS_EMOJI[2]}
+        fi
+    fi
+
+    echo "$icon"
+}
+
 # Display a notification indicating muted or current volume.
 notify_volume() {
     local -r vol=$(get_volume)
@@ -321,7 +345,7 @@ output_volume() {
         i3blocks    ) output_volume_i3blocks ;;
         xob         ) output_volume_xob ;;
         default     ) output_volume_default ;;
-        *           ) output_volume_custom "$@" ;;
+        *           ) output_volume_custom "$*" ;;
     esac
 }
 
@@ -338,14 +362,29 @@ output_volume_default() {
 #
 # Format options:
 #   %v = volume percentage or "MUTE" when muted
+#   %s = sink name (PulseAudio only)
+#   %c = card (alsamixer only)
+#   %m = mixer (alsamixer only)
+#   %p = volume progress bar
+#   %i = volume icon
 output_volume_custom() {
     local -r format=$*
+    local -r vol=$(get_volume)
+    local string
 
     if is_muted; then
-        echo -ne "${format//\%v/MUTE}"
+        string=${format//\%v/MUTE}
     else
-        echo -ne "${format//\%v/$(get_volume)%}"
+        string=${format//\%v/$vol%}
     fi
+
+    string=${string//\%s/$SINK}
+    string=${string//\%c/$CARD}
+    string=${string//\%m/$MIXER}
+    string=${string//\%p/$(progress_bar "$vol")}
+    string=${string//\%i/$(get_volume_emoji "$vol")}
+
+    echo -ne "$string"
 }
 
 # Outputs the current volume for i3blocks.
@@ -896,7 +935,7 @@ exec_command() {
             ;;
         output)
             case "$#" in 0) usage ;; esac
-            output_volume "$@"
+            output_volume "$*"
             exit "${EXITCODE:-$EX_OK}"
             ;;
         outputs)
@@ -964,6 +1003,14 @@ main() {
         audio-volume-medium-symbolic
         ## Only exists in some icon sets
         # audio-volume-overamplified-symbolic
+    )
+
+    # Emoji-based icons.
+    declare -a ICONS_EMOJI=(
+        🔇
+        🔊
+        🔈
+        🔉
     )
 
     # PulseAudio sink flags
