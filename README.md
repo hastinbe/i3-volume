@@ -1,12 +1,16 @@
 # i3-volume
 
-Volume control with notifications, and a volume statusline indicator. Written for use with [i3wm], but works with any window manager or as a standalone script.
+Volume control with on-screen display notifications. Works with any window manager, such as [i3wm], [bspwm], and [KDE], as a standalone script, or with statusbars such as [polybar], [i3blocks], [i3status], and more.
 
 [![License: GPL v2][license-badge]][license] ![build][build]
 
 ## Installation
 
-Read our [installation instructions](https://github.com/hastinbe/i3-volume/wiki/Installation) for general usage with [i3wm].
+Read the [installation instructions](https://github.com/hastinbe/i3-volume/wiki/Installation) to get started. For a specific usage:
+
+- [i3wm](https://github.com/hastinbe/i3-volume/wiki/Installation#i3wm)
+- [polybar](https://github.com/hastinbe/i3-volume/wiki/Installation#polybar)
+- [i3blocks](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3blocks)
 
 ### Usage
 
@@ -39,47 +43,52 @@ Usage: ./volume [<options>] <command> [<args>]
 Control volume and related notifications.
 
 Commands:
-  up <value>            increase volume
-  down <value>          decrease volume
-  set <value>           set volume
-  mute                  toggle mute
-  listen                listen for changes to a PulseAudio sink
-  output <format>       output volume in a supported format
-                        custom format substitutions:
-                            %v = volume
-                            example: "My current volume is %v"
-  outputs               show available output formats
-  notifications         show available notification methods
-  help                  display help
+  up <value>                  increase volume
+  down <value>                decrease volume
+  set <value>                 set volume
+  mute                        toggle mute
+  listen                      listen for changes to a PulseAudio sink
+  output <format>             output volume in a supported format
+                              custom format substitutions:
+                                  %v = volume
+                                  %s = sink name (PulseAudio only)
+                                  %c = card (alsamixer only)
+                                  %m = mixer (alsamixer only)
+                                  %p = volume progress bar
+                                  %i = volume icon/emoji
+
+                                  examples:
+                                      "Volume is %v" = Volume is 50%
+                                      "%i %v %p \n"  = 奔50% ██████████
+  outputs                     show available output formats
+  notifications               show available notification methods
+  help                        display help
 
 Options:
-  -a                    use amixer
-  -n                    enable notifications
-  -t <process_name>     process name of status bar (requires -u)
-  -u <signal>           signal to update status bar (requires -t)
-  -x <value>            maximum volume
-  -X <value>            maximum amplification; if supported (default: 2)
-  -h                    display help
+  -a                          use amixer
+  -n                          enable notifications
+  -j <muted,high,low,medium>  specify custom volume emojis as a comma separated list
+  -t <process_name>           process name of status bar (requires -u)
+  -u <signal>                 signal to update status bar (requires -t)
+  -x <value>                  maximum volume
+  -X <value>                  maximum amplification; if supported (default: 2)
+  -h                          display help
 
 amixer Options:
-  -c <card>             card number to control
-  -m <mixer>            set mixer (default: Master)
+  -c <card>                   card number to control
+  -m <mixer>                  set mixer (default: Master)
 
 PulseAudio Options:
-  -s <sink>             symbolic name of sink
+  -s <sink>                   symbolic name of sink
 
 Notification Options:
-  -N <method>           notification method (default: libnotify)
-  -p                    enable progress bar
-  -e <expires>          expiration time of notifications in ms
-  -l                    use fullcolor instead of symbolic icons
-  -S <suffix>           append suffix to symbolic icon names
-  -y                    use dunstify (default: notify-send)
+  -N <method>                 notification method (default: libnotify)
+  -p                          enable progress bar
+  -e <expires>                expiration time of notifications in ms
+  -l                          use fullcolor instead of symbolic icons
+  -S <suffix>                 append suffix to symbolic icon names
+  -y                          use dunstify (default: notify-send)
 ```
-
-#### Listen mode (PulseAudio only)
-
-Listen mode (`listen` comand) causes `i3-volume` to listen for changes on your PulseAudio sink. When configured, these events will update your status bar and dispatch on-screen display notifications to reflect the change.
 
 ## Migrating
 
@@ -125,6 +134,7 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 [build]: https://travis-ci.org/hastinbe/i3-volume.svg?branch=master
 [dunst]: https://dunst-project.org
 [herbe]: https://github.com/dudik/herbe
+[KDE]: https://kde.org
 [KOSD]: https://store.kde.org/p/1127472/show/page/5
 [i3blocks]: https://github.com/vivien/i3blocks
 [i3status]: https://github.com/i3/i3status
@@ -134,6 +144,7 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 [license-badge]: https://img.shields.io/badge/License-GPL%20v2-blue.svg
 [logo]: assets/logo.svg
 [notify-osd]: https://launchpad.net/notify-osd
+[polybar]: https://github.com/polybar/polybar
 [pulseaudio-utils]: https://www.freedesktop.org/wiki/Software/PulseAudio/
 [sxhkd]: https://github.com/baskerville/sxhkd
 [volnoti]: https://github.com/davidbrazdil/volnoti

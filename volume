@@ -800,42 +800,51 @@ ${COLOR_YELLOW}Usage:${COLOR_RESET} $0 [<options>] <command> [<args>]
 Control volume and related notifications.
 
 ${COLOR_YELLOW}Commands:${COLOR_RESET}
-  ${COLOR_GREEN}up <value>${COLOR_RESET}            increase volume
-  ${COLOR_GREEN}down <value>${COLOR_RESET}          decrease volume
-  ${COLOR_GREEN}set <value>${COLOR_RESET}           set volume
-  ${COLOR_GREEN}mute${COLOR_RESET}                  toggle mute
-  ${COLOR_GREEN}listen${COLOR_RESET}                listen for changes to a PulseAudio sink
-  ${COLOR_GREEN}output <format>${COLOR_RESET}       output volume in a supported format
-                        custom format substitutions:
-                            %v = volume
-                            example: "My current volume is %v"
-  ${COLOR_GREEN}outputs${COLOR_RESET}               show available output formats
-  ${COLOR_GREEN}notifications${COLOR_RESET}         show available notification methods
-  ${COLOR_GREEN}help${COLOR_RESET}                  display help
+  ${COLOR_GREEN}up <value>${COLOR_RESET}                  increase volume
+  ${COLOR_GREEN}down <value>${COLOR_RESET}                decrease volume
+  ${COLOR_GREEN}set <value>${COLOR_RESET}                 set volume
+  ${COLOR_GREEN}mute${COLOR_RESET}                        toggle mute
+  ${COLOR_GREEN}listen${COLOR_RESET}                      listen for changes to a PulseAudio sink
+  ${COLOR_GREEN}output <format>${COLOR_RESET}             output volume in a supported format
+                              custom format substitutions:
+                                  %v = volume
+                                  %s = sink name (PulseAudio only)
+                                  %c = card (alsamixer only)
+                                  %m = mixer (alsamixer only)
+                                  %p = volume progress bar
+                                  %i = volume icon/emoji
+
+                                  examples:
+                                      "Volume is %v" = Volume is 50%
+                                      "%i %v %p \n"  = 奔50% ██████████
+  ${COLOR_GREEN}outputs${COLOR_RESET}                     show available output formats
+  ${COLOR_GREEN}notifications${COLOR_RESET}               show available notification methods
+  ${COLOR_GREEN}help${COLOR_RESET}                        display help
 
 ${COLOR_YELLOW}Options:${COLOR_RESET}
-  ${COLOR_GREEN}-a${COLOR_RESET}                    use amixer
-  ${COLOR_GREEN}-n${COLOR_RESET}                    enable notifications
-  ${COLOR_GREEN}-t <process_name>${COLOR_RESET}     process name of status bar (${COLOR_MAGENTA}requires -u${COLOR_RESET})
-  ${COLOR_GREEN}-u <signal>${COLOR_RESET}           signal to update status bar (${COLOR_MAGENTA}requires -t${COLOR_RESET})
-  ${COLOR_GREEN}-x <value>${COLOR_RESET}            maximum volume
-  ${COLOR_GREEN}-X <value>${COLOR_RESET}            maximum amplification; if supported (${COLOR_MAGENTA}default: 2${COLOR_RESET})
-  ${COLOR_GREEN}-h${COLOR_RESET}                    display help
+  ${COLOR_GREEN}-a${COLOR_RESET}                          use amixer
+  ${COLOR_GREEN}-n${COLOR_RESET}                          enable notifications
+  ${COLOR_GREEN}-j <muted,high,low,medium>${COLOR_RESET}  specify custom volume emojis as a comma separated list
+  ${COLOR_GREEN}-t <process_name>${COLOR_RESET}           process name of status bar (${COLOR_MAGENTA}requires -u${COLOR_RESET})
+  ${COLOR_GREEN}-u <signal>${COLOR_RESET}                 signal to update status bar (${COLOR_MAGENTA}requires -t${COLOR_RESET})
+  ${COLOR_GREEN}-x <value>${COLOR_RESET}                  maximum volume
+  ${COLOR_GREEN}-X <value>${COLOR_RESET}                  maximum amplification; if supported (${COLOR_MAGENTA}default: 2${COLOR_RESET})
+  ${COLOR_GREEN}-h${COLOR_RESET}                          display help
 
 ${COLOR_YELLOW}amixer Options:${COLOR_RESET}
-  ${COLOR_GREEN}-c <card>${COLOR_RESET}             card number to control
-  ${COLOR_GREEN}-m <mixer>${COLOR_RESET}            set mixer (${COLOR_MAGENTA}default: Master${COLOR_RESET})
+  ${COLOR_GREEN}-c <card>${COLOR_RESET}                   card number to control
+  ${COLOR_GREEN}-m <mixer>${COLOR_RESET}                  set mixer (${COLOR_MAGENTA}default: Master${COLOR_RESET})
 
 ${COLOR_YELLOW}PulseAudio Options:${COLOR_RESET}
-  ${COLOR_GREEN}-s <sink>${COLOR_RESET}             symbolic name of sink
+  ${COLOR_GREEN}-s <sink>${COLOR_RESET}                   symbolic name of sink
 
 ${COLOR_YELLOW}Notification Options:${COLOR_RESET}
-  ${COLOR_GREEN}-N <method>${COLOR_RESET}           notification method (${COLOR_MAGENTA}default: libnotify${COLOR_RESET})
-  ${COLOR_GREEN}-p${COLOR_RESET}                    enable progress bar
-  ${COLOR_GREEN}-e <expires>${COLOR_RESET}          expiration time of notifications in ms
-  ${COLOR_GREEN}-l${COLOR_RESET}                    use fullcolor instead of symbolic icons
-  ${COLOR_GREEN}-S <suffix>${COLOR_RESET}           append suffix to symbolic icon names
-  ${COLOR_GREEN}-y${COLOR_RESET}                    use dunstify (${COLOR_MAGENTA}default: notify-send${COLOR_RESET})
+  ${COLOR_GREEN}-N <method>${COLOR_RESET}                 notification method (${COLOR_MAGENTA}default: libnotify${COLOR_RESET})
+  ${COLOR_GREEN}-p${COLOR_RESET}                          enable progress bar
+  ${COLOR_GREEN}-e <expires>${COLOR_RESET}                expiration time of notifications in ms
+  ${COLOR_GREEN}-l${COLOR_RESET}                          use fullcolor instead of symbolic icons
+  ${COLOR_GREEN}-S <suffix>${COLOR_RESET}                 append suffix to symbolic icon names
+  ${COLOR_GREEN}-y${COLOR_RESET}                          use dunstify (${COLOR_MAGENTA}default: notify-send${COLOR_RESET})
 EOF
     exit "$EX_USAGE"
 }
@@ -930,17 +939,10 @@ exec_command() {
             toggle_mute
             ;;
         listen)
-            local args="$*"
-
-            if not_empty "$args"; then
-                OUTPUT_MODE=true
-            fi
-
-            listen "$args"
+            listen "$*"
             ;;
         output)
             case "$#" in 0) usage ;; esac
-            OUTPUT_MODE=true
             output_volume "$*"
             exit "${EXITCODE:-$EX_OK}"
             ;;
@@ -1066,8 +1068,7 @@ main() {
         SINK \
         STATUSLINE \
         SYMBOLIC_ICON_SUFFIX \
-        NOTIFICATION_METHOD=libnotify \
-        OUTPUT_MODE=false
+        NOTIFICATION_METHOD=libnotify
 
     declare -i \
         EXPIRES=1500 \
