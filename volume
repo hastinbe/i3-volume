@@ -44,6 +44,10 @@ define_helpers() {
     ms_to_secs() {
         echo $(( ($1 + (1000 - 1)) / 1000 ))
     }
+
+    is_command_hookable() {
+        ! [[ ${POST_HOOK_EXEMPT_COMMANDS[*]} =~ $1 ]]
+    }
 }
 
 define_notification_methods() {
@@ -843,15 +847,6 @@ setup_amixer() {
     define_amixer_functions
 }
 
-bootstrap() {
-    define_helpers
-    define_notification_methods
-    define_output_formats
-    define_commands
-
-    setup_color
-}
-
 setup_color() {
     if has_color; then
         COLOR_RESET=$'\033[0m'
@@ -971,10 +966,6 @@ exec_command() {
     esac
 }
 
-is_command_hookable() {
-    ! [[ ${POST_HOOK_EXEMPT_COMMANDS[*]} =~ $1 ]]
-}
-
 post_command_hook() {
     if is_command_hookable "$COMMAND"; then
         show_volume_notification
@@ -1088,7 +1079,12 @@ main() {
         MAX_VOLUME \
         MAX_AMPLIFICATION=2
 
-    bootstrap
+    define_helpers
+    define_notification_methods
+    define_output_formats
+    define_commands
+
+    setup_color
 
     parse_opts "$@"
 
