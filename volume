@@ -440,16 +440,6 @@ volume_color() {
     fi
 }
 
-# Listens for PulseAudio events
-listen() {
-    local -r index=$(pa_get_sink_index "$sink")
-
-    while IFS= read -r; do
-        show_volume_notification
-        update_statusbar
-    done < <(pactl subscribe | stdbuf -oL grep -e "Event 'change' on sink #$index")
-}
-
 setup_notification_icons() {
     if not_empty "$SYMBOLIC_ICON_SUFFIX"; then
         apply_symbolic_icon_suffix
@@ -641,12 +631,20 @@ pa_register_funcs() {
     }
 
     # Listens for PulseAudio events
+    #
+    # Arguments:
+    #   Output    (optional) (string) An output mode. When set, outputs volume in the output mode format.
     listen() {
+        local -r output=$*
         local -r index=$(pa_get_sink_index "$SINK")
+
+        # Output volume so statusbars have something to display before any event occurs
+        not_empty "$output" && output_volume "$output"
 
         while IFS= read -r; do
             show_volume_notification
             update_statusbar
+            not_empty "$output" && output_volume "$output"
         done < <(pactl subscribe | stdbuf -oL grep -e "Event 'change' on sink #$index")
     }
 }
@@ -718,7 +716,7 @@ amixer_register_funcs() {
     #
     # Arguments:
     #   Volume      (integer|linear factor|percentage|decibel)
-    #   Card        (optional)( integer) Card number to control.
+    #   Card        (optional) (integer) Card number to control.
     amixer_set_volume() {
         local -r vol=${1:?$(error 'Volume is required')}
         local -r card=$2
@@ -872,7 +870,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:ac:e:hlm:nN:ps:S:t:u:x:X:y
+    local optstring=:ac:e:hj:lm:nN:ps:S:t:u:x:X:y
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -884,6 +882,7 @@ parse_opts() {
             a    ) USE_AMIXER=true ;;
             c    ) CARD=$OPTARG ;;
             e    ) EXPIRES=$OPTARG ;;
+            j    ) IFS=, read -ra ICONS_EMOJI <<< "$OPTARG" ;;
             l    ) USE_FULLCOLOR_ICONS=true ;;
             m    ) MIXER=${OPTARG@Q} ;;
             n    ) DISPLAY_NOTIFICATIONS=true ;;
@@ -931,10 +930,17 @@ exec_command() {
             toggle_mute
             ;;
         listen)
-            listen
+            local args="$*"
+
+            if not_empty "$args"; then
+                OUTPUT_MODE=true
+            fi
+
+            listen "$args"
             ;;
         output)
             case "$#" in 0) usage ;; esac
+            OUTPUT_MODE=true
             output_volume "$*"
             exit "${EXITCODE:-$EX_OK}"
             ;;
@@ -1007,10 +1013,10 @@ main() {
 
     # Emoji-based icons.
     declare -a ICONS_EMOJI=(
-        🔇
-        🔊
-        🔈
-        🔉
+        ﱝ
+        墳
+        奄
+        奔
     )
 
     # PulseAudio sink flags
@@ -1060,7 +1066,8 @@ main() {
         SINK \
         STATUSLINE \
         SYMBOLIC_ICON_SUFFIX \
-        NOTIFICATION_METHOD=libnotify
+        NOTIFICATION_METHOD=libnotify \
+        OUTPUT_MODE=false
 
     declare -i \
         EXPIRES=1500 \
