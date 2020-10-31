@@ -29,6 +29,10 @@ define_helpers() {
         [[ -v $1 ]]
     }
 
+    command_exists() {
+        command -v "$1" >/dev/null 2>&1;
+    }
+
     error() {
         echo "$COLOR_RED$*$COLOR_RESET"
     }
@@ -48,9 +52,84 @@ define_helpers() {
     is_command_hookable() {
         ! [[ ${POST_HOOK_EXEMPT_COMMANDS[*]} =~ $1 ]]
     }
+
+    has_capability() {
+        [[ "${NOTIFY_CAPS[*]}" =~ $1 ]]
+    }
 }
 
-define_notification_methods() {
+define_notify() {
+    # Display a notification indicating muted or current volume.
+    notify_volume() {
+        local -r vol=$(get_volume)
+        local icon
+
+        if is_muted; then
+            text="Volume muted"
+
+            if $USE_FULLCOLOR_ICONS; then
+                icon=${ICONS[0]}
+            else
+                icon=${ICONS_SYMBOLIC[0]}
+            fi
+        else
+            printf -v text "Volume %3s%%" "$vol"
+
+            icon=$(get_volume_icon "$vol")
+
+            if $SHOW_VOLUME_PROGRESS; then
+                local -r progress=$(progress_bar "$vol")
+                text="$text $progress"
+            fi
+        fi
+
+        case "$NOTIFICATION_METHOD" in
+            xosd      ) notify_volume_xosd "$vol" "$text" ;;
+            herbe     ) notify_volume_herbe "$text" ;;
+            volnoti   ) notify_volume_volnoti "$vol" ;;
+            kosd      ) notify_volume_kosd "$vol" ;;
+            dunst     ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
+            notify-osd) notify_volume_libnotify "$vol" "$icon" "$text" ;;
+            libnotify ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
+            *         ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
+        esac
+    }
+
+    list_notification_methods() {
+        awk -W posix 'match($0,/    notify_volume_([[:alnum:]]+)/) {print substr($0, 19, RLENGTH-18)}' "${BASH_SOURCE[0]}" || exit "$EX_USAGE"
+        exit "$EX_OK"
+    }
+
+    setup_notification_icons() {
+        if not_empty "$SYMBOLIC_ICON_SUFFIX"; then
+            apply_symbolic_icon_suffix
+        fi
+    }
+
+    show_volume_notification() {
+        $DISPLAY_NOTIFICATIONS || return
+
+        if empty "$NOTIFICATION_METHOD"; then
+            load_notify_server_info
+            NOTIFICATION_METHOD=$NOTIFY_SERVER
+        fi
+
+        setup_notification_icons
+        notify_volume
+    }
+
+    # Loads notification system information via DBus
+    load_notify_server_info() {
+        command_exists dbus-send || return
+        IFS=$'\t' read -r NOTIFY_SERVER _ _ _ < <(dbus-send --print-reply --dest=org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications.GetServerInformation | awk 'BEGIN { ORS="\t" }; match($0, /^   string ".*"/) {print substr($0, RSTART+11, RLENGTH-12)}')
+    }
+
+    # Load notification system capabilities via DBus
+    load_notify_server_caps() {
+        command_exists dbus-send || return
+        IFS= read -r -d '' -a NOTIFY_CAPS < <(dbus-send --print-reply=literal --dest="${DBUS_NAME}" "${DBUS_PATH}" "${DBUS_IFAC_FDN}.GetCapabilities" | awk 'RS="      " { if (NR > 2) print $1 }')
+    }
+
     # Send notifcation for libnotify-compatible notification daemons.
     #
     # Arguments:
@@ -61,11 +140,29 @@ define_notification_methods() {
         local -r vol=$1
         local -r icon=$2
         local -r text=${*:3}
+        local -a args=(
+            -t "$EXPIRES"
+            -h int:value:"$vol"
+            -h string:synchronous:volume
+            -h string:x-canonical-private-synchronous:i3-volume
+        )
+
+        if (( ${#NOTIFY_CAPS[@]} < 1 )); then
+            load_notify_server_caps
+        fi
+
+        if has_capability icon-static; then
+            args+=(-i "$icon")
+        fi
+
+        if $PLAY_SOUND && has_capability sound; then
+            args+=(-h string:sound-name:audio-volume-change)
+        fi
 
         if $USE_DUNSTIFY; then
-            "${DUNSTIFY_PATH:+${DUNSTIFY_PATH%/}/}dunstify" -i "$icon" -t "$EXPIRES" -h int:value:"$vol" -h string:synchronous:volume "$text" -r 1000
+            "${DUNSTIFY_PATH:+${DUNSTIFY_PATH%/}/}dunstify" "${args[@]}" -r 1000 "$text"
         else
-            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send" -i "$icon" -t "$EXPIRES" -h int:value:"$vol" -h string:synchronous:volume "$text" -h string:x-canonical-private-synchronous:i3-volume
+            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send" "${args[@]}" "$text"
         fi
     }
 
@@ -277,44 +374,6 @@ define_commands() {
         fi
     }
 
-    # Display a notification indicating muted or current volume.
-    notify_volume() {
-        local -r vol=$(get_volume)
-        local icon
-
-        if is_muted; then
-            text="Volume muted"
-
-            if $USE_FULLCOLOR_ICONS; then
-                icon=${ICONS[0]}
-            else
-                icon=${ICONS_SYMBOLIC[0]}
-            fi
-        else
-            printf -v text "Volume %3s%%" "$vol"
-
-            icon=$(get_volume_icon "$vol")
-
-            if $SHOW_VOLUME_PROGRESS; then
-                local -r progress=$(progress_bar "$vol")
-                text="$text $progress"
-            fi
-        fi
-
-        case "$NOTIFICATION_METHOD" in
-            xosd    ) notify_volume_xosd "$vol" "$text" ;;
-            herbe   ) notify_volume_herbe "$text" ;;
-            volnoti ) notify_volume_volnoti "$vol" ;;
-            kosd    ) notify_volume_kosd "$vol" ;;
-            *       ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
-        esac
-    }
-
-    list_notification_methods() {
-        awk -W posix 'match($0,/    notify_volume_([[:alnum:]]+)/) {print substr($0, 19, RLENGTH-18)}' "${BASH_SOURCE[0]}" || exit "$EX_USAGE"
-        exit "$EX_OK"
-    }
-
     # Outputs the current volume.
     #
     # Arguments
@@ -365,6 +424,8 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
 ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-a${COLOR_RESET}                          use amixer
   ${COLOR_GREEN}-n${COLOR_RESET}                          enable notifications
+  ${COLOR_GREEN}-C${COLOR_RESET}                          use libcanberra for playing event sounds
+  ${COLOR_GREEN}-P${COLOR_RESET}                          play sound for volume changes
   ${COLOR_GREEN}-j <muted,high,low,medium>${COLOR_RESET}  specify custom volume emojis as a comma separated list
   ${COLOR_GREEN}-t <process_name>${COLOR_RESET}           process name of status bar (${COLOR_MAGENTA}requires -u${COLOR_RESET})
   ${COLOR_GREEN}-u <signal>${COLOR_RESET}                 signal to update status bar (${COLOR_MAGENTA}requires -t${COLOR_RESET})
@@ -513,19 +574,6 @@ volume_color() {
     else
         pa_volume_color "$vol"
     fi
-}
-
-setup_notification_icons() {
-    if not_empty "$SYMBOLIC_ICON_SUFFIX"; then
-        apply_symbolic_icon_suffix
-    fi
-}
-
-show_volume_notification() {
-    $DISPLAY_NOTIFICATIONS || return
-
-    setup_notification_icons
-    notify_volume
 }
 
 # Updates the status bars
@@ -719,8 +767,19 @@ define_pulseaudio_functions() {
         while IFS= read -r; do
             show_volume_notification
             update_statusbar
+            play_volume_changed
             not_empty "$output" && output_volume "$output"
         done < <(pactl subscribe | stdbuf -oL grep -e "Event 'change' on sink #$index")
+    }
+
+    # Play a sound file.
+    #
+    # Arguments:
+    #   Sound file  (string)
+    pa_play() {
+        local -r file=$1
+
+        paplay -d "$SINK" "$file" &
     }
 }
 
@@ -840,6 +899,16 @@ define_amixer_functions() {
             echo "$COLOR_OTHER"
         fi
     }
+
+    # Play a sound file.
+    #
+    # Arguments:
+    #   Sound file  (string)
+    amixer_play() {
+        local -r file=$1
+
+        aplay -q "$file" &
+    }
 }
 
 # Register amixer related functions and settings
@@ -887,7 +956,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:ac:e:hj:lm:nN:ps:S:t:u:x:X:y
+    local optstring=:ac:Ce:hj:lm:nN:pPs:S:t:u:x:X:y
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -898,6 +967,7 @@ parse_opts() {
         case "$opt" in
             a    ) USE_AMIXER=true ;;
             c    ) CARD=$OPTARG ;;
+            C    ) USE_CANBERRA=true ;;
             e    ) EXPIRES=$OPTARG ;;
             j    ) IFS=, read -ra ICONS_EMOJI <<< "$OPTARG" ;;
             l    ) USE_FULLCOLOR_ICONS=true ;;
@@ -905,6 +975,7 @@ parse_opts() {
             n    ) DISPLAY_NOTIFICATIONS=true ;;
             N    ) NOTIFICATION_METHOD=$OPTARG ;;
             p    ) SHOW_VOLUME_PROGRESS=true ;;
+            P    ) PLAY_SOUND=true ;;
             s    ) SINK=$OPTARG ;;
             S    ) SYMBOLIC_ICON_SUFFIX=$OPTARG ;;
             t    ) STATUSLINE=$OPTARG ;;
@@ -966,9 +1037,39 @@ exec_command() {
     esac
 }
 
+play_volume_changed() {
+    $PLAY_SOUND || return
+
+    # Sound can be handled by the notification method
+    if $DISPLAY_NOTIFICATIONS && has_capability sound; then
+        return
+    fi
+
+    if $USE_CANBERRA; then
+        ca_play "$SOUND_VOLUME_CHANGED" "Volume Changed"
+    else
+        if $USE_AMIXER; then
+            amixer_play "$SOUND_VOLUME_CHANGED"
+        else
+            pa_play "$SOUND_VOLUME_CHANGED"
+        fi
+    fi
+}
+
+ca_play() {
+    local -r file=$1 desc=$2
+
+    if [[ -f $file ]]; then
+        "${CANBERRA_PATH:+${CANBERRA_PATH%/}/}canberra-gtk-play" -f "$file" -d "$desc"
+    else
+        "${CANBERRA_PATH:+${CANBERRA_PATH%/}/}canberra-gtk-play" -i "audio-volume-change" -d "$desc"
+    fi
+}
+
 post_command_hook() {
     if is_command_hookable "$COMMAND"; then
         show_volume_notification
+        play_volume_changed
         update_statusbar || usage
     fi
 }
@@ -1025,6 +1126,25 @@ main() {
         奔
     )
 
+    # Volume changed sound.
+    declare SOUND_VOLUME_CHANGED=${SOUND_VOLUME_CHANGED:-/usr/share/sounds/freedesktop/stereo/audio-volume-change.oga}
+
+    # DBUS constants
+    declare -r \
+        DBUS_NAME=org.freedesktop.Notifications \
+        DBUS_PATH=/org/freedesktop/Notifications \
+        DBUS_IFAC_FDN=org.freedesktop.Notifications
+
+    # Notification server information
+    declare \
+        NOTIFY_SERVER
+        # NOTIFY_VENDOR \
+        # NOTIFY_VERSION \
+        # NOTIFY_SPEC_VERSION
+
+    # Notification capabilities
+    declare -a NOTIFY_CAPS=()
+
     # PulseAudio sink flags
     declare -a SINK_FLAGS=()
 
@@ -1072,7 +1192,9 @@ main() {
         SINK \
         STATUSLINE \
         SYMBOLIC_ICON_SUFFIX \
-        NOTIFICATION_METHOD=libnotify
+        NOTIFICATION_METHOD \
+        PLAY_SOUND=false \
+        USE_CANBERRA=false
 
     declare -i \
         EXPIRES=1500 \
@@ -1080,7 +1202,7 @@ main() {
         MAX_AMPLIFICATION=2
 
     define_helpers
-    define_notification_methods
+    define_notify
     define_output_formats
     define_commands
 
