@@ -287,7 +287,7 @@ define_output_formats() {
             short_text="<span color=\"$color\">${vol}%</span>\n"
             full_text="<span color=\"$color\">${vol}%</span>\n"
 
-            if isset "$MAX_VOLUME" && (( vol > MAX_VOLUME )); then
+            if isset MAX_VOLUME && (( vol > MAX_VOLUME )); then
                 EXITCODE=$EX_URGENT
             fi
         fi
@@ -794,7 +794,7 @@ setup_pulseaudio() {
     fi
 
     # Determine a max volume when it's not specified
-    if ! isset "$MAX_VOLUME"; then
+    if ! isset MAX_VOLUME; then
         read -ra SINK_FLAGS < <(pa_get_sink_flags "$SINK")
         PA_BASE_VOLUME=$(pa_get_base_volume "$SINK")
 
