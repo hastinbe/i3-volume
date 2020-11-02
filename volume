@@ -465,6 +465,15 @@ ${COLOR_YELLOW}Notification Options:${COLOR_RESET}
   ${COLOR_GREEN}-l${COLOR_RESET}                          use fullcolor instead of symbolic icons
   ${COLOR_GREEN}-S <suffix>${COLOR_RESET}                 append suffix to symbolic icon names
   ${COLOR_GREEN}-y${COLOR_RESET}                          use dunstify (${COLOR_MAGENTA}default: notify-send${COLOR_RESET})
+
+${COLOR_YELLOW}Environment Variables:${COLOR_RESET}
+  ${COLOR_CYAN}XOSD_PATH${COLOR_RESET}                   path to osd_cat
+  ${COLOR_CYAN}HERBE_PATH${COLOR_RESET}                  path to herbe
+  ${COLOR_CYAN}VOLNOTI_PATH${COLOR_RESET}                path to volnoti-show
+  ${COLOR_CYAN}DUNSTIFY_PATH${COLOR_RESET}               path to dunstify
+  ${COLOR_CYAN}CANBERRA_PATH${COLOR_RESET}               path to canberra-gtk-play
+  ${COLOR_CYAN}NOTIFY_SEND_PATH${COLOR_RESET}            path to notify-send or notify-send.py
+  ${COLOR_CYAN}USE_NOTIFY_SEND_PY${COLOR_RESET}          flag to use notify-send.py instead of notify-send
 EOF
         exit "$EX_USAGE"
     }
@@ -941,6 +950,7 @@ setup_color() {
         COLOR_GREEN=$'\033[0;32m'
         COLOR_YELLOW=$'\033[0;33m'
         COLOR_MAGENTA=$'\033[0;35m'
+        COLOR_CYAN=$'\033[0;36m'
     fi
 }
 
@@ -1190,7 +1200,8 @@ main() {
         COLOR_RED \
         COLOR_GREEN \
         COLOR_YELLOW \
-        COLOR_MAGENTA
+        COLOR_MAGENTA \
+        COLOR_CYAN
 
     ###########################################################
     # Command line option variables

@@ -59,7 +59,7 @@ Commands:
 
                                   examples:
                                       "Volume is %v" = Volume is 50%
-                                      "%i %v %p \n"  = 奔50% ██████████
+                                      "%i %v %p \n"  = 奔 50% ██████████
   outputs                     show available output formats
   notifications               show available notification methods
   help                        display help
@@ -67,6 +67,8 @@ Commands:
 Options:
   -a                          use amixer
   -n                          enable notifications
+  -C                          use libcanberra for playing event sounds
+  -P                          play sound for volume changes
   -j <muted,high,low,medium>  specify custom volume emojis as a comma separated list
   -t <process_name>           process name of status bar (requires -u)
   -u <signal>                 signal to update status bar (requires -t)
@@ -88,6 +90,15 @@ Notification Options:
   -l                          use fullcolor instead of symbolic icons
   -S <suffix>                 append suffix to symbolic icon names
   -y                          use dunstify (default: notify-send)
+
+Environment Variables:
+  XOSD_PATH                   path to osd_cat
+  HERBE_PATH                  path to herbe
+  VOLNOTI_PATH                path to volnoti-show
+  DUNSTIFY_PATH               path to dunstify
+  CANBERRA_PATH               path to canberra-gtk-play
+  NOTIFY_SEND_PATH            path to notify-send or notify-send.py
+  USE_NOTIFY_SEND_PY          flag to use notify-send.py instead of notify-send
 ```
 
 ## Migrating
