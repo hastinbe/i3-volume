@@ -146,7 +146,7 @@ define_notify() {
         )
         local -a hints=(
             int:value:"$vol"
-            # Legacy hint that was renamed to x-canonical-private-synchronous in NotifyOSD
+            # Replaces previous notification in some notification servers
             string:synchronous:volume
             # Replaces previous notification in NotifyOSD
             string:x-canonical-private-synchronous:volume
@@ -165,8 +165,21 @@ define_notify() {
             hints+=(string:sound-name:audio-volume-change)
         fi
 
+        if ! isset NO_NOTIFY_COLOR && [[ $NOTIFICATION_METHOD == "dunst" ]]; then
+            if is_muted; then
+                hints+=(string:fgcolor:"$COLOR_MUTED")
+            else
+                hints+=(string:fgcolor:"$(volume_color "$vol")")
+            fi
+        fi
+
         if $USE_DUNSTIFY; then
             args+=(-r 1000)
+
+            # Transient notifications will bypass the idle_threshold setting.
+            # Should be boolean, but Notify-OSD doesn't support boolean yet. Dunst checks
+            # for int and bool with transient so lets play nice with both servers.
+            hints+=(int:transient:1)
 
             read -ra hints <<< "${hints[@]/#/-h }"
             "${DUNSTIFY_PATH:+${DUNSTIFY_PATH%/}/}dunstify" "${hints[@]}" "${args[@]}"  "$text"
@@ -474,6 +487,7 @@ ${COLOR_YELLOW}Environment Variables:${COLOR_RESET}
   ${COLOR_CYAN}CANBERRA_PATH${COLOR_RESET}               path to canberra-gtk-play
   ${COLOR_CYAN}NOTIFY_SEND_PATH${COLOR_RESET}            path to notify-send or notify-send.py
   ${COLOR_CYAN}USE_NOTIFY_SEND_PY${COLOR_RESET}          flag to use notify-send.py instead of notify-send
+  ${COLOR_CYAN}NO_NOTIFY_COLOR${COLOR_RESET}             flag to disable colors in notifications
 EOF
         exit "$EX_USAGE"
     }

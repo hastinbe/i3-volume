@@ -99,6 +99,7 @@ Environment Variables:
   CANBERRA_PATH               path to canberra-gtk-play
   NOTIFY_SEND_PATH            path to notify-send or notify-send.py
   USE_NOTIFY_SEND_PY          flag to use notify-send.py instead of notify-send
+  NO_NOTIFY_COLOR             flag to disable colors in notifications
 ```
 
 ## Migrating
