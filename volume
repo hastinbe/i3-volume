@@ -84,14 +84,15 @@ define_notify() {
         fi
 
         case "$NOTIFICATION_METHOD" in
-            xosd      ) notify_volume_xosd "$vol" "$text" ;;
-            herbe     ) notify_volume_herbe "$text" ;;
-            volnoti   ) notify_volume_volnoti "$vol" ;;
-            kosd      ) notify_volume_kosd "$vol" ;;
-            dunst     ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
-            notify-osd) notify_volume_libnotify "$vol" "$icon" "$text" ;;
-            libnotify ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
-            *         ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
+            xosd                       ) notify_volume_xosd "$vol" "$text" ;;
+            herbe                      ) notify_volume_herbe "$text" ;;
+            volnoti                    ) notify_volume_volnoti "$vol" ;;
+            kosd                       ) notify_volume_kosd "$vol" ;;
+            dunst                      ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
+            notify-osd                 ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
+            libnotify                  ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
+            haskell-notification-daemon) notify_volume_libnotify "$vol" "$icon" "$text" ;;
+            *                          ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
         esac
     }
 
@@ -142,27 +143,44 @@ define_notify() {
         local -r text=${*:3}
         local -a args=(
             -t "$EXPIRES"
-            -h int:value:"$vol"
-            -h string:synchronous:volume
-            -h string:x-canonical-private-synchronous:i3-volume
+        )
+        local -a hints=(
+            int:value:"$vol"
+            # Legacy hint that was renamed to x-canonical-private-synchronous in NotifyOSD
+            string:synchronous:volume
+            # Replaces previous notification in NotifyOSD
+            string:x-canonical-private-synchronous:volume
         )
 
-        if (( ${#NOTIFY_CAPS[@]} < 1 )); then
-            load_notify_server_caps
-        fi
+        (( ${#NOTIFY_CAPS[@]} < 1 )) && load_notify_server_caps
 
         if has_capability icon-static; then
             args+=(-i "$icon")
+
+            # haskell-notification-daemon (aka deadd-notification-center) does not support -i|--icon
+            hints+=(string:image-path:"$icon")
         fi
 
         if $PLAY_SOUND && has_capability sound; then
-            args+=(-h string:sound-name:audio-volume-change)
+            hints+=(string:sound-name:audio-volume-change)
         fi
 
         if $USE_DUNSTIFY; then
-            "${DUNSTIFY_PATH:+${DUNSTIFY_PATH%/}/}dunstify" "${args[@]}" -r 1000 "$text"
+            args+=(-r 1000)
+
+            read -ra hints <<< "${hints[@]/#/-h }"
+            "${DUNSTIFY_PATH:+${DUNSTIFY_PATH%/}/}dunstify" "${hints[@]}" "${args[@]}"  "$text"
+        elif isset USE_NOTIFY_SEND_PY; then
+            # Replaces previous notification, but leaves itself running in the bg to work
+            args+=(--replaces-process volume)
+
+            # By-pass the server's persistence capability, if it should exist
+            hints+=(boolean:transient:true)
+
+            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send.py" --hint "${hints[@]}" "${args[@]}" "$text" &
         else
-            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send" "${args[@]}" "$text"
+            read -ra hints <<< "${hints[@]/#/-h }"
+            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send" "${hints[@]}" "${args[@]}" "$text"
         fi
     }
 
