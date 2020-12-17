@@ -56,6 +56,10 @@ define_helpers() {
     has_capability() {
         [[ "${NOTIFY_CAPS[*]}" =~ $1 ]]
     }
+
+    max() {
+        echo $(( $1 > $2 ? $1 : $2 ))
+    }
 }
 
 define_notify() {
@@ -353,7 +357,7 @@ define_commands() {
 
             if (( vol + step > max_volume )); then
                 # Instead of doing nothing, step to max_volume
-                step=$(( max_volume - vol ))
+                step=$( max "0" "$(( max_volume - vol ))" )
             fi
         fi
 
