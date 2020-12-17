@@ -345,14 +345,15 @@ define_commands() {
     #   Step        (integer) Percentage to increase by.
     #   Max Volume  (optional) (integer|percentage) Maximum volume limit.
     increase_volume() {
-        local -r step=${1:?$(error 'Step is required')}
+        local step=${1:?$(error 'Step is required')}
         local -r max_volume=$2
 
         if not_empty "$max_volume"; then
             local -r vol=$(get_volume)
 
             if (( vol + step > max_volume )); then
-                return
+                # Instead of doing nothing, step to max_volume
+                step=$(( max_volume - vol ))
             fi
         fi
 
