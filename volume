@@ -149,12 +149,16 @@ define_notify() {
             -t "$EXPIRES"
         )
         local -a hints=(
-            int:value:"$vol"
             # Replaces previous notification in some notification servers
             string:synchronous:volume
             # Replaces previous notification in NotifyOSD
             string:x-canonical-private-synchronous:volume
         )
+
+        # If we're not drawing our own progress bar, allow the notification daemon to draw its own (if supported)
+        if ! $SHOW_VOLUME_PROGRESS; then
+            hints+=(int:value:"$vol")
+        fi
 
         (( ${#NOTIFY_CAPS[@]} < 1 )) && load_notify_server_caps
 
