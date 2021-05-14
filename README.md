@@ -86,6 +86,10 @@ PulseAudio Options:
 Notification Options:
   -N <method>                 notification method (default: libnotify)
   -p                          enable progress bar
+  -L <placement>              progress bar placement (default: summary; requires -p)
+                              placements:
+                                  body
+                                  summary
   -e <expires>                expiration time of notifications in ms
   -l                          use fullcolor instead of symbolic icons
   -S <suffix>                 append suffix to symbolic icon names

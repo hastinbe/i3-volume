@@ -67,9 +67,11 @@ define_notify() {
     notify_volume() {
         local -r vol=$(get_volume)
         local icon
+        local summary
+        local body
 
         if is_muted; then
-            text="Volume muted"
+            summary="Volume muted"
 
             if $USE_FULLCOLOR_ICONS; then
                 icon=${ICONS[0]}
@@ -77,26 +79,31 @@ define_notify() {
                 icon=${ICONS_SYMBOLIC[0]}
             fi
         else
-            printf -v text "Volume %3s%%" "$vol"
+            printf -v summary "Volume %3s%%" "$vol"
 
             icon=$(get_volume_icon "$vol")
 
             if $SHOW_VOLUME_PROGRESS; then
                 local -r progress=$(progress_bar "$vol")
-                text="$text $progress"
+
+                if [[ $PROGRESS_PLACEMENT == body ]]; then
+                    body="$progress"
+                else
+                    summary="$summary $progress"
+                fi
             fi
         fi
 
         case "$NOTIFICATION_METHOD" in
-            xosd                       ) notify_volume_xosd "$vol" "$text" ;;
-            herbe                      ) notify_volume_herbe "$text" ;;
+            xosd                       ) notify_volume_xosd "$vol" "$summary $body" ;;
+            herbe                      ) notify_volume_herbe "$summary $body" ;;
             volnoti                    ) notify_volume_volnoti "$vol" ;;
             kosd                       ) notify_volume_kosd "$vol" ;;
-            dunst                      ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
-            notify-osd                 ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
-            libnotify                  ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
-            haskell-notification-daemon) notify_volume_libnotify "$vol" "$icon" "$text" ;;
-            *                          ) notify_volume_libnotify "$vol" "$icon" "$text" ;;
+            dunst                      ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
+            notify-osd                 ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
+            libnotify                  ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
+            haskell-notification-daemon) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
+            *                          ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
         esac
     }
 
@@ -140,11 +147,13 @@ define_notify() {
     # Arguments:
     #   Volume      (integer) An integer indicating the volume.
     #   Icon        (string) Icon to display.
-    #   Text        (string) Notification text.
+    #   Summary     (string) Notification summary.
+    #   Body        (string) Notification body. (optional)
     notify_volume_libnotify() {
         local -r vol=$1
         local -r icon=$2
-        local -r text=${*:3}
+        local -r summary=$3
+        local -r body=${*:4}
         local -a args=(
             -t "$EXPIRES"
         )
@@ -190,7 +199,7 @@ define_notify() {
             hints+=(int:transient:1)
 
             read -ra hints <<< "${hints[@]/#/-h }"
-            "${DUNSTIFY_PATH:+${DUNSTIFY_PATH%/}/}dunstify" "${hints[@]}" "${args[@]}"  "$text"
+            "${DUNSTIFY_PATH:+${DUNSTIFY_PATH%/}/}dunstify" "${hints[@]}" "${args[@]}" "$summary" "$body"
         elif isset USE_NOTIFY_SEND_PY; then
             # Replaces previous notification, but leaves itself running in the bg to work
             args+=(--replaces-process volume)
@@ -198,10 +207,10 @@ define_notify() {
             # By-pass the server's persistence capability, if it should exist
             hints+=(boolean:transient:true)
 
-            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send.py" --hint "${hints[@]}" "${args[@]}" "$text" &
+            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send.py" --hint "${hints[@]}" "${args[@]}" "$summary" "$body" &
         else
             read -ra hints <<< "${hints[@]/#/-h }"
-            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send" "${hints[@]}" "${args[@]}" "$text"
+            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send" "${hints[@]}" "${args[@]}" "$summary" "$body"
         fi
     }
 
@@ -483,6 +492,10 @@ ${COLOR_YELLOW}PulseAudio Options:${COLOR_RESET}
 ${COLOR_YELLOW}Notification Options:${COLOR_RESET}
   ${COLOR_GREEN}-N <method>${COLOR_RESET}                 notification method (${COLOR_MAGENTA}default: libnotify${COLOR_RESET})
   ${COLOR_GREEN}-p${COLOR_RESET}                          enable progress bar
+  ${COLOR_GREEN}-L <placement>${COLOR_RESET}              progress bar placement (${COLOR_MAGENTA}default: summary${COLOR_RESET}; ${COLOR_MAGENTA}requires -p${COLOR_RESET})
+                              placements:
+                                  body
+                                  summary
   ${COLOR_GREEN}-e <expires>${COLOR_RESET}                expiration time of notifications in ms
   ${COLOR_GREEN}-l${COLOR_RESET}                          use fullcolor instead of symbolic icons
   ${COLOR_GREEN}-S <suffix>${COLOR_RESET}                 append suffix to symbolic icon names
@@ -1007,7 +1020,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:ac:Ce:hj:lm:nN:pPs:S:t:u:x:X:y
+    local optstring=:ac:Ce:hj:lL:m:nN:pPs:S:t:u:x:X:y
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -1022,6 +1035,7 @@ parse_opts() {
             e    ) EXPIRES=$OPTARG ;;
             j    ) IFS=, read -ra ICONS_EMOJI <<< "$OPTARG" ;;
             l    ) USE_FULLCOLOR_ICONS=true ;;
+            L    ) PROGRESS_PLACEMENT=$OPTARG ;;
             m    ) MIXER=${OPTARG@Q} ;;
             n    ) DISPLAY_NOTIFICATIONS=true ;;
             N    ) NOTIFICATION_METHOD=$OPTARG ;;
@@ -1240,6 +1254,7 @@ main() {
         USE_FULLCOLOR_ICONS=false \
         CARD \
         MIXER=Master \
+        PROGRESS_PLACEMENT=summary \
         SIGNAL \
         SINK \
         STATUSLINE \
