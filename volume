@@ -171,12 +171,13 @@ define_notify() {
 
         (( ${#NOTIFY_CAPS[@]} < 1 )) && load_notify_server_caps
 
-        if has_capability icon-static; then
-            args+=(-i "$icon")
-
+        if has_capability icon-static || has_capability icon-multi; then
             # haskell-notification-daemon (aka deadd-notification-center) does not support -i|--icon
-            hints+=(string:image-path:"$icon")
+            args+=(-i "$icon")
         fi
+
+        # dunst doesn't announce icon-(static|multi) server capabilities, but supports image-path hint
+        hints+=(string:image-path:"$icon")
 
         if $PLAY_SOUND && has_capability sound; then
             hints+=(string:sound-name:audio-volume-change)
