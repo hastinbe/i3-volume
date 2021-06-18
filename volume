@@ -86,7 +86,7 @@ define_notify() {
             if $SHOW_VOLUME_PROGRESS; then
                 local -r progress=$(progress_bar "$vol")
 
-                if [[ $PROGRESS_PLACEMENT == body ]]; then
+                if has_capability body && [[ $PROGRESS_PLACEMENT == body ]]; then
                     body="$progress"
                 else
                     summary="$summary $progress"
