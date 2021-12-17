@@ -129,12 +129,13 @@ Version 3 introduces commands which makes it incompatible with previous versions
 | Program | Note |
 | ---------- | ----- |
 | **[i3blocks]** | See our [example blocklet](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3blocks) |
+| **[i3status-rust]** | See our [example custom block](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3status-rust) |
 | **[xob]** | Requires extra steps for notifications. [Guide](https://github.com/hastinbe/i3-volume/wiki/Usage-with-xob) |
-| **[XOSD]** | Notifications require the `-N xosd` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-XOSD)
-| **[herbe]** | Notifications require the `-N herbe` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-herbe)
-| **[volnoti]** | Notifications require the `-N volnoti` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-volnoti)
-| **[KOSD]** | Notifications require the `-N kosd` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-kosd)
-| **[sxhkd]** | For keybindings with or without [i3wm], often used with [bspwm]. [Example](https://github.com/hastinbe/i3-volume/wiki/Keybindings#sxkhd)
+| **[XOSD]** | Notifications require the `-N xosd` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-XOSD) |
+| **[herbe]** | Notifications require the `-N herbe` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-herbe) |
+| **[volnoti]** | Notifications require the `-N volnoti` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-volnoti) |
+| **[KOSD]** | Notifications require the `-N kosd` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-kosd) |
+| **[sxhkd]** | For keybindings with or without [i3wm], often used with [bspwm]. [Example](https://github.com/hastinbe/i3-volume/wiki/Keybindings#sxkhd) |
 
 ## Help
 
@@ -154,6 +155,7 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 [KOSD]: https://store.kde.org/p/1127472/show/page/5
 [i3blocks]: https://github.com/vivien/i3blocks
 [i3status]: https://github.com/i3/i3status
+[i3status-rust]: https://github.com/greshake/i3status-rust
 [i3wm]: https://i3wm.org
 [libnotify]: https://developer.gnome.org/libnotify
 [license]: https://www.gnu.org/licenses/gpl-2.0.en.html
