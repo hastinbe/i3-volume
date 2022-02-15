@@ -701,7 +701,7 @@ define_pulseaudio_functions() {
     pa_get_volume() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
-        pactl get-sink-volume $sink| \
+        pactl get-sink-volume $sink | \
             awk -W posix '/^Volume: / {gsub("%,?", ""); print $5; exit}'
     }
 
