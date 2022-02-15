@@ -682,10 +682,6 @@ define_pulseaudio_functions() {
         unset PA_LIST_SINKS
     }
 
-    pa_default_sink_name() {
-        pactl info | awk -F': ' '/^Default Sink: /{print $2}'
-    }
-
     # Get the index of a sink name.
     #
     # Arguments
@@ -705,9 +701,8 @@ define_pulseaudio_functions() {
     pa_get_volume() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
-        pa_list_sinks | \
-            awk -W posix '/^[ \t]+Name: / {insink = $2 == "'"$sink"'"}
-                          /^[ \t]+Volume: / && insink {gsub("%,?", ""); print $5; exit}'
+        pactl get-sink-volume $sink| \
+            awk -W posix '/^Volume: / {gsub("%,?", ""); print $5; exit}'
     }
 
     # Get the max volume as a percentage.
@@ -854,7 +849,7 @@ setup_pulseaudio() {
     PA_LIST_SINKS=$(pactl list sinks) || exit 1
 
     if empty "$SINK"; then
-        SINK="$(pa_default_sink_name)"
+        SINK="$(pactl get-default-sink)"
     fi
 
     # Determine a max volume when it's not specified
