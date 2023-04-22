@@ -38,7 +38,7 @@ define_helpers() {
     }
 
     has_color() {
-        (( $(tput colors 2>/dev/null || echo 0) >= 8 )) && [ -t 1 ]
+        [ "$(tput colors)" -ge 8 ] &>/dev/null && [ -t 1 ]
     }
 
     # Converts milliseconds to seconds with rounding up
