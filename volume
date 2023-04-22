@@ -60,6 +60,10 @@ define_helpers() {
     max() {
         echo $(( $1 > $2 ? $1 : $2 ))
     }
+
+    has_port() {
+        [[ -v "SINK_PORTS[$1]" ]]
+    }
 }
 
 define_notify() {
@@ -316,6 +320,7 @@ define_output_formats() {
         string=${string//\%c/$CARD}
         string=${string//\%m/$MIXER}
         string=${string//\%p/$(progress_bar "$vol")}
+        string=${string//\%P/$(pa_get_active_port_description "$SINK")}
         string=${string//\%i/$(get_volume_emoji "$vol")}
 
         echo -ne "$string"
@@ -325,16 +330,17 @@ define_output_formats() {
     output_volume_i3blocks() {
         local short_text
         local full_text
+        local -r port=$(pa_get_active_port_description "$SINK")
 
         if is_muted; then
-            short_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
-            full_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
+            short_text="<span color=\"$COLOR_MUTED\">$port MUTED</span>\n"
+            full_text="<span color=\"$COLOR_MUTED\">$port MUTED</span>\n"
         else
             local -r vol=$(get_volume)
             local -r color=$(volume_color "$vol")
 
-            short_text="<span color=\"$color\">${vol}%</span>\n"
-            full_text="<span color=\"$color\">${vol}%</span>\n"
+            short_text="<span color=\"$color\">${vol}% $port</span>\n"
+            full_text="<span color=\"$color\">${vol}% $port</span>\n"
 
             if isset MAX_VOLUME && (( vol > MAX_VOLUME )); then
                 EXITCODE=$EX_URGENT
@@ -682,6 +688,47 @@ define_pulseaudio_functions() {
         unset PA_LIST_SINKS
     }
 
+    pa_get_sink_active_port() {
+        local -r sink=${1:?$(error 'Sink name is required')}
+
+        pa_list_sinks | \
+            awk -W posix '/^\tName: / {insink = $2 == "'"$sink"'"}
+                          /^\tActive Port: / && insink' | \
+            cut -d' ' -f3-
+    }
+
+    pa_get_active_port_description() {
+        local -r sink=${1:?$(error 'Sink name is required')}
+        local -r port=$(pa_get_sink_active_port "$sink")
+
+        if has_port "$port"; then
+            echo "${SINK_PORTS[$port]}"
+        fi
+    }
+
+    # Load the sink's ports.
+    #
+    # Arguments
+    #   Sink name   (string) Symbolic name of sink.
+    pa_load_sink_ports() {
+        local -r sink=${1:?$(error 'Sink name is required')}
+
+        declare -gA SINK_PORTS
+
+        while IFS=: read -r name description; do
+            SINK_PORTS["$name"]="$description"
+        done < <(pa_list_sinks | \
+                    awk -W posix '/^\tName: / {insink = $2 == "'"$sink"'"}
+                                  /^\tPorts:/ {inport = insink}
+                                  /^\t\t[[:print:]]+: [[:print:]]+ \(/ && inport {
+                                      start=index($0, ": ")+2;
+                                      end=strlen=index($0, "(");
+                                      description=substr($0, start, end-start)
+                                      sub(/[ ]+$/, "", description)
+                                      print $1 description
+                                  }')
+    }
+
     # Get the index of a sink name.
     #
     # Arguments
@@ -705,7 +752,7 @@ define_pulseaudio_functions() {
             awk -W posix '/^Volume: / {gsub("%,?", ""); print $5; exit}'
     }
 
-    # Get the max volume as a percentage.
+    # Get the base volume as a percentage.
     #
     # Arguments
     #   Sink name   (string) Symbolic name of sink.
@@ -851,6 +898,8 @@ setup_pulseaudio() {
     if empty "$SINK"; then
         SINK="$(pactl get-default-sink)"
     fi
+
+    (( ${#SINK_PORTS[@]} < 1 )) && pa_load_sink_ports "$SINK"
 
     # Determine a max volume when it's not specified
     if ! isset MAX_VOLUME; then
@@ -1208,6 +1257,9 @@ main() {
 
     # PulseAudio sink flags
     declare -a SINK_FLAGS=()
+
+    # PulseAudio sink ports
+    declare -gA SINK_PORTS
 
     # PulseAudio volume variables and constants.
     #   Note: unlike in PA, PA_VOLUME_* here are percentages instead of integers
