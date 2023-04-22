@@ -171,9 +171,7 @@ define_notify() {
         )
 
         # If we're not drawing our own progress bar, allow the notification daemon to draw its own (if supported)
-        if ! $SHOW_VOLUME_PROGRESS; then
-            hints+=(int:value:"$vol")
-        fi
+        $SHOW_VOLUME_PROGRESS || hints+=(int:value:"$vol")
 
         (( ${#NOTIFY_CAPS[@]} < 1 )) && load_notify_server_caps
 
