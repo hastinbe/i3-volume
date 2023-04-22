@@ -41,12 +41,13 @@ define_helpers() {
         [ "$(tput colors)" -ge 8 ] &>/dev/null && [ -t 1 ]
     }
 
-    # Converts milliseconds to seconds with rounding up
+    # Converts milliseconds to seconds.
     #
     # Arguments:
     #   milliseconds    (integer) An integer in milliseconds
     ms_to_secs() {
-        echo $(( ($1 + (1000 - 1)) / 1000 ))
+        # divide by 1000 and round up to nearest integer using 'bc' command
+        echo $(echo "scale=0; (${1} + 999) / 1000" | bc)
     }
 
     is_command_hookable() {
