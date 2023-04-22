@@ -183,11 +183,15 @@ define_notify() {
             hints+=(string:sound-name:audio-volume-change)
         fi
 
-        if ! isset NO_NOTIFY_COLOR && [[ $NOTIFICATION_METHOD == "dunst" ]]; then
-            if is_muted; then
-                hints+=(string:fgcolor:"$COLOR_MUTED")
-            else
-                hints+=(string:fgcolor:"$(volume_color "$vol")")
+        if [[ $NOTIFICATION_METHOD == "dunst" ]]; then
+            hints+=(string:x-dunst-stack-tag:volume)
+
+            if ! isset NO_NOTIFY_COLOR; then
+                if is_muted; then
+                    hints+=(string:fgcolor:"$COLOR_MUTED")
+                else
+                    hints+=(string:fgcolor:"$(volume_color "$vol")")
+                fi
             fi
         fi
 
