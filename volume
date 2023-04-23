@@ -370,13 +370,13 @@ define_output_formats() {
 
         if is_muted; then
             short_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
-            full_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
+            full_text="$short_text"
         else
             local -r vol=$(get_volume)
             local -r color=$(volume_color "$vol")
 
             short_text="<span color=\"$color\">${vol}%</span>\n"
-            full_text="<span color=\"$color\">${vol}%</span>\n"
+            full_text="$short_text"
 
             if isset MAX_VOLUME && (( vol > MAX_VOLUME )); then
                 EXITCODE=$EX_URGENT
