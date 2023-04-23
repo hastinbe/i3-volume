@@ -96,15 +96,11 @@ define_notify() {
         fi
 
         case "$NOTIFICATION_METHOD" in
-            xosd                       ) notify_volume_xosd "$vol" "$summary $body" ;;
-            herbe                      ) notify_volume_herbe "$summary $body" ;;
-            volnoti                    ) notify_volume_volnoti "$vol" ;;
-            kosd                       ) notify_volume_kosd "$vol" ;;
-            dunst                      ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
-            notify-osd                 ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
-            libnotify                  ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
-            haskell-notification-daemon) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
-            *                          ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
+            xosd    ) notify_volume_xosd "$vol" "$summary $body" ;;
+            herbe   ) notify_volume_herbe "$summary $body" ;;
+            volnoti ) notify_volume_volnoti "$vol" ;;
+            kosd    ) notify_volume_kosd "$vol" ;;
+            *       ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
         esac
     }
 
