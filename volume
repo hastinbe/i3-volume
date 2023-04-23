@@ -655,7 +655,9 @@ progress_bar() {
     local -r percent=${1:?$(error 'Percentage is required')}
     local -r max_percent=${2:-100}
     local -r divisor=${3:-5}
-    local -r progress=$(( (percent > max_percent ? max_percent : percent) / divisor ))
+
+    local -r normalized=$(( percent > max_percent ? max_percent : percent ))
+    local -r progress=$(( normalized / divisor ))
 
     printf -v bar "%*s" $progress ""
     echo "${bar// /█}"
