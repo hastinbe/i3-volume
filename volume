@@ -197,7 +197,7 @@ define_notify() {
         fi
 
         if $USE_DUNSTIFY; then
-            EXECUTABLE="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}dunstify"
+            executable="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}dunstify"
 
             args+=( '-r' 1000 )
 
@@ -206,7 +206,7 @@ define_notify() {
             # for int and bool with transient so lets play nice with both servers.
             hints+=( "int:transient:1" )
         elif isset USE_NOTIFY_SEND_PY; then
-            EXECUTABLE="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}notify-send.py"
+            executable="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}notify-send.py"
 
             # Replaces previous notification, but leaves itself running in the bg to work
             args+=( --replaces-process volume )
@@ -217,17 +217,17 @@ define_notify() {
             # Prefix all hints with --hint to work with notify-send.py
             hints=( "${hints[@]/#/--hint }" )
         else
-            EXECUTABLE="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}notify-send"
+            executable="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}notify-send"
         fi
 
-        if ! command_exists "$EXECUTABLE"; then
-            echo "$EXECUTABLE not found. Please install it or set NOTIFY_PATH to the correct path." >&2
+        if ! command_exists "$executable"; then
+            echo "$executable not found. Please install it or set NOTIFY_PATH to the correct path." >&2
             exit "$EX_UNAVAILABLE"
         fi
 
         read -ra hints <<< "${hints[@]/#/-h }"
 
-        "$EXECUTABLE" "${hints[@]}" "${args[@]}" "$summary" "$body" &
+        "$executable" "${hints[@]}" "${args[@]}" "$summary" "$body" &
     }
 
     # Send notification to XOSD.
