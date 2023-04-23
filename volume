@@ -38,15 +38,16 @@ define_helpers() {
     }
 
     has_color() {
-        (( $(tput colors 2>/dev/null || echo 0) >= 8 )) && [ -t 1 ]
+        [ "$(tput colors)" -ge 8 ] &>/dev/null && [ -t 1 ]
     }
 
-    # Converts milliseconds to seconds with rounding up
+    # Converts milliseconds to seconds.
     #
     # Arguments:
     #   milliseconds    (integer) An integer in milliseconds
     ms_to_secs() {
-        echo $(( ($1 + (1000 - 1)) / 1000 ))
+        # divide by 1000 and round up to nearest integer using 'bc' command
+        echo "scale=0; (${1} + 999) / 1000" | bc
     }
 
     is_command_hookable() {
@@ -99,20 +100,21 @@ define_notify() {
         fi
 
         case "$NOTIFICATION_METHOD" in
-            xosd                       ) notify_volume_xosd "$vol" "$summary $body" ;;
-            herbe                      ) notify_volume_herbe "$summary $body" ;;
-            volnoti                    ) notify_volume_volnoti "$vol" ;;
-            kosd                       ) notify_volume_kosd "$vol" ;;
-            dunst                      ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
-            notify-osd                 ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
-            libnotify                  ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
-            haskell-notification-daemon) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
-            *                          ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
+            xosd    ) notify_volume_xosd "$vol" "$summary $body" ;;
+            herbe   ) notify_volume_herbe "$summary $body" ;;
+            volnoti ) notify_volume_volnoti "$vol" ;;
+            kosd    ) notify_volume_kosd "$vol" ;;
+            *       ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
         esac
     }
 
     list_notification_methods() {
-        awk -W posix 'match($0,/    notify_volume_([[:alnum:]]+)/) {print substr($0, 19, RLENGTH-18)}' "${BASH_SOURCE[0]}" || exit "$EX_USAGE"
+        local source="${BASH_SOURCE[0]}"
+        awk -W posix -v source="$source" '
+            match($0, /    notify_volume_([[:alnum:]]+)/) {
+                print substr($0, RSTART + 18, RLENGTH - 18) > "/dev/stdout"
+            }
+        ' "$source" || exit "$EX_USAGE"
         exit "$EX_OK"
     }
 
@@ -158,65 +160,75 @@ define_notify() {
         local -r icon=$2
         local -r summary=$3
         local -r body=${*:4}
-        local -a args=(
-            -t "$EXPIRES"
+        local args=(
+            '-t' "$EXPIRES"
         )
-        local -a hints=(
+        local hints=(
             # Replaces previous notification in some notification servers
-            string:synchronous:volume
+            'string:synchronous:volume'
             # Replaces previous notification in NotifyOSD
-            string:x-canonical-private-synchronous:volume
+            'string:x-canonical-private-synchronous:volume'
         )
+        local executable
 
         # If we're not drawing our own progress bar, allow the notification daemon to draw its own (if supported)
-        if ! $SHOW_VOLUME_PROGRESS; then
-            hints+=(int:value:"$vol")
-        fi
+        $SHOW_VOLUME_PROGRESS || hints+=( "int:value:$vol" )
 
-        (( ${#NOTIFY_CAPS[@]} < 1 )) && load_notify_server_caps
+        # (( ${#NOTIFY_CAPS[@]} < 1 )) && load_notify_server_caps
+        [[ ${#NOTIFY_CAPS[@]} -lt 1 ]] && load_notify_server_caps
 
         if has_capability icon-static || has_capability icon-multi; then
-            # haskell-notification-daemon (aka deadd-notification-center) does not support -i|--icon
-            args+=(-i "$icon")
+            # haskell-notification-daemon (aka deadd-notification-center) does not support -i|--icon, but supports string:image-path
+            args+=( '-i' "$icon" )
+            hints+=( "string:image-path:$icon" )
         fi
 
-        # dunst doesn't announce icon-(static|multi) server capabilities, but supports image-path hint
-        hints+=(string:image-path:"$icon")
+        $PLAY_SOUND && has_capability sound && hints+=( "string:sound-name:audio-volume-change" )
 
-        if $PLAY_SOUND && has_capability sound; then
-            hints+=(string:sound-name:audio-volume-change)
-        fi
+        if [[ $NOTIFICATION_METHOD == "dunst" ]]; then
+            hints+=( "string:x-dunst-stack-tag:volume" )
 
-        if ! isset NO_NOTIFY_COLOR && [[ $NOTIFICATION_METHOD == "dunst" ]]; then
-            if is_muted; then
-                hints+=(string:fgcolor:"$COLOR_MUTED")
-            else
-                hints+=(string:fgcolor:"$(volume_color "$vol")")
+            if ! isset NO_NOTIFY_COLOR; then
+                if is_muted; then
+                    hints+=( "string:fgcolor:$COLOR_MUTED" )
+                else
+                    hints+=( "string:fgcolor:$(volume_color "$vol")" )
+                fi
             fi
         fi
 
         if $USE_DUNSTIFY; then
-            args+=(-r 1000)
+            executable="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}dunstify"
+
+            args+=( '-r' 1000 )
 
             # Transient notifications will bypass the idle_threshold setting.
             # Should be boolean, but Notify-OSD doesn't support boolean yet. Dunst checks
             # for int and bool with transient so lets play nice with both servers.
-            hints+=(int:transient:1)
-
-            read -ra hints <<< "${hints[@]/#/-h }"
-            "${DUNSTIFY_PATH:+${DUNSTIFY_PATH%/}/}dunstify" "${hints[@]}" "${args[@]}" "$summary" "$body"
+            hints+=( "int:transient:1" )
         elif isset USE_NOTIFY_SEND_PY; then
+            executable="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}notify-send.py"
+
             # Replaces previous notification, but leaves itself running in the bg to work
-            args+=(--replaces-process volume)
+            args+=( --replaces-process volume )
 
             # By-pass the server's persistence capability, if it should exist
-            hints+=(boolean:transient:true)
+            hints+=( "boolean:transient:true" )
 
-            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send.py" --hint "${hints[@]}" "${args[@]}" "$summary" "$body" &
+            # Prefix all hints with --hint to work with notify-send.py
+            hints=( "${hints[@]/#/--hint }" )
         else
-            read -ra hints <<< "${hints[@]/#/-h }"
-            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send" "${hints[@]}" "${args[@]}" "$summary" "$body"
+            executable="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}notify-send"
         fi
+
+        command_exists "$executable" || {
+            error "$executable not found. Please install it or set NOTIFY_PATH to the correct path."
+            exit "$EX_UNAVAILABLE"
+        }
+
+        read -ra hints <<< "${hints[@]/#/-h }"
+
+        "$executable" "${hints[@]}" "${args[@]}" "$summary" "$body" &
     }
 
     # Send notification to XOSD.
@@ -227,8 +239,8 @@ define_notify() {
     notify_volume_xosd() {
         local -r vol=$1
         local -r text=${*:2}
-        local -r delay=$(ms_to_secs "$EXPIRES")
         local percentage
+        local executable
 
         if is_muted; then
             color=$COLOR_MUTED
@@ -238,7 +250,24 @@ define_notify() {
             percentage=$vol
         fi
 
-        "${XOSD_PATH:+${XOSD_PATH%/}/}osd_cat" --align center -b percentage -P "$percentage" -d "$delay" -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" & disown
+        executable="${XOSD_PATH:+${XOSD_PATH%/}/}osd_cat"
+
+        command_exists "$executable" || {
+            error "$executable not found. Please install it or set XOSD_PATH to the correct path."
+            exit "$EX_UNAVAILABLE"
+        }
+
+        "$executable" \
+            --align center \
+            -b percentage \
+            -P "$percentage" \
+            -d "$(ms_to_secs "$EXPIRES")" \
+            -p top \
+            -A center \
+            -c "$color" \
+            -T "$text" \
+            -O 2 \
+            -u "$COLOR_XOSD_OUTLINE" & disown
     }
 
     # Send notification to herbe.
@@ -250,11 +279,19 @@ define_notify() {
     #       time but would make this irrelevant. See https://github.com/dudik/herbe/pull/10
     notify_volume_herbe() {
         local -r text=$*
+        local executable
 
         # Dismiss existing/pending notifications to prevent queuing
         pkill -SIGUSR1 herbe
 
-        "${HERBE_PATH:+${HERBE_PATH%/}/}herbe" "$text" & disown
+        executable="${HERBE_PATH:+${HERBE_PATH%/}/}herbe"
+
+        command_exists "$executable" || {
+            error "$executable not found. Please install it or set HERBE_PATH to the correct path."
+            exit "$EX_UNAVAILABLE"
+        }
+
+        "$executable" "$text" & disown
     }
 
     # Send notification to volnoti.
@@ -263,11 +300,19 @@ define_notify() {
     #   Volume      (integer) An integer indicating the volume.
     notify_volume_volnoti() {
         local -r vol=$1
+        local executable
+
+        executable="${VOLNOTI_PATH:+${VOLNOTI_PATH%/}/}volnoti-show"
+
+        command_exists "$executable" || {
+            error "$executable not found. Please install it or set VOLNOTI_PATH to the correct path."
+            exit "$EX_UNAVAILABLE"
+        }
 
         if is_muted; then
-            "${VOLNOTI_PATH:+${VOLNOTI_PATH%/}/}volnoti-show" -m "$vol"
+            "$executable" -m "$vol"
         else
-            "${VOLNOTI_PATH:+${VOLNOTI_PATH%/}/}volnoti-show" "$vol"
+            "$executable" "$vol"
         fi
     }
 
@@ -277,12 +322,13 @@ define_notify() {
     #   Volume      (integer) An integer indicating the volume.
     notify_volume_kosd() {
         local -r vol=$1
+        local muted=0
 
         if is_muted; then
-            qdbus org.kde.kded /modules/kosd showVolume "$vol" 1
-        else
-            qdbus org.kde.kded /modules/kosd showVolume "$vol" 0
+            muted=1
         fi
+
+        qdbus org.kde.kded /modules/kosd showVolume "$vol" "$muted"
     }
 }
 
@@ -306,24 +352,20 @@ define_output_formats() {
     #   %p = volume progress bar
     #   %i = volume icon
     output_volume_custom() {
-        local -r format=$*
         local -r vol=$(get_volume)
-        local string
-
-        if is_muted; then
-            string=${format//\%v/MUTE}
-        else
-            string=${format//\%v/$vol%}
-        fi
-
-        string=${string//\%s/$SINK}
+        local -r format=${1//\%v/$vol%}
+        local string=${format//\%s/$SINK}
         string=${string//\%c/$CARD}
         string=${string//\%m/$MIXER}
         string=${string//\%p/$(progress_bar "$vol")}
         string=${string//\%P/$(pa_get_active_port_description "$SINK")}
         string=${string//\%i/$(get_volume_emoji "$vol")}
 
-        echo -ne "$string"
+        if is_muted; then
+            echo -ne "${string//\%v/MUTE}"
+        else
+            echo -ne "$string"
+        fi
     }
 
     # Outputs the current volume for i3blocks.
@@ -333,14 +375,14 @@ define_output_formats() {
         local -r port=$(pa_get_active_port_description "$SINK")
 
         if is_muted; then
-            short_text="<span color=\"$COLOR_MUTED\">$port MUTED</span>\n"
-            full_text="<span color=\"$COLOR_MUTED\">$port MUTED</span>\n"
+            short_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
+            full_text="$short_text"
         else
             local -r vol=$(get_volume)
             local -r color=$(volume_color "$vol")
 
-            short_text="<span color=\"$color\">${vol}% $port</span>\n"
-            full_text="<span color=\"$color\">${vol}% $port</span>\n"
+            short_text="<span color=\"$color\">${vol}%</span>\n"
+            full_text="$short_text"
 
             if isset MAX_VOLUME && (( vol > MAX_VOLUME )); then
                 EXITCODE=$EX_URGENT
@@ -512,11 +554,10 @@ ${COLOR_YELLOW}Environment Variables:${COLOR_RESET}
   ${COLOR_CYAN}XOSD_PATH${COLOR_RESET}                   path to osd_cat
   ${COLOR_CYAN}HERBE_PATH${COLOR_RESET}                  path to herbe
   ${COLOR_CYAN}VOLNOTI_PATH${COLOR_RESET}                path to volnoti-show
-  ${COLOR_CYAN}DUNSTIFY_PATH${COLOR_RESET}               path to dunstify
   ${COLOR_CYAN}CANBERRA_PATH${COLOR_RESET}               path to canberra-gtk-play
-  ${COLOR_CYAN}NOTIFY_SEND_PATH${COLOR_RESET}            path to notify-send or notify-send.py
-  ${COLOR_CYAN}USE_NOTIFY_SEND_PY${COLOR_RESET}          flag to use notify-send.py instead of notify-send
+  ${COLOR_CYAN}NOTIFY_PATH${COLOR_RESET}                 path to command that sends notifications
   ${COLOR_CYAN}NO_NOTIFY_COLOR${COLOR_RESET}             flag to disable colors in notifications
+  ${COLOR_CYAN}USE_NOTIFY_SEND_PY${COLOR_RESET}          flag to use notify-send.py instead of notify-send
 EOF
         exit "$EX_USAGE"
     }
@@ -620,7 +661,9 @@ progress_bar() {
     local -r percent=${1:?$(error 'Percentage is required')}
     local -r max_percent=${2:-100}
     local -r divisor=${3:-5}
-    local -r progress=$(( (percent > max_percent ? max_percent : percent) / divisor ))
+
+    local -r normalized=$(( percent > max_percent ? max_percent : percent ))
+    local -r progress=$(( normalized / divisor ))
 
     printf -v bar "%*s" $progress ""
     echo "${bar// /█}"
@@ -748,7 +791,7 @@ define_pulseaudio_functions() {
     pa_get_volume() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
-        pactl get-sink-volume $sink | \
+        pactl get-sink-volume "$sink" | \
             awk -W posix '/^Volume: / {gsub("%,?", ""); print $5; exit}'
     }
 
@@ -885,6 +928,11 @@ define_pulseaudio_functions() {
     pa_play() {
         local -r file=$1
 
+        command_exists paplay || {
+            error "paplay is not installed or not in \$PATH"
+            return 1
+        }
+
         paplay -d "$SINK" "$file" &
     }
 }
@@ -1014,6 +1062,11 @@ define_amixer_functions() {
     #   Sound file  (string)
     amixer_play() {
         local -r file=$1
+
+        command_exists aplay || {
+            error "aplay is not installed or not in \$PATH"
+            return 1
+        }
 
         aplay -q "$file" &
     }
@@ -1168,11 +1221,17 @@ play_volume_changed() {
 
 ca_play() {
     local -r file=$1 desc=$2
+    local executable="${CANBERRA_PATH:+${CANBERRA_PATH%/}/}canberra-gtk-play"
+
+    command_exists "$executable" || {
+        error "$executable not found. Please install it or set NOTIFY_PATH to the correct path."
+        return 1
+    }
 
     if [[ -f $file ]]; then
-        "${CANBERRA_PATH:+${CANBERRA_PATH%/}/}canberra-gtk-play" -f "$file" -d "$desc"
+        "$executable" -f "$file" -d "$desc"
     else
-        "${CANBERRA_PATH:+${CANBERRA_PATH%/}/}canberra-gtk-play" -i "audio-volume-change" -d "$desc"
+        "$executable" -i "audio-volume-change" -d "$desc"
     fi
 }
 
@@ -1203,7 +1262,8 @@ main() {
     declare -ir \
         EX_OK=0 \
         EX_URGENT=33 \
-        EX_USAGE=64
+        EX_USAGE=64 \
+        EX_UNAVAILABLE=69
 
     # Main program exit code
     declare -i EXITCODE=$EX_OK
