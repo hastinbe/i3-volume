@@ -218,7 +218,7 @@ define_notify() {
         fi
 
         command_exists "$executable" || {
-            echo "$executable not found. Please install it or set NOTIFY_PATH to the correct path." >&2
+            error "$executable not found. Please install it or set NOTIFY_PATH to the correct path."
             exit "$EX_UNAVAILABLE"
         }
 
@@ -249,7 +249,7 @@ define_notify() {
         executable="${XOSD_PATH:+${XOSD_PATH%/}/}osd_cat"
 
         command_exists "$executable" || {
-            echo "$executable not found. Please install it or set XOSD_PATH to the correct path." >&2
+            error "$executable not found. Please install it or set XOSD_PATH to the correct path."
             exit "$EX_UNAVAILABLE"
         }
 
@@ -283,7 +283,7 @@ define_notify() {
         executable="${HERBE_PATH:+${HERBE_PATH%/}/}herbe"
 
         command_exists "$executable" || {
-            echo "$executable not found. Please install it or set HERBE_PATH to the correct path." >&2
+            error "$executable not found. Please install it or set HERBE_PATH to the correct path."
             exit "$EX_UNAVAILABLE"
         }
 
@@ -301,7 +301,7 @@ define_notify() {
         executable="${VOLNOTI_PATH:+${VOLNOTI_PATH%/}/}volnoti-show"
 
         command_exists "$executable" || {
-            echo "$executable not found. Please install it or set VOLNOTI_PATH to the correct path." >&2
+            error "$executable not found. Please install it or set VOLNOTI_PATH to the correct path."
             exit "$EX_UNAVAILABLE"
         }
 
@@ -881,6 +881,11 @@ define_pulseaudio_functions() {
     pa_play() {
         local -r file=$1
 
+        command_exists paplay || {
+            error "paplay is not installed or not in \$PATH"
+            return 1
+        }
+
         paplay -d "$SINK" "$file" &
     }
 }
@@ -1008,6 +1013,11 @@ define_amixer_functions() {
     #   Sound file  (string)
     amixer_play() {
         local -r file=$1
+
+        command_exists aplay || {
+            error "aplay is not installed or not in \$PATH"
+            return 1
+        }
 
         aplay -q "$file" &
     }
@@ -1162,11 +1172,17 @@ play_volume_changed() {
 
 ca_play() {
     local -r file=$1 desc=$2
+    local executable="${CANBERRA_PATH:+${CANBERRA_PATH%/}/}canberra-gtk-play"
+
+    command_exists "$executable" || {
+        error "$executable not found. Please install it or set NOTIFY_PATH to the correct path."
+        return 1
+    }
 
     if [[ -f $file ]]; then
-        "${CANBERRA_PATH:+${CANBERRA_PATH%/}/}canberra-gtk-play" -f "$file" -d "$desc"
+        "$executable" -f "$file" -d "$desc"
     else
-        "${CANBERRA_PATH:+${CANBERRA_PATH%/}/}canberra-gtk-play" -i "audio-volume-change" -d "$desc"
+        "$executable" -i "audio-volume-change" -d "$desc"
     fi
 }
 
