@@ -348,23 +348,19 @@ define_output_formats() {
     #   %p = volume progress bar
     #   %i = volume icon
     output_volume_custom() {
-        local -r format=$*
         local -r vol=$(get_volume)
-        local string
-
-        if is_muted; then
-            string=${format//\%v/MUTE}
-        else
-            string=${format//\%v/$vol%}
-        fi
-
-        string=${string//\%s/$SINK}
+        local -r format=${1//\%v/$vol%}
+        local string=${format//\%s/$SINK}
         string=${string//\%c/$CARD}
         string=${string//\%m/$MIXER}
         string=${string//\%p/$(progress_bar "$vol")}
         string=${string//\%i/$(get_volume_emoji "$vol")}
 
-        echo -ne "$string"
+        if is_muted; then
+            echo -ne "${string//\%v/MUTE}"
+        else
+            echo -ne "$string"
+        fi
     }
 
     # Outputs the current volume for i3blocks.
