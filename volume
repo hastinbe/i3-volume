@@ -47,7 +47,7 @@ define_helpers() {
     #   milliseconds    (integer) An integer in milliseconds
     ms_to_secs() {
         # divide by 1000 and round up to nearest integer using 'bc' command
-        echo $(echo "scale=0; (${1} + 999) / 1000" | bc)
+        echo "scale=0; (${1} + 999) / 1000" | bc
     }
 
     is_command_hookable() {
