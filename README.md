@@ -99,11 +99,10 @@ Environment Variables:
   XOSD_PATH                   path to osd_cat
   HERBE_PATH                  path to herbe
   VOLNOTI_PATH                path to volnoti-show
-  DUNSTIFY_PATH               path to dunstify
   CANBERRA_PATH               path to canberra-gtk-play
-  NOTIFY_SEND_PATH            path to notify-send or notify-send.py
-  USE_NOTIFY_SEND_PY          flag to use notify-send.py instead of notify-send
+  NOTIFY_PATH                 path to command that sends notifications
   NO_NOTIFY_COLOR             flag to disable colors in notifications
+  USE_NOTIFY_SEND_PY          flag to use notify-send.py instead of notify-send
 ```
 
 ## Migrating

@@ -160,67 +160,74 @@ define_notify() {
         local -r icon=$2
         local -r summary=$3
         local -r body=${*:4}
-        local -a args=(
-            -t "$EXPIRES"
+        local args=(
+            '-t' "$EXPIRES"
         )
-        local -a hints=(
+        local hints=(
             # Replaces previous notification in some notification servers
-            string:synchronous:volume
+            'string:synchronous:volume'
             # Replaces previous notification in NotifyOSD
-            string:x-canonical-private-synchronous:volume
+            'string:x-canonical-private-synchronous:volume'
         )
 
         # If we're not drawing our own progress bar, allow the notification daemon to draw its own (if supported)
-        $SHOW_VOLUME_PROGRESS || hints+=(int:value:"$vol")
+        $SHOW_VOLUME_PROGRESS || hints+=( "int:value:$vol" )
 
-        (( ${#NOTIFY_CAPS[@]} < 1 )) && load_notify_server_caps
+        # (( ${#NOTIFY_CAPS[@]} < 1 )) && load_notify_server_caps
+        [[ ${#NOTIFY_CAPS[@]} -lt 1 ]] && load_notify_server_caps
 
         if has_capability icon-static || has_capability icon-multi; then
-            # haskell-notification-daemon (aka deadd-notification-center) does not support -i|--icon
-            args+=(-i "$icon")
+            # haskell-notification-daemon (aka deadd-notification-center) does not support -i|--icon, but supports string:image-path
+            args+=( '-i' "$icon" )
+            hints+=( "string:image-path:$icon" )
         fi
 
-        # dunst doesn't announce icon-(static|multi) server capabilities, but supports image-path hint
-        hints+=(string:image-path:"$icon")
-
-        if $PLAY_SOUND && has_capability sound; then
-            hints+=(string:sound-name:audio-volume-change)
-        fi
+        $PLAY_SOUND && has_capability sound && hints+=( "string:sound-name:audio-volume-change" )
 
         if [[ $NOTIFICATION_METHOD == "dunst" ]]; then
-            hints+=(string:x-dunst-stack-tag:volume)
+            hints+=( "string:x-dunst-stack-tag:volume" )
 
             if ! isset NO_NOTIFY_COLOR; then
                 if is_muted; then
-                    hints+=(string:fgcolor:"$COLOR_MUTED")
+                    hints+=( "string:fgcolor:$COLOR_MUTED" )
                 else
-                    hints+=(string:fgcolor:"$(volume_color "$vol")")
+                    hints+=( "string:fgcolor:$(volume_color "$vol")" )
                 fi
             fi
         fi
 
         if $USE_DUNSTIFY; then
-            args+=(-r 1000)
+            EXECUTABLE="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}dunstify"
+
+            args+=( '-r' 1000 )
 
             # Transient notifications will bypass the idle_threshold setting.
             # Should be boolean, but Notify-OSD doesn't support boolean yet. Dunst checks
             # for int and bool with transient so lets play nice with both servers.
-            hints+=(int:transient:1)
-
-            read -ra hints <<< "${hints[@]/#/-h }"
-            "${DUNSTIFY_PATH:+${DUNSTIFY_PATH%/}/}dunstify" "${hints[@]}" "${args[@]}" "$summary" "$body"
+            hints+=( "int:transient:1" )
         elif isset USE_NOTIFY_SEND_PY; then
+            EXECUTABLE="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}notify-send.py"
+
             # Replaces previous notification, but leaves itself running in the bg to work
-            args+=(--replaces-process volume)
+            args+=( --replaces-process volume )
 
             # By-pass the server's persistence capability, if it should exist
-            hints+=(boolean:transient:true)
+            hints+=( "boolean:transient:true" )
 
-            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send.py" --hint "${hints[@]}" "${args[@]}" "$summary" "$body" &
+            # Prefix all hints with --hint to work with notify-send.py
+            hints=( "${hints[@]/#/--hint }" )
         else
-            read -ra hints <<< "${hints[@]/#/-h }"
-            "${NOTIFY_SEND_PATH:+${NOTIFY_SEND_PATH%/}/}notify-send" "${hints[@]}" "${args[@]}" "$summary" "$body"
+            EXECUTABLE="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}notify-send"
         fi
+
+        if ! command_exists "$EXECUTABLE"; then
+            echo "$EXECUTABLE not found. Please install it or set NOTIFY_PATH to the correct path." >&2
+            exit "$EX_UNAVAILABLE"
+        fi
+
+        read -ra hints <<< "${hints[@]/#/-h }"
+
+        "$EXECUTABLE" "${hints[@]}" "${args[@]}" "$summary" "$body" &
     }
 
     # Send notification to XOSD.
@@ -514,11 +521,10 @@ ${COLOR_YELLOW}Environment Variables:${COLOR_RESET}
   ${COLOR_CYAN}XOSD_PATH${COLOR_RESET}                   path to osd_cat
   ${COLOR_CYAN}HERBE_PATH${COLOR_RESET}                  path to herbe
   ${COLOR_CYAN}VOLNOTI_PATH${COLOR_RESET}                path to volnoti-show
-  ${COLOR_CYAN}DUNSTIFY_PATH${COLOR_RESET}               path to dunstify
   ${COLOR_CYAN}CANBERRA_PATH${COLOR_RESET}               path to canberra-gtk-play
-  ${COLOR_CYAN}NOTIFY_SEND_PATH${COLOR_RESET}            path to notify-send or notify-send.py
-  ${COLOR_CYAN}USE_NOTIFY_SEND_PY${COLOR_RESET}          flag to use notify-send.py instead of notify-send
+  ${COLOR_CYAN}NOTIFY_PATH${COLOR_RESET}                 path to command that sends notifications
   ${COLOR_CYAN}NO_NOTIFY_COLOR${COLOR_RESET}             flag to disable colors in notifications
+  ${COLOR_CYAN}USE_NOTIFY_SEND_PY${COLOR_RESET}          flag to use notify-send.py instead of notify-send
 EOF
         exit "$EX_USAGE"
     }
@@ -1162,7 +1168,8 @@ main() {
     declare -ir \
         EX_OK=0 \
         EX_URGENT=33 \
-        EX_USAGE=64
+        EX_USAGE=64 \
+        EX_UNAVAILABLE=69
 
     # Main program exit code
     declare -i EXITCODE=$EX_OK
