@@ -169,6 +169,7 @@ define_notify() {
             # Replaces previous notification in NotifyOSD
             'string:x-canonical-private-synchronous:volume'
         )
+        local executable
 
         # If we're not drawing our own progress bar, allow the notification daemon to draw its own (if supported)
         $SHOW_VOLUME_PROGRESS || hints+=( "int:value:$vol" )
@@ -220,10 +221,10 @@ define_notify() {
             executable="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}notify-send"
         fi
 
-        if ! command_exists "$executable"; then
+        command_exists "$executable" || {
             echo "$executable not found. Please install it or set NOTIFY_PATH to the correct path." >&2
             exit "$EX_UNAVAILABLE"
-        fi
+        }
 
         read -ra hints <<< "${hints[@]/#/-h }"
 
@@ -238,8 +239,8 @@ define_notify() {
     notify_volume_xosd() {
         local -r vol=$1
         local -r text=${*:2}
-        local -r delay=$(ms_to_secs "$EXPIRES")
         local percentage
+        local executable
 
         if is_muted; then
             color=$COLOR_MUTED
@@ -249,7 +250,24 @@ define_notify() {
             percentage=$vol
         fi
 
-        "${XOSD_PATH:+${XOSD_PATH%/}/}osd_cat" --align center -b percentage -P "$percentage" -d "$delay" -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" & disown
+        executable="${XOSD_PATH:+${XOSD_PATH%/}/}osd_cat"
+
+        command_exists "$executable" || {
+            echo "$executable not found. Please install it or set XOSD_PATH to the correct path." >&2
+            exit "$EX_UNAVAILABLE"
+        }
+
+        "$executable" \
+            --align center \
+            -b percentage \
+            -P "$percentage" \
+            -d "$(ms_to_secs "$EXPIRES")" \
+            -p top \
+            -A center \
+            -c "$color" \
+            -T "$text" \
+            -O 2 \
+            -u "$COLOR_XOSD_OUTLINE" & disown
     }
 
     # Send notification to herbe.
@@ -261,11 +279,19 @@ define_notify() {
     #       time but would make this irrelevant. See https://github.com/dudik/herbe/pull/10
     notify_volume_herbe() {
         local -r text=$*
+        local executable
 
         # Dismiss existing/pending notifications to prevent queuing
         pkill -SIGUSR1 herbe
 
-        "${HERBE_PATH:+${HERBE_PATH%/}/}herbe" "$text" & disown
+        executable="${HERBE_PATH:+${HERBE_PATH%/}/}herbe"
+
+        command_exists "$executable" || {
+            echo "$executable not found. Please install it or set HERBE_PATH to the correct path." >&2
+            exit "$EX_UNAVAILABLE"
+        }
+
+        "$executable" "$text" & disown
     }
 
     # Send notification to volnoti.
@@ -274,11 +300,19 @@ define_notify() {
     #   Volume      (integer) An integer indicating the volume.
     notify_volume_volnoti() {
         local -r vol=$1
+        local executable
+
+        executable="${VOLNOTI_PATH:+${VOLNOTI_PATH%/}/}volnoti-show"
+
+        command_exists "$executable" || {
+            echo "$executable not found. Please install it or set VOLNOTI_PATH to the correct path." >&2
+            exit "$EX_UNAVAILABLE"
+        }
 
         if is_muted; then
-            "${VOLNOTI_PATH:+${VOLNOTI_PATH%/}/}volnoti-show" -m "$vol"
+            "$executable" -m "$vol"
         else
-            "${VOLNOTI_PATH:+${VOLNOTI_PATH%/}/}volnoti-show" "$vol"
+            "$executable" "$vol"
         fi
     }
 
@@ -288,12 +322,13 @@ define_notify() {
     #   Volume      (integer) An integer indicating the volume.
     notify_volume_kosd() {
         local -r vol=$1
+        local muted=0
 
         if is_muted; then
-            qdbus org.kde.kded /modules/kosd showVolume "$vol" 1
-        else
-            qdbus org.kde.kded /modules/kosd showVolume "$vol" 0
+            muted=1
         fi
+
+        qdbus org.kde.kded /modules/kosd showVolume "$vol" "$muted"
     }
 }
 
