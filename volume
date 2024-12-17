@@ -350,6 +350,7 @@ define_output_formats() {
     #   %c = card (alsamixer only)
     #   %m = mixer (alsamixer only)
     #   %p = volume progress bar
+    #   %P = active port description (PulseAudio only)
     #   %i = volume icon
     output_volume_custom() {
         local -r vol=$(get_volume)
@@ -376,13 +377,13 @@ define_output_formats() {
 
         if is_muted; then
             short_text="<span color=\"$COLOR_MUTED\">MUTE</span>\n"
-            full_text="$short_text"
+            full_text="<span color=\"$COLOR_TEXT\">$port</span> $short_text"
         else
             local -r vol=$(get_volume)
             local -r color=$(volume_color "$vol")
 
             short_text="<span color=\"$color\">${vol}%</span>\n"
-            full_text="$short_text"
+            full_text="<span color=\"$COLOR_TEXT\">$port</span> $short_text"
 
             if isset MAX_VOLUME && (( vol > MAX_VOLUME )); then
                 EXITCODE=$EX_URGENT
@@ -511,6 +512,7 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   %m = mixer (alsamixer only)
                                   %p = volume progress bar
                                   %i = volume icon/emoji
+                                  %P = active port description (PulseAudio only)
 
                                   examples:
                                       "Volume is %v" = Volume is 50%
@@ -745,7 +747,12 @@ define_pulseaudio_functions() {
         local -r port=$(pa_get_sink_active_port "$sink")
 
         if has_port "$port"; then
-            echo "${SINK_PORTS[$port]}"
+            # Check if there's an alias defined for this port
+            if [[ -v PORT_ALIASES[$port] ]]; then
+                echo "${PORT_ALIASES[$port]}"
+            else
+                echo "${SINK_PORTS[$port]}"
+            fi
         fi
     }
 
@@ -760,16 +767,16 @@ define_pulseaudio_functions() {
 
         while IFS=: read -r name description; do
             SINK_PORTS["$name"]="$description"
-        done < <(pa_list_sinks | \
-                    awk -W posix '/^\tName: / {insink = $2 == "'"$sink"'"}
-                                  /^\tPorts:/ {inport = insink}
-                                  /^\t\t[[:print:]]+: [[:print:]]+ \(/ && inport {
-                                      start=index($0, ": ")+2;
-                                      end=strlen=index($0, "(");
-                                      description=substr($0, start, end-start)
-                                      sub(/[ ]+$/, "", description)
-                                      print $1 description
-                                  }')
+        done < <(pa_list_sinks | awk -W posix \
+            '/^\tName: / {insink = $2 == "'"$sink"'"}
+             /^\tPorts:/ {inport = insink}
+             /^\t\t[[:print:]]+: [[:print:]]+ \(/ && inport {
+                 start=index($0, ": ")+2;
+                 end=strlen=index($0, "(");
+                 description=substr($0, start, end-start)
+                 sub(/[ ]+$/, "", description)
+                 print $1 description
+             }')
     }
 
     # Get the index of a sink name.
@@ -1118,7 +1125,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:ac:Ce:hj:lL:m:nN:pPs:S:t:u:x:X:y
+    local optstring=:aA:c:Ce:hj:lL:m:nN:pPs:S:t:u:x:X:y
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -1128,6 +1135,8 @@ parse_opts() {
     while getopts "$optstring" opt; do
         case "$opt" in
             a    ) USE_AMIXER=true ;;
+            A    ) IFS=: read -r port alias <<< "$OPTARG"
+                   PORT_ALIASES[$port]=$alias ;;
             c    ) CARD=$OPTARG ;;
             C    ) USE_CANBERRA=true ;;
             e    ) EXPIRES=$OPTARG ;;
@@ -1331,14 +1340,15 @@ main() {
     # Cached output of `pactl list sinks`; so we don't have to call it each time we need it
     declare PA_LIST_SINKS
 
-    # Output volume colors
+    # Colors
     declare -r \
         COLOR_MUTED=${COLOR_MUTED:-#FFFF00} \
         COLOR_MUTED_TO_BASE=${COLOR_MUTED_TO_BASE:-#00FF00} \
         COLOR_BASE_TO_NORM=${COLOR_BASE_TO_NORM:-#FFFF00} \
         COLOR_NORM_TO_MAX=${COLOR_NORM_TO_MAX:-#FF0000} \
         COLOR_OTHER=${COLOR_OTHER:-#FFFFFF} \
-        COLOR_XOSD_OUTLINE=${COLOR_XOSD_OUTLINE:-#222222}
+        COLOR_XOSD_OUTLINE=${COLOR_XOSD_OUTLINE:-#222222} \
+        COLOR_TEXT=${COLOR_TEXT:-#FFFF00}
 
     declare \
         COLOR_RESET \

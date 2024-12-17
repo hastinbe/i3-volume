@@ -56,6 +56,7 @@ Commands:
                                   %m = mixer (alsamixer only)
                                   %p = volume progress bar
                                   %i = volume icon/emoji
+                                  %P = active port description (PulseAudio only)
 
                                   examples:
                                       "Volume is %v" = Volume is 50%
@@ -82,6 +83,7 @@ amixer Options:
 
 PulseAudio Options:
   -s <sink>                   symbolic name of sink
+  -A <port:alias>             specify an alias for a port name (e.g., -A "Speakers:Living Room")
 
 Notification Options:
   -N <method>                 notification method (default: libnotify)
