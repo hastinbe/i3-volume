@@ -1,0 +1,28 @@
+name: ShellCheck CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  shellcheck:
+    name: Run ShellCheck
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Install ShellCheck
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      # Step 3: Run ShellCheck on all shell scripts
+      - name: Run ShellCheck
+        run: |
+          shellcheck **/*.sh

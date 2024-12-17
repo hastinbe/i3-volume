@@ -149,7 +149,7 @@ Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 
 [alsa-utils]: https://alsa.opensrc.org/Alsa-utils
 [bspwm]: https://github.com/baskerville/bspwm
-[build]: https://travis-ci.org/hastinbe/i3-volume.svg?branch=master
+[build]: https://github.com/hastinbe/i3-volume/actions/workflows/shellcheck.yml/badge.svg
 [dunst]: https://dunst-project.org
 [herbe]: https://github.com/dudik/herbe
 [KDE]: https://kde.org
