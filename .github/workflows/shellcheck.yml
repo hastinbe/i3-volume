@@ -25,4 +25,4 @@ jobs:
       # Step 3: Run ShellCheck on all shell scripts
       - name: Run ShellCheck
         run: |
-          shellcheck **/*.sh
+          shellcheck volume
