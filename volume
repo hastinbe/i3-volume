@@ -736,24 +736,16 @@ define_pulseaudio_functions() {
     pa_get_sink_active_port() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
-        pa_list_sinks | \
-            awk -W posix '/^[ \t]+Name: / {insink = $2 == "'"$sink"'"}
-                          /^[ \t]+Active Port: / && insink' | \
-            cut -d' ' -f3-
+        awk -v sink="$sink" '
+            /^[ \t]+Name:/ { insink = ($2 == sink) }
+            /^[ \t]+Active Port:/ && insink { print $3 }
+        ' <<< "$(pa_list_sinks)"
     }
 
     pa_get_active_port_description() {
         local -r sink=${1:?$(error 'Sink name is required')}
         local -r port=$(pa_get_sink_active_port "$sink")
-
-        if has_port "$port"; then
-            # Check if there's an alias defined for this port
-            if [[ -v PORT_ALIASES[$port] ]]; then
-                echo "${PORT_ALIASES[$port]}"
-            else
-                echo "${SINK_PORTS[$port]}"
-            fi
-        fi
+        echo "${PORT_ALIASES[$port]:-${SINK_PORTS[$port]}}"
     }
 
     # Load the sink's ports.
