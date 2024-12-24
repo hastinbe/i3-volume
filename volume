@@ -73,7 +73,7 @@ define_notify() {
         local -r vol=$(get_volume)
         local icon
         local summary
-        local body
+        local body=""
 
         if is_muted; then
             summary="Volume muted"
@@ -730,7 +730,7 @@ define_pulseaudio_functions() {
     }
 
     pa_invalidate_cache() {
-        unset PA_LIST_SINKS
+        PA_LIST_SINKS=""
     }
 
     pa_get_sink_active_port() {
@@ -1326,12 +1326,12 @@ main() {
 
     # PulseAudio sink flags
     declare -a SINK_FLAGS=()
-    
+
     # PulseAudio port aliases
-    declare -A PORT_ALIASES
+    declare -gA PORT_ALIASES=()
 
     # PulseAudio sink ports
-    declare -gA SINK_PORTS
+    declare -gA SINK_PORTS=()
 
     # PulseAudio volume variables and constants.
     #   Note: unlike in PA, PA_VOLUME_* here are percentages instead of integers
@@ -1341,7 +1341,7 @@ main() {
         PA_VOLUME_MUTED=0
 
     # Cached output of `pactl list sinks`; so we don't have to call it each time we need it
-    declare PA_LIST_SINKS
+    declare PA_LIST_SINKS=""
 
     # Colors
     declare -r \
@@ -1364,23 +1364,22 @@ main() {
     ###########################################################
     # Command line option variables
     ###########################################################
-    declare -l NOTIFICATION_METHOD
+    declare -l NOTIFICATION_METHOD=""
 
     declare \
-        COMMAND \
+        COMMAND="" \
         DISPLAY_NOTIFICATIONS=false \
         SHOW_VOLUME_PROGRESS=false \
         USE_AMIXER=false \
         USE_DUNSTIFY=false \
         USE_FULLCOLOR_ICONS=false \
-        CARD \
+        CARD="" \
         MIXER=Master \
         PROGRESS_PLACEMENT=summary \
-        SIGNAL \
-        SINK \
-        STATUSLINE \
-        SYMBOLIC_ICON_SUFFIX \
-        NOTIFICATION_METHOD \
+        SIGNAL="" \
+        SINK="" \
+        STATUSLINE="" \
+        SYMBOLIC_ICON_SUFFIX="" \
         PLAY_SOUND=false \
         USE_CANBERRA=false
 
