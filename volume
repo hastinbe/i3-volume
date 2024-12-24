@@ -723,7 +723,7 @@ setup_audio() {
 define_pulseaudio_functions() {
     # Executes `pactl list sinks` or return its output if called previously
     pa_list_sinks() {
-        if $OPT_LISTEN || empty "$PA_LIST_SINKS"; then
+        if [[ $COMMAND == "listen" ]] || empty "$PA_LIST_SINKS"; then
             PA_LIST_SINKS=$(pactl list sinks)
         fi
         echo "$PA_LIST_SINKS"
