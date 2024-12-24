@@ -763,8 +763,6 @@ define_pulseaudio_functions() {
     pa_load_sink_ports() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
-        declare -gA SINK_PORTS
-
         while IFS=: read -r name description; do
             SINK_PORTS["$name"]="$description"
         done < <(pa_list_sinks | awk -W posix \
