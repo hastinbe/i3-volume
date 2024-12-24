@@ -63,7 +63,7 @@ define_helpers() {
     }
 
     has_port() {
-        [[ -v "SINK_PORTS[$1]" ]]
+        isset SINK_PORTS[$1]
     }
 }
 
