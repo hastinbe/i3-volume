@@ -737,8 +737,8 @@ define_pulseaudio_functions() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
         pa_list_sinks | \
-            awk -W posix '/^\tName: / {insink = $2 == "'"$sink"'"}
-                          /^\tActive Port: / && insink' | \
+            awk -W posix '/^[ \t]+Name: / {insink = $2 == "'"$sink"'"}
+                          /^[ \t]+Active Port: / && insink' | \
             cut -d' ' -f3-
     }
 
@@ -766,9 +766,9 @@ define_pulseaudio_functions() {
         while IFS=: read -r name description; do
             SINK_PORTS["$name"]="$description"
         done < <(pa_list_sinks | awk -W posix \
-            '/^\tName: / {insink = $2 == "'"$sink"'"}
-             /^\tPorts:/ {inport = insink}
-             /^\t\t[[:print:]]+: [[:print:]]+ \(/ && inport {
+            '/^[ \t]+Name: / {insink = ($2 == "'"$sink"'")}
+             /^[ \t]+Ports:/ {inport = insink}
+             /^[ \t]+[[:print:]]+: [[:print:]]+ \(/ && inport {
                  start=index($0, ": ")+2;
                  end=strlen=index($0, "(");
                  description=substr($0, start, end-start)
