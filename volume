@@ -736,7 +736,7 @@ define_pulseaudio_functions() {
     pa_get_sink_active_port() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
-        awk -v sink="$sink" '
+        awk -W posix -v sink="$sink" '
             /^[ \t]+Name:/ { insink = ($2 == sink) }
             /^[ \t]+Active Port:/ && insink { print $3 }
         ' <<< "$(pa_list_sinks)"
@@ -757,15 +757,16 @@ define_pulseaudio_functions() {
 
         while IFS=: read -r name description; do
             SINK_PORTS["$name"]="$description"
-        done < <(pa_list_sinks | awk -W posix \
-            '/^[ \t]+Name: / {insink = ($2 == "'"$sink"'")}
+        done < <(pa_list_sinks | awk -W posix -v sink="$sink" \
+            '/^[ \t]+Name: / {insink = ($2 == sink)}
              /^[ \t]+Ports:/ {inport = insink}
              /^[ \t]+[[:print:]]+: [[:print:]]+ \(/ && inport {
                  start=index($0, ": ")+2;
-                 end=strlen=index($0, "(");
-                 description=substr($0, start, end-start)
-                 sub(/[ ]+$/, "", description)
-                 print $1 description
+                 end=index($0, "(");
+                 len=end-start;
+                 desc=substr($0, start, len)
+                 sub(/[ ]+$/, "", desc)
+                 print $1 desc
              }')
     }
 
@@ -777,8 +778,9 @@ define_pulseaudio_functions() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
         pa_list_sinks | \
-            awk -W posix '/^Sink #/{gsub("#", ""); idx = $2}
-                          /^[ \t]+Name: / {insink = $2 == "'"$sink"'"; if (insink) { print idx }; exit}'
+            awk -W posix -v sink="$sink" \
+                '/^Sink #/{gsub("#", ""); idx = $2}
+                 /^[ \t]+Name: / && $2 == sink {print idx; exit}'
     }
 
     # Get the volume as a percentage.
@@ -800,8 +802,9 @@ define_pulseaudio_functions() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
         pa_list_sinks | \
-            awk -W posix '/^[ \t]+Name: / {insink = $2 == "'"$sink"'"}
-                          /^[ \t]+Base Volume: / && insink {gsub("%", ""); print $5; exit}'
+            awk -W posix -v sink="$sink" \
+                '/^[ \t]+Name: / {insink = ($2 == sink)}
+                 /^[ \t]+Base Volume: / && insink {gsub("%", ""); print $5; exit}'
     }
 
     # Increase volume relative to current volume using pulseaudio.
@@ -865,8 +868,9 @@ define_pulseaudio_functions() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
         pa_list_sinks | \
-            awk -W posix '/^[ \t]+Name: / {insink = $2 == "'"$sink"'"}
-                          /^[ \t]+Mute: / && insink && $2 ~ /^yes$/ { exitcode=1 }; END { exit !exitcode }'
+            awk -W posix -v sink="$sink" \
+                '/^[ \t]+Name: / {insink = ($2 == sink)}
+                 /^[ \t]+Mute: / && insink && $2 ~ /^yes$/ { exitcode=1 }; END { exit !exitcode }'
     }
 
     # Get the flags of the PulseAudio sink.
@@ -877,8 +881,9 @@ define_pulseaudio_functions() {
         local -r sink=${1:?$(error 'Sink name is required')}
 
         pa_list_sinks | \
-            awk -W posix '/^[ \t]+Name: / {insink = $2 == "'"$sink"'"}
-                          /^[ \t]+Flags: / && insink { for(i = 2; i <= NF; ++i) printf $i FS; exit}'
+            awk -W posix -v sink="$sink" \
+                '/^[ \t]+Name: / {insink = ($2 == sink)}
+                 /^[ \t]+Flags: / && insink { for(i = 2; i <= NF; ++i) printf $i FS; exit}'
     }
 
     # Get color for the given volume for PulseAudio
