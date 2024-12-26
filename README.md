@@ -52,8 +52,6 @@ Commands:
                               custom format substitutions:
                                   %v = volume
                                   %s = sink name (PulseAudio only)
-                                  %c = card (alsamixer only)
-                                  %m = mixer (alsamixer only)
                                   %p = volume progress bar
                                   %i = volume icon/emoji
                                   %P = active port description (PulseAudio only)
@@ -66,7 +64,6 @@ Commands:
   help                        display help
 
 Options:
-  -a                          use amixer
   -n                          enable notifications
   -C                          use libcanberra for playing event sounds
   -P                          play sound for volume changes
@@ -76,10 +73,6 @@ Options:
   -x <value>                  maximum volume
   -X <value>                  maximum amplification; if supported (default: 2)
   -h                          display help
-
-amixer Options:
-  -c <card>                   card number to control
-  -m <mixer>                  set mixer (default: Master)
 
 PulseAudio Options:
   -s <sink>                   symbolic name of sink
@@ -170,7 +163,6 @@ Having a problem? Try reading our [common issues](https://github.com/hastinbe/i3
 
 Copyright (C) 1989, 1991 Free Software Foundation, Inc.
 
-[alsa-utils]: https://alsa.opensrc.org/Alsa-utils
 [bspwm]: https://github.com/baskerville/bspwm
 [build]: https://github.com/hastinbe/i3-volume/actions/workflows/shellcheck.yml/badge.svg
 [dunst]: https://dunst-project.org
