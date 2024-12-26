@@ -61,10 +61,6 @@ define_helpers() {
     max() {
         echo $(( $1 > $2 ? $1 : $2 ))
     }
-
-    has_port() {
-        isset SINK_PORTS["$1"]
-    }
 }
 
 define_notify() {
