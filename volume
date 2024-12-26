@@ -111,7 +111,7 @@ define_notify() {
     list_notification_methods() {
         local source="${BASH_SOURCE[0]}"
         awk -W posix -v source="$source" '
-            match($0, /    notify_volume_([[:alnum:]]+)/) {
+            match($0, / +notify_volume_([[:alnum:]]+)\(\)/) {
                 print substr($0, RSTART + 18, RLENGTH - 18) > "/dev/stdout"
             }
         ' "$source" || exit "$EX_USAGE"
@@ -489,7 +489,7 @@ define_commands() {
     }
 
     list_output_formats() {
-        awk -W posix 'match($0,/    output_volume_([[:alnum:]]+)/) {print substr($0, 19, RLENGTH-18)}' "${BASH_SOURCE[0]}" || exit "$EX_USAGE"
+        awk -W posix 'match($0,/ +output_volume_([[:alnum:]]+)\(\)/) {print substr($0, RSTART + 18, RLENGTH - 20)}' "${BASH_SOURCE[0]}" || exit "$EX_USAGE"
         exit "$EX_OK"
     }
 
