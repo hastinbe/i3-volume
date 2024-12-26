@@ -673,7 +673,7 @@ progress_bar() {
 
 apply_symbolic_icon_suffix() {
     for i in "${!ICONS_SYMBOLIC[@]}"; do
-        ICONS_SYMBOLIC[$i]="${ICONS_SYMBOLIC[$i]}${SYMBOLIC_ICON_SUFFIX}"
+        ICONS_SYMBOLIC[i]="${ICONS_SYMBOLIC[i]}${SYMBOLIC_ICON_SUFFIX}"
     done
 }
 
