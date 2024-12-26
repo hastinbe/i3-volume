@@ -1090,6 +1090,15 @@ setup_color() {
     fi
 }
 
+load_config() {
+    local config=${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume/config
+    [[ -f $config ]] && source "$config"
+
+    # Set defaults if not defined in config
+    # : "${MAX_VOLUME:=100}"
+    : "${NOTIFICATION_METHOD:=libnotify}"
+}
+
 # Rearrange all options to place flags first
 # Author: greycat
 # URL: https://mywiki.wooledge.org/ComplexOptionParsing
@@ -1359,7 +1368,7 @@ main() {
     ###########################################################
     # Command line option variables
     ###########################################################
-    declare -l NOTIFICATION_METHOD=""
+    declare NOTIFICATION_METHOD=""
 
     declare \
         COMMAND="" \
@@ -1390,11 +1399,12 @@ main() {
 
     setup_color
 
+    load_config
+
     parse_opts "$@"
 
     # Requires options to be parsed first
     setup_audio
-
     exec_command "${CMDARGS[*]}" && post_command_hook
 
     exit ${EXITCODE:-$EX_OK}

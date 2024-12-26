@@ -107,6 +107,29 @@ Environment Variables:
   USE_NOTIFY_SEND_PY          flag to use notify-send.py instead of notify-send
 ```
 
+### Configuration
+
+`i3-volume` also looks for a configuration file located at either `~/.config/i3-volume/config`, or `$XDG_CONFIG_HOME/i3-volume/config`. You can use this file to set any variables that are not set in the command line. For example, if you want to always display notifications using `dunst`. You can add the following to your config file:
+
+```
+NOTIFICATION_METHOD="dunst"
+DISPLAY_NOTIFICATIONS=true
+```
+
+Or if using `i3blocks` as your statusline and `dunst` for notifications, aliasing the `analog-output-speaker` port to `Speaker` and using fullcolor icons:
+
+```
+STATUSLINE="i3blocks"
+SIGNAL="SIGRTMIN+10"
+NOTIFICATION_METHOD="dunst"
+USE_DUNSTIFY=true
+DISPLAY_NOTIFICATIONS=true
+USE_FULLCOLOR_ICONS=true
+PORT_ALIASES[analog-output-speaker]=Speaker
+```
+
+Now every invocation of the script will use these settings, unless overridden by command line options. To find more variables, check the [source code](https://github.com/hastinbe/i3-volume/blob/master/volume) of the `parse_opts` and `main` functions.
+
 ## Migrating
 
 ### Version 2.x to 3.x
