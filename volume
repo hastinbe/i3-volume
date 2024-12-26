@@ -1091,7 +1091,8 @@ setup_color() {
 }
 
 load_config() {
-    local config=${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume/config
+    local -r config=${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume/config
+    # shellcheck source=/dev/null
     [[ -f $config ]] && source "$config"
 
     # Set defaults if not defined in config
