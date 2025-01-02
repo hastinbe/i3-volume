@@ -20,7 +20,7 @@ define_helpers() {
     empty()               { [[ -z $1 ]]; }
     not_empty()           { [[ -n $1 ]]; }
     isset()               { [[ -v $1 ]]; }
-    command_exists()      { command -v "$1" >/dev/null 2>&1; }
+    command_exists()      { command -v "$1" &>/dev/null; }
     error()               { echo "$COLOR_RED$*$COLOR_RESET"; }
     has_color()           { [ "$(tput colors)" -ge 8 ] &>/dev/null && [ -t 1 ]; }
     ms_to_secs()          { echo "scale=0; (${1} + 999) / 1000" | bc; }
