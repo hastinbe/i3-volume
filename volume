@@ -4,10 +4,7 @@
 #
 #  Volume control and volume notifications.
 #
-#  Dependencies:
-#      awk
-#      jq
-#      WirePlumber
+#  Dependencies: awk bc jq WirePlumber
 #
 #  Copyright (c) 2016 Beau Hastings. All rights reserved.
 #  License: GNU General Public License v2
@@ -17,42 +14,32 @@
 #  Wiki: https://github.com/hastinbe/i3-volume/wiki/
 
 define_helpers() {
-    empty()               { [[ -z $1 ]]; }
-    not_empty()           { [[ -n $1 ]]; }
-    isset()               { [[ -v $1 ]]; }
-    command_exists()      { command -v "$1" &>/dev/null; }
-    error()               { echo "$COLOR_RED$*$COLOR_RESET"; }
-    has_color()           { [ "$(tput colors)" -ge 8 ] &>/dev/null && [ -t 1 ]; }
-    ms_to_secs()          { echo "scale=0; (${1} + 999) / 1000" | bc; }
+    empty() { [[ -z $1 ]]; }
+    not_empty() { [[ -n $1 ]]; }
+    isset() { [[ -v $1 ]]; }
+    command_exists() { command -v "$1" &>/dev/null; }
+    error() { echo "$COLOR_RED$*$COLOR_RESET"; }
+    has_color() { [ "$(tput colors)" -ge 8 ] &>/dev/null && [ -t 1 ]; }
+    ms_to_secs() { echo "scale=0; (${1} + 999) / 1000" | bc; }
     is_command_hookable() { ! [[ ${POST_HOOK_EXEMPT_COMMANDS[*]} =~ $1 ]]; }
-    has_capability()      { [[ "${NOTIFY_CAPS[*]}" =~ $1 ]]; }
-    max()                 { echo $(( $1 > $2 ? $1 : $2 )); }
+    has_capability() { [[ "${NOTIFY_CAPS[*]}" =~ $1 ]]; }
+    max() { echo $(( $1 > $2 ? $1 : $2 )); }
 }
 
 define_notify() {
-    # Display a notification indicating muted or current volume.
     notify_volume() {
         local -r vol=$(get_volume)
-        local icon
-        local summary
-        local body=""
+        local icon summary body=""
 
         if is_muted; then
             summary="Volume muted"
-
-            if $USE_FULLCOLOR_ICONS; then
-                icon=${ICONS[0]}
-            else
-                icon=${ICONS_SYMBOLIC[0]}
-            fi
+            icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[0]}" || echo "${ICONS_SYMBOLIC[0]}")
         else
             printf -v summary "Volume %3s%%" "$vol"
-
             icon=$(get_volume_icon "$vol")
 
             if $SHOW_VOLUME_PROGRESS; then
                 local -r progress=$(progress_bar "$vol")
-
                 if has_capability body && [[ $PROGRESS_PLACEMENT == body ]]; then
                     body="$progress"
                 else
@@ -72,17 +59,10 @@ define_notify() {
 
     list_notification_methods() {
         local source="${BASH_SOURCE[0]}"
-        awk -v source="$source" '
-            match($0, / +notify_volume_([[:alnum:]]+)\(\)/) {
-                print substr($0, RSTART + 18, RLENGTH - 20) > "/dev/stdout"
-            }
-        ' "$source" || exit "$EX_USAGE"
-        exit "$EX_OK"
+        awk -v source="$source" 'match($0, / +notify_volume_([[:alnum:]]+)\(\)/) { print substr($0, RSTART + 18, RLENGTH - 20) }' "$source" || EXITCODE=$EX_USAGE
     }
 
-    setup_notification_icons() {
-        not_empty "$SYMBOLIC_ICON_SUFFIX" && apply_symbolic_icon_suffix;
-    }
+    setup_notification_icons() { not_empty "$SYMBOLIC_ICON_SUFFIX" && apply_symbolic_icon_suffix; }
 
     show_volume_notification() {
         $DISPLAY_NOTIFICATIONS || return
@@ -107,166 +87,109 @@ define_notify() {
     }
 
     notify_volume_libnotify() {
-        local -r vol=$1
-        local -r icon=$2
-        local -r summary=$3
-        local -r body=${*:4}
-        local args=(
-            '-t' "$EXPIRES"
-        )
+        local vol=$1 icon=$2 summary=$3 body=${*:4}
+        local args=('-t' "$EXPIRES")
         local hints=(
-            # Replaces previous notification in some notification servers
-            'string:synchronous:volume'
-            # Replaces previous notification in NotifyOSD
-            'string:x-canonical-private-synchronous:volume'
+            'string:synchronous:volume'                     # Replace previous notification in some notification servers
+            'string:x-canonical-private-synchronous:volume' # Replace previous notification in NotifyOSD
         )
         local executable
 
-        # If we're not drawing our own progress bar, allow the notification daemon to draw its own (if supported)
+        # Add progress hint if we're not drawing our own (if supported)
         $SHOW_VOLUME_PROGRESS || hints+=( "int:value:$vol" )
 
-        # (( ${#NOTIFY_CAPS[@]} < 1 )) && load_notify_server_caps
+        # Load notification server capabilities if not already loaded
         [[ ${#NOTIFY_CAPS[@]} -lt 1 ]] && load_notify_server_caps
 
+        # Add icon hints if supported
         if has_capability icon-static || has_capability icon-multi; then
-            # haskell-notification-daemon (aka deadd-notification-center) does not support -i|--icon, but supports string:image-path
             args+=( '-i' "$icon" )
-            hints+=( "string:image-path:$icon" )
+            hints+=( "string:image-path:$icon" ) # For linux_notification_center, supports string:image-path instead of -i|--icon
         fi
 
+        # Add sound hint if sound is enabled and supported
         $PLAY_SOUND && has_capability sound && hints+=( "string:sound-name:audio-volume-change" )
 
+        # Dunst-specific options
         if [[ $NOTIFICATION_METHOD == "dunst" ]]; then
             hints+=( "string:x-dunst-stack-tag:volume" )
-
             if ! isset NO_NOTIFY_COLOR; then
-                if is_muted; then
-                    hints+=( "string:fgcolor:$COLOR_MUTED" )
-                else
-                    hints+=( "string:fgcolor:$(volume_color "$vol")" )
-                fi
+                local color
+                if is_muted; then color=$COLOR_MUTED; else color=$(volume_color "$vol"); fi
+                hints+=( "string:fgcolor:$color" )
             fi
         fi
 
+        # Determine executable and additional arguments
         if $USE_DUNSTIFY; then
             executable="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}dunstify"
-
             args+=( '-r' 1000 )
 
             # Transient notifications will bypass the idle_threshold setting.
             # Should be boolean, but Notify-OSD doesn't support boolean yet. Dunst checks
-            # for int and bool with transient so lets play nice with both servers.
+            # for int and bool with transient so use what works with both servers.
             hints+=( "int:transient:1" )
         elif isset USE_NOTIFY_SEND_PY; then
             executable="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}notify-send.py"
-
-            # Replaces previous notification, but leaves itself running in the bg to work
-            args+=( --replaces-process volume )
-
-            # By-pass the server's persistence capability, if it should exist
-            hints+=( "boolean:transient:true" )
-
-            # Prefix all hints with --hint to work with notify-send.py
-            hints=( "${hints[@]/#/--hint }" )
+            args+=( --replaces-process volume ) # Replaces previous notification, but leaves itself running in the bg to work
+            hints+=( "boolean:transient:true" ) # By-pass the server's persistence capability, if it should exist
+            hints=( "${hints[@]/#/--hint }" ) # Prefix all hints with --hint to work with notify-send.py
         else
             executable="${NOTIFY_PATH:+${NOTIFY_PATH%/}/}notify-send"
         fi
 
-        command_exists "$executable" || {
-            error "$executable not found. Please install it or set NOTIFY_PATH to the correct path."
-            exit "$EX_UNAVAILABLE"
-        }
+        command_exists "$executable" || { error "$executable not found. Please install it or set NOTIFY_PATH to the correct path."; exit "$EX_UNAVAILABLE"; }
 
         read -ra hints <<< "${hints[@]/#/-h }"
-
         "$executable" "${hints[@]}" "${args[@]}" "$summary" "$body" &
     }
 
     notify_volume_xosd() {
-        local -r vol=$1
-        local -r text=${*:2}
+        local vol=$1 text=${*:2}
+        local executable="${XOSD_PATH:+${XOSD_PATH%/}/}osd_cat"
         local percentage
-        local executable
+        local color
 
-        if is_muted; then
-            color=$COLOR_MUTED
-            percentage=0
-        else
-            color=$(volume_color "$vol")
-            percentage=$vol
-        fi
+        if is_muted; then percentage=0; color=$COLOR_MUTED
+        else percentage=$vol; color=$(volume_color "$vol"); fi
 
-        executable="${XOSD_PATH:+${XOSD_PATH%/}/}osd_cat"
+        command_exists "$executable" || { error "$executable not found. Please install it or set XOSD_PATH to the correct path."; exit "$EX_UNAVAILABLE"; }
 
-        command_exists "$executable" || {
-            error "$executable not found. Please install it or set XOSD_PATH to the correct path."
-            exit "$EX_UNAVAILABLE"
-        }
-
-        "$executable" \
-            --align center \
-            -b percentage \
-            -P "$percentage" \
-            -d "$(ms_to_secs "$EXPIRES")" \
-            -p top \
-            -A center \
-            -c "$color" \
-            -T "$text" \
-            -O 2 \
-            -u "$COLOR_XOSD_OUTLINE" & disown
+        "$executable" --align center -b percentage -P "$percentage" -d "$(ms_to_secs "$EXPIRES")" -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" & disown
     }
 
     # Note: a patch with a notify-send script for herbe, not in the current version at this
     #       time but would make this irrelevant. See https://github.com/dudik/herbe/pull/10
     notify_volume_herbe() {
         local -r text=$*
-        local executable
+        local executable="${HERBE_PATH:+${HERBE_PATH%/}/}herbe"
 
-        # Dismiss existing/pending notifications to prevent queuing
-        pkill -SIGUSR1 herbe
+        command_exists "$executable" || { error "$executable not found. Please install it or set HERBE_PATH to the correct path."; exit "$EX_UNAVAILABLE"; }
 
-        executable="${HERBE_PATH:+${HERBE_PATH%/}/}herbe"
-
-        command_exists "$executable" || {
-            error "$executable not found. Please install it or set HERBE_PATH to the correct path."
-            exit "$EX_UNAVAILABLE"
-        }
-
+        pkill -SIGUSR1 herbe # Dismiss existing/pending notifications to prevent queuing
         "$executable" "$text" & disown
     }
 
     notify_volume_volnoti() {
         local -r vol=$1
-        local executable
-        executable="${VOLNOTI_PATH:+${VOLNOTI_PATH%/}/}volnoti-show"
+        local executable="${VOLNOTI_PATH:+${VOLNOTI_PATH%/}/}volnoti-show"
 
-        command_exists "$executable" || {
-            error "$executable not found. Please install it or set VOLNOTI_PATH to the correct path."
-            exit "$EX_UNAVAILABLE"
-        }
+        command_exists "$executable" || { error "$executable not found. Please install it or set VOLNOTI_PATH to the correct path."; exit "$EX_UNAVAILABLE"; }
 
-        if is_muted; then
-            "$executable" -m "$vol"
-        else
-            "$executable" "$vol"
-        fi
+        if is_muted; then "$executable" -m "$vol"
+        else "$executable" "$vol"; fi
     }
 
     notify_volume_kosd() {
         local -r vol=$1
-        local -r muted=$(is_muted && echo 1 || echo 0)
+        local muted
+        if is_muted; then muted=1; else muted=0; fi
         qdbus org.kde.kded /modules/kosd showVolume "$vol" "$muted"
     }
 }
 
 define_output_formats() {
-    output_volume_default() {
-        if is_muted; then
-            echo MUTE
-        else
-            echo "$(get_volume)%"
-        fi
-    }
+    output_volume_default() { if is_muted; then echo MUTE; else echo "$(get_volume)%"; fi }
 
     # Format options:
     #   %v = volume percentage or "MUTE" when muted
@@ -282,11 +205,8 @@ define_output_formats() {
         string=${string//\%p/$(progress_bar "$vol")}
         string=${string//\%i/$(get_volume_emoji "$vol")}
 
-        if is_muted; then
-            echo -ne "${string//\%v/MUTED}"
-        else
-            echo -ne "$string"
-        fi
+        if is_muted; then echo -ne "${string//\%v/MUTED}"
+        else echo -ne "$string"; fi
     }
 
     output_volume_i3blocks() {
@@ -307,16 +227,7 @@ define_output_formats() {
         echo -ne "$full_text$short_text"
     }
 
-    # Outputs the current volume for xob.
-    output_volume_xob() {
-        local -ir vol=$(get_volume)
-
-        if is_muted; then
-            echo "${vol}!"
-        else
-            echo "$vol"
-        fi
-    }
+    output_volume_xob() { echo "$(get_volume)$(is_muted && echo "!")"; }
 }
 
 define_commands() {
@@ -352,18 +263,9 @@ define_commands() {
         esac
     }
 
-    increase_volume() {
-        set_volume "${1:?$(error 'Step is required')}" "+"
-    }
-
-    decrease_volume() {
-        set_volume "${1:?$(error 'Step is required')}" "-"
-    }
-
-    toggle_mute() {
-        invalidate_cache
-        wpctl set-mute "$NODE_ID" toggle
-    }
+    increase_volume() { set_volume "${1:?$(error 'Step is required')}" "+"; }
+    decrease_volume() { set_volume "${1:?$(error 'Step is required')}" "-"; }
+    toggle_mute() { invalidate_cache; wpctl set-mute "$NODE_ID" toggle; }
 
     output_volume() {
         local -r for=${1:?$(error 'Output method is required')}
@@ -376,10 +278,7 @@ define_commands() {
         esac
     }
 
-    list_output_formats() {
-        awk 'match($0,/ +output_volume_([[:alnum:]]+)\(\)/) {print substr($0, RSTART + 18, RLENGTH - 20)}' "${BASH_SOURCE[0]}" || exit "$EX_USAGE"
-        exit "$EX_OK"
-    }
+    list_output_formats() { awk 'match($0,/ +output_volume_([[:alnum:]]+)\(\)/) {print substr($0, RSTART + 18, RLENGTH - 20)}' "${BASH_SOURCE[0]}" || EXITCODE=$EX_USAGE; }
 
     usage() {
         cat <<- EOF 1>&2
@@ -513,11 +412,7 @@ progress_bar() {
     echo "${bar// /█}"
 }
 
-apply_symbolic_icon_suffix() {
-    for i in "${!ICONS_SYMBOLIC[@]}"; do
-        ICONS_SYMBOLIC[i]="${ICONS_SYMBOLIC[i]}${SYMBOLIC_ICON_SUFFIX}"
-    done
-}
+apply_symbolic_icon_suffix() { for i in "${!ICONS_SYMBOLIC[@]}"; do ICONS_SYMBOLIC[i]="${ICONS_SYMBOLIC[i]}${SYMBOLIC_ICON_SUFFIX}"; done; }
 
 volume_color() {
     local -ir vol=${1:?$(error 'A volume is required')}
@@ -561,23 +456,14 @@ init_audio() {
     MAX_VOL=$(get_max_volume)
 }
 
-get_node_id() {
-    pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."node.name" == "'"$NODE_NAME"'") | .id'
-}
-
-get_node_nick() {
-    pw_dump | jq -r '.[] | select(.id == '$NODE_ID') | .info.props."node.nick"'
-}
+get_node_id() { pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."node.name" == "'"$NODE_NAME"'") | .id'; }
+get_node_nick() { pw_dump | jq -r '.[] | select(.id == '"$NODE_ID"') | .info.props."node.nick"'; }
 
 get_node_display_name() {
-    if isset NODE_ALIASES[$NODE_ID]; then
-        echo "${NODE_ALIASES[$NODE_ID]}"
-    elif isset NODE_ALIASES[$NODE_NAME]; then
-        echo "${NODE_ALIASES[$NODE_NAME]}"
-    elif isset NODE_ALIASES["$NODE_NICK"]; then
-        echo "${NODE_ALIASES[$NODE_NICK]}"
-    else
-        get_node_nick
+    if isset NODE_ALIASES["$NODE_ID"]; then echo "${NODE_ALIASES[$NODE_ID]}"
+    elif isset NODE_ALIASES["$NODE_NAME"]; then echo "${NODE_ALIASES[$NODE_NAME]}"
+    elif isset NODE_ALIASES["$NODE_NICK"]; then echo "${NODE_ALIASES[$NODE_NICK]}"
+    else get_node_nick
     fi
 }
 
@@ -592,9 +478,7 @@ get_node_display_name() {
 # }
 
 pw_dump() {
-    if [[ $COMMAND == "listen" ]] || empty "$PW_DUMP"; then
-        PW_DUMP=$(pw-dump)
-    fi
+    if [[ $COMMAND == "listen" ]] || empty "$PW_DUMP"; then PW_DUMP=$(pw-dump); fi
     echo "$PW_DUMP"
 }
 
@@ -611,7 +495,7 @@ listen() {
     not_empty "$output" && output_volume "$output"
 
     # Monitor events and filter for the sink ID
-    pw-cli subscribe | stdbuf -oL grep -F "object.id = $NODE_ID" | while IFS= read -r event; do
+    pw-cli subscribe | stdbuf -oL grep -F "object.id = $NODE_ID" | while IFS= read -r; do
         show_volume_notification
         update_statusbar
         play_volume_changed
@@ -620,27 +504,16 @@ listen() {
 }
 
 pw_play() {
-    local -r file=$1
-
-    command_exists pw-play || {
-        error "pw-play is not installed or not in \$PATH"
-        return 1
-    }
-
-    pw-play --target "$NODE_ID" "$file" &
+    command_exists pw-play || { error "pw-play is not installed or not in \$PATH"; return 1; }
+    pw-play --target "$NODE_ID" "$1" &
 }
 
 get_volume_info() {
     local -r type=${1:?$(error 'Volume type (default/min/max) is required')}
     local vol
+    vol=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "volume") | .type.'"$type"'' 2>/dev/null)
 
-    vol=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "volume") | .type.'$type'' 2>/dev/null)
-
-    if empty "$vol"; then
-        echo "Error: $type volume information not found for NODE_ID=$NODE_ID" >&2
-        return 1
-    fi
-
+    empty "$vol" && { echo "Error: $type volume information not found for NODE_ID=$NODE_ID" >&2; return 1; }
     echo "$vol" | awk '{print $1 * 100}'
 }
 
@@ -649,14 +522,14 @@ get_min_volume() { get_volume_info "min"; }
 get_max_volume() { get_volume_info "max"; }
 
 init_color() {
-    if has_color; then
+    has_color && {
         COLOR_RESET=$'\033[0m'
         COLOR_RED=$'\033[0;31m'
         COLOR_GREEN=$'\033[0;32m'
         COLOR_YELLOW=$'\033[0;33m'
         COLOR_MAGENTA=$'\033[0;35m'
         COLOR_CYAN=$'\033[0;36m'
-    fi
+    }
 }
 
 load_config() {
@@ -754,26 +627,16 @@ exec_command() {
                 *) set_volume "$1" ;;
             esac
             ;;
-        mute)
-            toggle_mute
-            ;;
-        listen)
-            listen "$*"
-            ;;
+        mute) toggle_mute ;;
+        listen) listen "$*" ;;
         output)
             case "$#" in 0) usage ;; esac
             output_volume "$*"
             exit "${EXITCODE:-$EX_OK}"
             ;;
-        outputs)
-            list_output_formats
-            ;;
-        notifications)
-            list_notification_methods
-            ;;
-        *)
-            usage
-            ;;
+        outputs) list_output_formats ;;
+        notifications) list_notification_methods ;;
+        *) usage ;;
     esac
 }
 
@@ -781,30 +644,20 @@ play_volume_changed() {
     $PLAY_SOUND || return
 
     # Sound can be handled by the notification method
-    if $DISPLAY_NOTIFICATIONS && has_capability sound; then
-        return
-    fi
+    if $DISPLAY_NOTIFICATIONS && has_capability sound; then return; fi
 
-    if $USE_CANBERRA; then
-        ca_play "$SOUND_VOLUME_CHANGED" "Volume Changed"
-    else
-        pw_play "$SOUND_VOLUME_CHANGED"
-    fi
+    if $USE_CANBERRA; then ca_play "$SOUND_VOLUME_CHANGED" "Volume Changed"
+    else pw_play "$SOUND_VOLUME_CHANGED"; fi
 }
 
 ca_play() {
     local -r file=$1 desc=$2
     local executable="${CANBERRA_PATH:+${CANBERRA_PATH%/}/}canberra-gtk-play"
 
-    command_exists "$executable" || {
-        error "$executable not found. Please install it or set NOTIFY_PATH to the correct path."
-        return 1
-    }
+    command_exists "$executable" || { error "$executable not found. Please install it or set NOTIFY_PATH to the correct path."; return 1; }
 
-    if [[ -f $file ]]; then
-        "$executable" -f "$file" -d "$desc"
-    else
-        "$executable" -i "audio-volume-change" -d "$desc"
+    if [[ -f $file ]]; then "$executable" -f "$file" -d "$desc"
+    else "$executable" -i "audio-volume-change" -d "$desc"
     fi
 }
 
@@ -829,14 +682,12 @@ main() {
     # they handle notifications and/or statusbar updates manually
     declare -a POST_HOOK_EXEMPT_COMMANDS=(
         listen
+        notifications
+        outputs
     )
 
     # Exit codes
-    declare -ir \
-        EX_OK=0 \
-        EX_URGENT=33 \
-        EX_USAGE=64 \
-        EX_UNAVAILABLE=69
+    declare -ir EX_OK=0 EX_URGENT=33 EX_USAGE=64 EX_UNAVAILABLE=69
 
     # Main program exit code
     declare -i EXITCODE=$EX_OK
@@ -862,12 +713,7 @@ main() {
     )
 
     # Emoji-based icons.
-    declare -a ICONS_EMOJI=(
-        ﱝ
-        墳
-        奄
-        奔
-    )
+    declare -a ICONS_EMOJI=( ﱝ 墳 奄 奔 )
 
     # Volume changed sound.
     declare SOUND_VOLUME_CHANGED=${SOUND_VOLUME_CHANGED:-/usr/share/sounds/freedesktop/stereo/audio-volume-change.oga}
@@ -891,10 +737,7 @@ main() {
     # PipeWire node aliases
     declare -gA NODE_ALIASES=()
 
-    declare -i \
-        DEFAULT_VOL=100 \
-        MIN_VOL=0 \
-        MAX_VOL=100
+    declare -i DEFAULT_VOL=100 MIN_VOL=0 MAX_VOL=100
 
     # Cached output of `pw-dump`; so we don't have to call it each time we need it
     declare PW_DUMP=""
@@ -909,13 +752,7 @@ main() {
         COLOR_XOSD_OUTLINE=${COLOR_XOSD_OUTLINE:-#222222} \
         COLOR_TEXT=${COLOR_TEXT:-#FFFF00}
 
-    declare \
-        COLOR_RESET \
-        COLOR_RED \
-        COLOR_GREEN \
-        COLOR_YELLOW \
-        COLOR_MAGENTA \
-        COLOR_CYAN
+    declare COLOR_RESET COLOR_RED COLOR_GREEN COLOR_YELLOW COLOR_MAGENTA COLOR_CYAN
 
     ###########################################################
     # Command line option variables
