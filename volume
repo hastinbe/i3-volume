@@ -633,7 +633,7 @@ ca_play() {
     local -r file=$1 desc=$2
     local executable="${CANBERRA_PATH:+${CANBERRA_PATH%/}/}canberra-gtk-play"
 
-    command_exists "$executable" || { error "$executable not found. Please install it or set NOTIFY_PATH to the correct path."; return 1; }
+    command_exists "$executable" || { error "$executable not found. Please install it or set CANBERRA_PATH to the correct path."; return 1; }
 
     if [[ -f $file ]]; then "$executable" -f "$file" -d "$desc"
     else "$executable" -i "audio-volume-change" -d "$desc"
@@ -767,6 +767,7 @@ main() {
 
     # Requires options to be parsed first
     init_audio
+
     exec_command "${CMDARGS[*]}" && post_command_hook
 
     exit ${EXITCODE:-$EX_OK}
