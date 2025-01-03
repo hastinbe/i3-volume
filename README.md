@@ -47,47 +47,44 @@ Commands:
   down <value>                decrease volume
   set <value>                 set volume
   mute                        toggle mute
-  listen                      listen for changes to a PulseAudio sink
-  output <format>             output volume in a supported format
-                              custom format substitutions:
-                                  %v = volume
-                                  %s = sink name (PulseAudio only)
+  listen                      monitor volume changes on a sink
+  output <format>             display volume in a custom format
+                              format placeholders:
+                                  %v = volume level
+                                  %s = sink name
                                   %p = volume progress bar
                                   %i = volume icon/emoji
-                                  %P = active port description (PulseAudio only)
+                                  %P = active port description
 
                                   examples:
                                       "Volume is %v" = Volume is 50%
                                       "%i %v %p \n"  = 奔 50% ██████████
-  outputs                     show available output formats
-  notifications               show available notification methods
+  outputs                     show supported output formats
+  notifications               list notification methods
   help                        display help
 
 Options:
   -n                          enable notifications
-  -C                          use libcanberra for playing event sounds
+  -C                          play event sounds using libcanberra
   -P                          play sound for volume changes
-  -j <muted,high,low,medium>  specify custom volume emojis as a comma separated list
-  -t <process_name>           process name of status bar (requires -u)
+  -j <muted,high,low,medium>  custom volume emojis
+  -s <sink>                   specify sink (default: @DEFAULT_AUDIO_SINK@)
+  -t <process_name>           status bar process name (requires -u)
+  -A <node.nick:alias>        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   -u <signal>                 signal to update status bar (requires -t)
-  -x <value>                  maximum volume
-  -X <value>                  maximum amplification; if supported (default: 2)
+  -x <value>                  set maximum volume
   -h                          display help
-
-PulseAudio Options:
-  -s <sink>                   symbolic name of sink
-  -A <port:alias>             specify an alias for a port name (e.g., -A "Speakers:Living Room")
 
 Notification Options:
   -N <method>                 notification method (default: libnotify)
-  -p                          enable progress bar
+  -p                          enable progress bar in notifications
   -L <placement>              progress bar placement (default: summary; requires -p)
                               placements:
                                   body
                                   summary
-  -e <expires>                expiration time of notifications in ms
-  -l                          use fullcolor instead of symbolic icons
-  -S <suffix>                 append suffix to symbolic icon names
+  -e <ms>                     notification expiration time
+  -l                          use full-color icons
+  -S <suffix>                 add suffix to symbolic icon names
   -y                          use dunstify (default: notify-send)
 
 Environment Variables:
@@ -95,9 +92,9 @@ Environment Variables:
   HERBE_PATH                  path to herbe
   VOLNOTI_PATH                path to volnoti-show
   CANBERRA_PATH               path to canberra-gtk-play
-  NOTIFY_PATH                 path to command that sends notifications
-  NO_NOTIFY_COLOR             flag to disable colors in notifications
-  USE_NOTIFY_SEND_PY          flag to use notify-send.py instead of notify-send
+  NOTIFY_PATH                 path to notification command
+  NO_NOTIFY_COLOR             disable colors in notifications
+  USE_NOTIFY_SEND_PY          use notify-send.py instead of notify-send
 ```
 
 ### Configuration

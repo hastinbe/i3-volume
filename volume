@@ -287,46 +287,44 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
   ${COLOR_GREEN}down <value>${COLOR_RESET}                decrease volume
   ${COLOR_GREEN}set <value>${COLOR_RESET}                 set volume
   ${COLOR_GREEN}mute${COLOR_RESET}                        toggle mute
-  ${COLOR_GREEN}listen${COLOR_RESET}                      listen for changes to a PipeWire sink
-  ${COLOR_GREEN}output <format>${COLOR_RESET}             output volume in a supported format
-                              custom format substitutions:
+  ${COLOR_GREEN}listen${COLOR_RESET}                      monitor volume changes on a sink
+  ${COLOR_GREEN}output <format>${COLOR_RESET}             display volume in a custom format
+                              format placeholders:
                                   %v = volume
-                                  %s = sink name (PipeWire only)
+                                  %s = sink name
                                   %p = volume progress bar
                                   %i = volume icon/emoji
-                                  %P = active port description (PipeWire only)
+                                  %P = active port description
 
                                   examples:
                                       "Volume is %v" = Volume is 50%
                                       "%i %v %p \n"  = 奔 50% ██████████
-  ${COLOR_GREEN}outputs${COLOR_RESET}                     show available output formats
-  ${COLOR_GREEN}notifications${COLOR_RESET}               show available notification methods
-  ${COLOR_GREEN}help${COLOR_RESET}                        display help
+  ${COLOR_GREEN}outputs${COLOR_RESET}                     show supported output formats
+  ${COLOR_GREEN}notifications${COLOR_RESET}               list notification methods
+  ${COLOR_GREEN}help${COLOR_RESET}                        show help
 
 ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-n${COLOR_RESET}                          enable notifications
-  ${COLOR_GREEN}-C${COLOR_RESET}                          use libcanberra for playing event sounds
+  ${COLOR_GREEN}-C${COLOR_RESET}                          play event sounds using libcanberra
   ${COLOR_GREEN}-P${COLOR_RESET}                          play sound for volume changes
-  ${COLOR_GREEN}-j <muted,high,low,medium>${COLOR_RESET}  specify custom volume emojis as a comma separated list
-  ${COLOR_GREEN}-t <process_name>${COLOR_RESET}           process name of status bar (${COLOR_MAGENTA}requires -u${COLOR_RESET})
+  ${COLOR_GREEN}-j <muted,high,low,medium>${COLOR_RESET}  custom volume emojis
+  ${COLOR_GREEN}-s <sink>${COLOR_RESET}                   specify sink (${COLOR_MAGENTA}default: @DEFAULT_AUDIO_SINK@${COLOR_RESET})
+  ${COLOR_GREEN}-t <process_name>${COLOR_RESET}           status bar process name (${COLOR_MAGENTA}requires -u${COLOR_RESET})
+  ${COLOR_GREEN}-A <node.nick:alias>${COLOR_RESET}        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   ${COLOR_GREEN}-u <signal>${COLOR_RESET}                 signal to update status bar (${COLOR_MAGENTA}requires -t${COLOR_RESET})
-  ${COLOR_GREEN}-x <value>${COLOR_RESET}                  maximum volume
-  ${COLOR_GREEN}-X <value>${COLOR_RESET}                  maximum amplification; if supported (${COLOR_MAGENTA}default: 2${COLOR_RESET})
-  ${COLOR_GREEN}-h${COLOR_RESET}                          display help
-
-${COLOR_YELLOW}PipeWire Options:${COLOR_RESET}
-  ${COLOR_GREEN}-s <sink>${COLOR_RESET}                   symbolic name of sink
+  ${COLOR_GREEN}-x <value>${COLOR_RESET}                  set maximum volume
+  ${COLOR_GREEN}-h${COLOR_RESET}                          show help
 
 ${COLOR_YELLOW}Notification Options:${COLOR_RESET}
   ${COLOR_GREEN}-N <method>${COLOR_RESET}                 notification method (${COLOR_MAGENTA}default: libnotify${COLOR_RESET})
-  ${COLOR_GREEN}-p${COLOR_RESET}                          enable progress bar
+  ${COLOR_GREEN}-p${COLOR_RESET}                          enable progress bar in notifications
   ${COLOR_GREEN}-L <placement>${COLOR_RESET}              progress bar placement (${COLOR_MAGENTA}default: summary${COLOR_RESET}; ${COLOR_MAGENTA}requires -p${COLOR_RESET})
                               placements:
                                   body
                                   summary
-  ${COLOR_GREEN}-e <expires>${COLOR_RESET}                expiration time of notifications in ms
-  ${COLOR_GREEN}-l${COLOR_RESET}                          use fullcolor instead of symbolic icons
-  ${COLOR_GREEN}-S <suffix>${COLOR_RESET}                 append suffix to symbolic icon names
+  ${COLOR_GREEN}-e <ms>${COLOR_RESET}                     notification expiration time
+  ${COLOR_GREEN}-l${COLOR_RESET}                          use full-color icons
+  ${COLOR_GREEN}-S <suffix>${COLOR_RESET}                 add suffix to symbolic icon names
   ${COLOR_GREEN}-y${COLOR_RESET}                          use dunstify (${COLOR_MAGENTA}default: notify-send${COLOR_RESET})
 
 ${COLOR_YELLOW}Environment Variables:${COLOR_RESET}
