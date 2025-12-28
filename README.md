@@ -42,14 +42,14 @@ Usage: ./volume [<options>] <command> [<args>]
 Control volume and related notifications.
 
 Commands:
-  up <value>                  increase volume
-  down <value>                decrease volume
+  up [value]                  increase volume (uses default step if value omitted)
+  down [value]                decrease volume (uses default step if value omitted)
   set <value>                 set volume
   mute                        toggle mute
   mic <cmd> [value]           control microphone
                               commands:
-                                  up <value>    - increase microphone volume
-                                  down <value>  - decrease microphone volume
+                                  up [value]    - increase microphone volume (uses default step if value omitted)
+                                  down [value]  - decrease microphone volume (uses default step if value omitted)
                                   set <value>   - set microphone volume
                                   mute          - toggle microphone mute
   listen                      monitor volume changes on a sink
@@ -99,6 +99,7 @@ Options:
   -t <process_name>           status bar process name (requires -u)
   -A <node.nick:alias>        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   -u <signal>                 signal to update status bar (requires -t)
+  -D <value>                  set default step size (default: 5)
   -x <value>                  set maximum volume
   -h                          display help
 
@@ -145,7 +146,19 @@ USE_FULLCOLOR_ICONS=true
 PORT_ALIASES[analog-output-speaker]=Speaker
 ```
 
-Now every invocation of the script will use these settings, unless overridden by command line options. To find more variables, check the [source code](https://github.com/hastinbe/i3-volume/blob/master/volume) of the `parse_opts` and `main` functions.
+Now every invocation of the script will use these settings, unless overridden by command line options. For example, to set a default step size:
+
+```
+DEFAULT_STEP=10
+```
+
+This allows you to use `volume up` or `volume down` without specifying a step size each time. You can also use the `-D` option to set and save the default step size:
+
+```bash
+volume -D 10 up
+```
+
+This will save `DEFAULT_STEP=10` to your config file automatically, making it persistent for future invocations. To find more variables, check the [source code](https://github.com/hastinbe/i3-volume/blob/master/volume) of the `parse_opts` and `main` functions.
 
 ## Migrating
 

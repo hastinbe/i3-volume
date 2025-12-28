@@ -314,8 +314,20 @@ define_commands() {
         esac
     }
 
-    increase_volume() { set_volume "${1:?$(error 'Step is required')}" "+"; }
-    decrease_volume() { set_volume "${1:?$(error 'Step is required')}" "-"; }
+    increase_volume() {
+        local step=${1:-}
+        if empty "$step"; then
+            step=${DEFAULT_STEP:-5}
+        fi
+        set_volume "$step" "+"
+    }
+    decrease_volume() {
+        local step=${1:-}
+        if empty "$step"; then
+            step=${DEFAULT_STEP:-5}
+        fi
+        set_volume "$step" "-"
+    }
     toggle_mute() { invalidate_cache; wpctl set-mute "$NODE_ID" toggle; }
 
     set_mic_volume() {
@@ -340,8 +352,20 @@ define_commands() {
         esac
     }
 
-    increase_mic_volume() { set_mic_volume "${1:?$(error 'Step is required')}" "+"; }
-    decrease_mic_volume() { set_mic_volume "${1:?$(error 'Step is required')}" "-"; }
+    increase_mic_volume() {
+        local step=${1:-}
+        if empty "$step"; then
+            step=${DEFAULT_STEP:-5}
+        fi
+        set_mic_volume "$step" "+"
+    }
+    decrease_mic_volume() {
+        local step=${1:-}
+        if empty "$step"; then
+            step=${DEFAULT_STEP:-5}
+        fi
+        set_mic_volume "$step" "-"
+    }
     toggle_mic_mute() {
         if empty "$SOURCE_ID"; then
             init_source
@@ -1273,8 +1297,8 @@ ${COLOR_YELLOW}Usage:${COLOR_RESET} $0 [<options>] <command> [<args>]
 Control volume and related notifications.
 
 ${COLOR_YELLOW}Commands:${COLOR_RESET}
-  ${COLOR_GREEN}up <value>${COLOR_RESET}                  increase volume
-  ${COLOR_GREEN}down <value>${COLOR_RESET}                decrease volume
+  ${COLOR_GREEN}up [value]${COLOR_RESET}                  increase volume (uses default step if value omitted)
+  ${COLOR_GREEN}down [value]${COLOR_RESET}                decrease volume (uses default step if value omitted)
   ${COLOR_GREEN}set <value>${COLOR_RESET}                 set volume
   ${COLOR_GREEN}mute${COLOR_RESET}                        toggle mute
   ${COLOR_GREEN}mic <cmd> [value]${COLOR_RESET}           control microphone
@@ -1330,6 +1354,7 @@ ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-t <process_name>${COLOR_RESET}           status bar process name (${COLOR_MAGENTA}requires -u${COLOR_RESET})
   ${COLOR_GREEN}-A <node.nick:alias>${COLOR_RESET}        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   ${COLOR_GREEN}-u <signal>${COLOR_RESET}                 signal to update status bar (${COLOR_MAGENTA}requires -t${COLOR_RESET})
+  ${COLOR_GREEN}-D <value>${COLOR_RESET}                  set default step size (${COLOR_MAGENTA}default: 5${COLOR_RESET})
   ${COLOR_GREEN}-x <value>${COLOR_RESET}                  set maximum volume
   ${COLOR_GREEN}-h${COLOR_RESET}                          show help
 
@@ -1564,6 +1589,49 @@ load_config() {
     : "${NOTIFICATION_METHOD:=libnotify}"
 }
 
+save_config_value() {
+    local -r key=$1
+    local -r value=$2
+    local -r config=${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume/config
+    local config_dir
+    config_dir=$(dirname "$config")
+
+    # Create config directory if it doesn't exist
+    mkdir -p "$config_dir" || {
+        error "Failed to create config directory: $config_dir"
+        return 1
+    }
+
+    # If config file exists, update or add the key
+    if [[ -f $config ]]; then
+        # Check if key already exists
+        if grep -q "^[[:space:]]*${key}=" "$config" 2>/dev/null; then
+            # Update existing key (handle both quoted and unquoted values)
+            if [[ "$value" =~ ^[0-9]+$ ]]; then
+                # Numeric value - no quotes needed
+                sed -i "s|^[[:space:]]*${key}=.*|${key}=${value}|" "$config"
+            else
+                # String value - add quotes if not already quoted
+                sed -i "s|^[[:space:]]*${key}=.*|${key}=\"${value}\"|" "$config"
+            fi
+        else
+            # Add new key at the end
+            if [[ "$value" =~ ^[0-9]+$ ]]; then
+                echo "${key}=${value}" >> "$config"
+            else
+                echo "${key}=\"${value}\"" >> "$config"
+            fi
+        fi
+    else
+        # Create new config file
+        if [[ "$value" =~ ^[0-9]+$ ]]; then
+            echo "${key}=${value}" > "$config"
+        else
+            echo "${key}=\"${value}\"" > "$config"
+        fi
+    fi
+}
+
 # Rearrange all options to place flags first
 # Author: greycat
 # URL: https://mywiki.wooledge.org/ComplexOptionParsing
@@ -1594,7 +1662,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:A:Ce:hj:lL:nN:pPs:S:t:u:yI:
+    local optstring=:A:Ce:hj:lL:nN:pPs:S:t:u:yI:D:
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -1619,6 +1687,8 @@ parse_opts() {
             t    ) STATUSLINE=$OPTARG ;;
             u    ) SIGNAL=$OPTARG ;;
             I    ) SOURCE_NAME=$OPTARG ;;
+            D    ) DEFAULT_STEP=$OPTARG
+                   save_config_value "DEFAULT_STEP" "$OPTARG" ;;
             y    ) USE_DUNSTIFY=true ;;
             h | *) usage ;;
         esac
@@ -1636,12 +1706,18 @@ exec_command() {
 
     case "$COMMAND" in
         up|raise|increase)
-            case "$#" in 1) ;; *) usage ;; esac
-            increase_volume "$1"
+            case "$#" in
+                0) increase_volume ;;
+                1) increase_volume "$1" ;;
+                *) usage ;;
+            esac
             ;;
         down|lower|decrease)
-            case "$#" in 1) ;; *) usage ;; esac
-            decrease_volume "$1"
+            case "$#" in
+                0) decrease_volume ;;
+                1) decrease_volume "$1" ;;
+                *) usage ;;
+            esac
             ;;
         set)
             case "$#" in 1) ;; *) usage ;; esac
@@ -1658,6 +1734,8 @@ exec_command() {
                 1)
                     case "$1" in
                         mute) toggle_mic_mute ;;
+                        up|raise|increase) increase_mic_volume ;;
+                        down|lower|decrease) decrease_mic_volume ;;
                         *) usage ;;
                     esac
                     ;;
@@ -1833,6 +1911,7 @@ main() {
     declare -gA NODE_ALIASES=()
 
     declare -i DEFAULT_VOL=100 MIN_VOL=0 MAX_VOL=100
+    declare -i DEFAULT_STEP=${DEFAULT_STEP:-5}
 
     # Cached output of `pw-dump`; so we don't have to call it each time we need it
     declare PW_DUMP=""
