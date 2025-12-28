@@ -277,6 +277,203 @@ define_commands() {
 
     list_output_formats() { awk 'match($0,/ +output_volume_([[:alnum:]]+)\(\)/) {print substr($0, RSTART + 18, RLENGTH - 20)}' "${BASH_SOURCE[0]}" || EXITCODE=$EX_USAGE; }
 
+    list_sinks() {
+        local default_sink_name
+        default_sink_name=$(wpctl inspect @DEFAULT_AUDIO_SINK@ 2>/dev/null | awk '/[ \*]+node\.name/{gsub(/"/, "", $4); print $4}')
+
+        local sinks
+        readarray -t sinks < <(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Sink") | "\(.id)|\(.info.props."node.name")|\(.info.props."node.nick" // "N/A")"' 2>/dev/null)
+
+        if [[ ${#sinks[@]} -eq 0 ]]; then
+            error "No audio sinks found."
+            return 1
+        fi
+
+        echo "${COLOR_YELLOW}Audio Sinks:${COLOR_RESET}"
+        echo
+
+        local sink_id sink_name sink_nick vol muted is_default
+        for sink in "${sinks[@]}"; do
+            IFS='|' read -r sink_id sink_name sink_nick <<< "$sink"
+
+            # Get volume and mute status
+            vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
+            muted=$(wpctl get-volume "$sink_id" 2>/dev/null | grep -q '\[MUTED\]' && echo "MUTED" || echo "")
+
+            # Check if this is the default sink
+            if [[ "$sink_name" == "$default_sink_name" ]]; then
+                is_default="${COLOR_GREEN}*${COLOR_RESET} "
+            else
+                is_default="  "
+            fi
+
+            # Apply alias if available
+            local display_name="$sink_nick"
+            if isset NODE_ALIASES["$sink_id"]; then
+                display_name="${NODE_ALIASES[$sink_id]}"
+            elif isset NODE_ALIASES["$sink_name"]; then
+                display_name="${NODE_ALIASES[$sink_name]}"
+            elif isset NODE_ALIASES["$sink_nick"]; then
+                display_name="${NODE_ALIASES[$sink_nick]}"
+            fi
+
+            printf "%s${COLOR_CYAN}%3s${COLOR_RESET}  ${COLOR_GREEN}%s${COLOR_RESET}" "$is_default" "$sink_id" "$display_name"
+            if [[ -n "$muted" ]]; then
+                printf "  ${COLOR_RED}[MUTED]${COLOR_RESET}  ${COLOR_YELLOW}%3s%%${COLOR_RESET}" "$vol"
+            else
+                printf "  ${COLOR_YELLOW}%3s%%${COLOR_RESET}" "$vol"
+            fi
+            echo "  ${COLOR_MAGENTA}($sink_name)${COLOR_RESET}"
+        done
+        echo
+        echo "${COLOR_GREEN}*${COLOR_RESET} = default sink"
+    }
+
+    list_sources() {
+        local default_source_name
+        default_source_name=$(wpctl inspect @DEFAULT_AUDIO_SOURCE@ 2>/dev/null | awk '/[ \*]+node\.name/{gsub(/"/, "", $4); print $4}')
+
+        local sources
+        readarray -t sources < <(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Source") | "\(.id)|\(.info.props."node.name")|\(.info.props."node.nick" // "N/A")"' 2>/dev/null)
+
+        if [[ ${#sources[@]} -eq 0 ]]; then
+            error "No audio sources found."
+            return 1
+        fi
+
+        echo "${COLOR_YELLOW}Audio Sources:${COLOR_RESET}"
+        echo
+
+        local source_id source_name source_nick vol muted is_default
+        for source in "${sources[@]}"; do
+            IFS='|' read -r source_id source_name source_nick <<< "$source"
+
+            # Get volume and mute status
+            vol=$(wpctl get-volume "$source_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
+            muted=$(wpctl get-volume "$source_id" 2>/dev/null | grep -q '\[MUTED\]' && echo "MUTED" || echo "")
+
+            # Check if this is the default source
+            if [[ "$source_name" == "$default_source_name" ]]; then
+                is_default="${COLOR_GREEN}*${COLOR_RESET} "
+            else
+                is_default="  "
+            fi
+
+            # Apply alias if available
+            local display_name="$source_nick"
+            if isset NODE_ALIASES["$source_id"]; then
+                display_name="${NODE_ALIASES[$source_id]}"
+            elif isset NODE_ALIASES["$source_name"]; then
+                display_name="${NODE_ALIASES[$source_name]}"
+            elif isset NODE_ALIASES["$source_nick"]; then
+                display_name="${NODE_ALIASES[$source_nick]}"
+            fi
+
+            printf "%s${COLOR_CYAN}%3s${COLOR_RESET}  ${COLOR_GREEN}%s${COLOR_RESET}" "$is_default" "$source_id" "$display_name"
+            if [[ -n "$muted" ]]; then
+                printf "  ${COLOR_RED}[MUTED]${COLOR_RESET}  ${COLOR_YELLOW}%3s%%${COLOR_RESET}" "$vol"
+            else
+                printf "  ${COLOR_YELLOW}%3s%%${COLOR_RESET}" "$vol"
+            fi
+            echo "  ${COLOR_MAGENTA}($source_name)${COLOR_RESET}"
+        done
+        echo
+        echo "${COLOR_GREEN}*${COLOR_RESET} = default source"
+    }
+
+    list_ports() {
+        if empty "$NODE_ID"; then
+            error "No sink specified. Use -s <sink> or ensure default sink is available."
+            return 1
+        fi
+
+        local sink_display_name
+        sink_display_name=$(get_node_display_name)
+
+        echo "${COLOR_YELLOW}Ports for sink: ${COLOR_GREEN}$sink_display_name${COLOR_RESET} (ID: ${COLOR_CYAN}$NODE_ID${COLOR_RESET})"
+        echo
+
+        # Try to get ports from PropInfo first
+        local ports
+        readarray -t ports < <(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | "\(.id)|\(.name)|\(.description // "N/A")"' 2>/dev/null)
+
+        # If no ports found via PropInfo, try alternative method using node properties
+        if [[ ${#ports[@]} -eq 0 ]]; then
+            readarray -t ports < <(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.props | to_entries[] | select(.key | test("port\\..*")) | "\(.key)|\(.value)"' 2>/dev/null)
+        fi
+
+        if [[ ${#ports[@]} -eq 0 ]]; then
+            echo "${COLOR_YELLOW}No ports found for this sink.${COLOR_RESET}"
+            echo "This sink may not support port switching, or port information is not available."
+            echo "Try using ${COLOR_GREEN}wpctl status${COLOR_RESET} for more information."
+            return 0
+        fi
+
+        # Get active port
+        local active_port
+        active_port=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .value' 2>/dev/null)
+
+        # If no active port from PropInfo, try node properties
+        if empty "$active_port"; then
+            active_port=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.props."audio.port" // empty' 2>/dev/null)
+        fi
+
+        local port_id port_name port_desc is_active
+        for port in "${ports[@]}"; do
+            IFS='|' read -r port_id port_name port_desc <<< "$port"
+
+            # Handle different port formats
+            if [[ -z "$port_desc" || "$port_desc" == "N/A" ]]; then
+                port_desc="$port_name"
+            fi
+
+            if [[ "$port_id" == "$active_port" || "$port_name" == "$active_port" ]]; then
+                is_active="${COLOR_GREEN}*${COLOR_RESET} "
+            else
+                is_active="  "
+            fi
+
+            printf "%s${COLOR_CYAN}%s${COLOR_RESET}  ${COLOR_GREEN}%s${COLOR_RESET}" "$is_active" "$port_id" "$port_desc"
+            if [[ -n "$port_name" && "$port_name" != "$port_desc" ]]; then
+                echo "  ${COLOR_MAGENTA}($port_name)${COLOR_RESET}"
+            else
+                echo
+            fi
+        done
+        echo
+        echo "${COLOR_GREEN}*${COLOR_RESET} = active port"
+    }
+
+    list() {
+        local -r type=${1:-}
+
+        case "$type" in
+            sinks|sink)
+                list_sinks
+                ;;
+            sources|source)
+                list_sources
+                ;;
+            ports|port)
+                list_ports
+                ;;
+            "")
+                error "List type required. Use: list sinks|sources|ports"
+                echo "  ${COLOR_GREEN}list sinks${COLOR_RESET}    - list all audio output sinks"
+                echo "  ${COLOR_GREEN}list sources${COLOR_RESET} - list all audio input sources"
+                echo "  ${COLOR_GREEN}list ports${COLOR_RESET}    - list ports for current sink"
+                EXITCODE=$EX_USAGE
+                return 1
+                ;;
+            *)
+                error "Unknown list type: $type"
+                echo "Valid types: sinks, sources, ports"
+                EXITCODE=$EX_USAGE
+                return 1
+                ;;
+        esac
+    }
+
     usage() {
         cat <<- EOF 1>&2
 ${COLOR_YELLOW}Usage:${COLOR_RESET} $0 [<options>] <command> [<args>]
@@ -288,6 +485,11 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
   ${COLOR_GREEN}set <value>${COLOR_RESET}                 set volume
   ${COLOR_GREEN}mute${COLOR_RESET}                        toggle mute
   ${COLOR_GREEN}listen${COLOR_RESET}                      monitor volume changes on a sink
+  ${COLOR_GREEN}list <type>${COLOR_RESET}                 list sinks, sources, or ports
+                              types:
+                                  sinks   - list all audio output sinks
+                                  sources - list all audio input sources
+                                  ports   - list ports for current sink
   ${COLOR_GREEN}output <format>${COLOR_RESET}             display volume in a custom format
                               format placeholders:
                                   %v = volume
@@ -608,6 +810,13 @@ exec_command() {
             ;;
         mute) toggle_mute ;;
         listen) listen "$*" ;;
+        list)
+            case "$#" in
+                0) list "" ;;
+                1) list "$1" ;;
+                *) usage ;;
+            esac
+            ;;
         output)
             case "$#" in 0) usage ;; esac
             output_volume "$*"
@@ -663,6 +872,7 @@ main() {
         listen
         notifications
         outputs
+        list
     )
 
     # Exit codes

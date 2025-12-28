@@ -16,7 +16,6 @@ Read the [installation instructions](https://github.com/hastinbe/i3-volume/wiki/
 
 Use your keyboard volume keys to increase, decrease, or mute your volume. If you have a volume indicator in your status line it will be updated to reflect the volume change. When notifications are enabled a popup will display the volume level.
 
-
 #### On-Screen Notifications
 
 | [notify-osd] | [dunst] | [xob] |
@@ -48,6 +47,11 @@ Commands:
   set <value>                 set volume
   mute                        toggle mute
   listen                      monitor volume changes on a sink
+  list <type>                 list sinks, sources, or ports
+                              types:
+                                  sinks   - list all audio output sinks
+                                  sources - list all audio input sources
+                                  ports   - list ports for current sink
   output <format>             display volume in a custom format
                               format placeholders:
                                   %v = volume level
