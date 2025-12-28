@@ -755,6 +755,282 @@ define_commands() {
         esac
     }
 
+    get_profiles_dir() {
+        echo "${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume/profiles"
+    }
+
+    save_profile() {
+        local -r profile_name=${1:?$(error 'Profile name is required')}
+        local profiles_dir profile_file
+
+        # Validate profile name (alphanumeric, dash, underscore only)
+        if [[ ! "$profile_name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            error "Invalid profile name: $profile_name"
+            echo "Profile names can only contain letters, numbers, dashes, and underscores."
+            return 1
+        fi
+
+        profiles_dir=$(get_profiles_dir)
+        profile_file="$profiles_dir/$profile_name.json"
+
+        # Create profiles directory if it doesn't exist
+        mkdir -p "$profiles_dir" || {
+            error "Failed to create profiles directory: $profiles_dir"
+            return 1
+        }
+
+        # Get current state
+        local vol muted sink_name port_id mic_vol mic_muted
+        vol=$(get_volume)
+        muted=$(is_muted && echo "true" || echo "false")
+        sink_name="$NODE_NAME"
+        port_id=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .value' 2>/dev/null || echo "")
+
+        # Get mic state if available
+        if not_empty "$SOURCE_ID"; then
+            mic_vol=$(get_mic_volume 2>/dev/null || echo "")
+            mic_muted=$(is_mic_muted 2>/dev/null && echo "true" || echo "false")
+        else
+            mic_vol=""
+            mic_muted=""
+        fi
+
+        # Create JSON profile
+        local profile_json
+        profile_json=$(jq -n \
+            --arg vol "$vol" \
+            --arg muted "$muted" \
+            --arg sink "$sink_name" \
+            --arg port "$port_id" \
+            --arg mic_vol "${mic_vol:-}" \
+            --arg mic_muted "${mic_muted:-}" \
+            '{volume: ($vol | tonumber), muted: ($muted == "true"), sink: $sink, port: (if $port == "" then null else $port end), mic_volume: (if $mic_vol == "" then null else ($mic_vol | tonumber) end), mic_muted: (if $mic_muted == "" then null else ($mic_muted == "true") end)}' 2>/dev/null)
+
+        if empty "$profile_json"; then
+            error "Failed to create profile JSON"
+            return 1
+        fi
+
+        # Save to file
+        echo "$profile_json" > "$profile_file" || {
+            error "Failed to save profile to: $profile_file"
+            return 1
+        }
+
+        echo "Profile saved: $profile_name"
+        if $DISPLAY_NOTIFICATIONS; then
+            local icon summary
+            icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[1]}" || echo "${ICONS_SYMBOLIC[1]}")
+            summary="Profile saved: $profile_name"
+
+            case "$NOTIFICATION_METHOD" in
+                xosd    ) notify_volume_xosd 0 "$summary" ;;
+                herbe   ) notify_volume_herbe "$summary" ;;
+                volnoti ) notify_volume_volnoti 0 ;;
+                kosd    ) notify_volume_kosd 0 ;;
+                *       ) notify_volume_libnotify 0 "$icon" "$summary" "" ;;
+            esac
+        fi
+    }
+
+    load_profile() {
+        local -r profile_name=${1:?$(error 'Profile name is required')}
+        local profiles_dir profile_file
+
+        profiles_dir=$(get_profiles_dir)
+        profile_file="$profiles_dir/$profile_name.json"
+
+        if [[ ! -f "$profile_file" ]]; then
+            error "Profile not found: $profile_name"
+            echo "Use 'volume profile list' to see available profiles."
+            return 1
+        fi
+
+        # Read profile JSON
+        local vol muted sink_name port_id mic_vol mic_muted
+        vol=$(jq -r '.volume // empty' "$profile_file" 2>/dev/null)
+        muted=$(jq -r '.muted // false' "$profile_file" 2>/dev/null)
+        sink_name=$(jq -r '.sink // empty' "$profile_file" 2>/dev/null)
+        port_id=$(jq -r '.port // empty' "$profile_file" 2>/dev/null)
+        mic_vol=$(jq -r '.mic_volume // empty' "$profile_file" 2>/dev/null)
+        mic_muted=$(jq -r '.mic_muted // false' "$profile_file" 2>/dev/null)
+
+        if empty "$vol"; then
+            error "Invalid profile: $profile_name (missing volume)"
+            return 1
+        fi
+
+        # Switch sink if specified and different
+        if not_empty "$sink_name" && [[ "$sink_name" != "$NODE_NAME" ]]; then
+            # Find sink by name
+            local sink_id
+            sink_id=$(pw_dump | jq -r --arg name "$sink_name" '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Sink" and .info.props."node.name" == $name) | .id' 2>/dev/null)
+
+            if not_empty "$sink_id"; then
+                wpctl set-default "$sink_id" &>/dev/null
+                invalidate_cache
+                # Reinitialize audio to get new NODE_ID
+                NODE_NAME="$sink_name"
+                NODE_ID=$(get_node_id)
+            fi
+        fi
+
+        # Set volume
+        set_volume "$vol"
+
+        # Set mute status
+        local current_muted
+        current_muted=$(is_muted && echo "true" || echo "false")
+        if [[ "$muted" == "true" && "$current_muted" != "true" ]]; then
+            toggle_mute
+        elif [[ "$muted" != "true" && "$current_muted" == "true" ]]; then
+            toggle_mute
+        fi
+
+        # Set port if specified
+        if not_empty "$port_id" && [[ "$port_id" != "null" ]]; then
+            set_port "$port_id" &>/dev/null || true
+        fi
+
+        # Set mic volume and mute if specified
+        if not_empty "$mic_vol" && [[ "$mic_vol" != "null" ]] && not_empty "$SOURCE_ID"; then
+            set_mic_volume "$mic_vol"
+            local current_mic_muted
+            current_mic_muted=$(is_mic_muted 2>/dev/null && echo "true" || echo "false")
+            if [[ "$mic_muted" == "true" && "$current_mic_muted" != "true" ]]; then
+                toggle_mic_mute
+            elif [[ "$mic_muted" != "true" && "$current_mic_muted" == "true" ]]; then
+                toggle_mic_mute
+            fi
+        fi
+
+        echo "Profile loaded: $profile_name"
+        if $DISPLAY_NOTIFICATIONS; then
+            local icon summary
+            icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[1]}" || echo "${ICONS_SYMBOLIC[1]}")
+            summary="Profile loaded: $profile_name"
+
+            case "$NOTIFICATION_METHOD" in
+                xosd    ) notify_volume_xosd "$vol" "$summary" ;;
+                herbe   ) notify_volume_herbe "$summary" ;;
+                volnoti ) notify_volume_volnoti "$vol" ;;
+                kosd    ) notify_volume_kosd "$vol" ;;
+                *       ) notify_volume_libnotify "$vol" "$icon" "$summary" "" ;;
+            esac
+        fi
+
+        # Update statusbar
+        update_statusbar || true
+    }
+
+    list_profiles() {
+        local profiles_dir
+        profiles_dir=$(get_profiles_dir)
+
+        if [[ ! -d "$profiles_dir" ]]; then
+            echo "${COLOR_YELLOW}No profiles directory found.${COLOR_RESET}"
+            echo "Save a profile first using: ${COLOR_GREEN}volume profile save <name>${COLOR_RESET}"
+            return 0
+        fi
+
+        local profiles
+        readarray -t profiles < <(find "$profiles_dir" -name "*.json" -type f -printf "%f\n" 2>/dev/null | sed 's/\.json$//' | sort)
+
+        if [[ ${#profiles[@]} -eq 0 ]]; then
+            echo "${COLOR_YELLOW}No profiles found.${COLOR_RESET}"
+            echo "Save a profile first using: ${COLOR_GREEN}volume profile save <name>${COLOR_RESET}"
+            return 0
+        fi
+
+        echo "${COLOR_YELLOW}Saved Profiles:${COLOR_RESET}"
+        echo
+
+        local profile_name profile_file vol muted sink_name
+        for profile_name in "${profiles[@]}"; do
+            profile_file="$profiles_dir/$profile_name.json"
+            vol=$(jq -r '.volume // "N/A"' "$profile_file" 2>/dev/null)
+            muted=$(jq -r '.muted // false' "$profile_file" 2>/dev/null)
+            sink_name=$(jq -r '.sink // "default"' "$profile_file" 2>/dev/null)
+
+            printf "  ${COLOR_GREEN}%s${COLOR_RESET}" "$profile_name"
+            if [[ "$muted" == "true" ]]; then
+                printf "  ${COLOR_RED}[MUTED]${COLOR_RESET}  ${COLOR_YELLOW}%s%%${COLOR_RESET}" "$vol"
+            else
+                printf "  ${COLOR_YELLOW}%s%%${COLOR_RESET}" "$vol"
+            fi
+            echo "  ${COLOR_MAGENTA}($sink_name)${COLOR_RESET}"
+        done
+        echo
+    }
+
+    delete_profile() {
+        local -r profile_name=${1:?$(error 'Profile name is required')}
+        local profiles_dir profile_file
+
+        profiles_dir=$(get_profiles_dir)
+        profile_file="$profiles_dir/$profile_name.json"
+
+        if [[ ! -f "$profile_file" ]]; then
+            error "Profile not found: $profile_name"
+            return 1
+        fi
+
+        rm -f "$profile_file" || {
+            error "Failed to delete profile: $profile_name"
+            return 1
+        }
+
+        echo "Profile deleted: $profile_name"
+    }
+
+    profile() {
+        local -r subcommand=${1:-}
+        local -r target=${2:-}
+
+        case "$subcommand" in
+            save)
+                if empty "$target"; then
+                    error "Profile name required. Use: profile save <name>"
+                    EXITCODE=$EX_USAGE
+                    return 1
+                fi
+                save_profile "$target"
+                ;;
+            load)
+                if empty "$target"; then
+                    error "Profile name required. Use: profile load <name>"
+                    EXITCODE=$EX_USAGE
+                    return 1
+                fi
+                load_profile "$target"
+                ;;
+            list)
+                list_profiles
+                ;;
+            delete|remove|rm)
+                if empty "$target"; then
+                    error "Profile name required. Use: profile delete <name>"
+                    EXITCODE=$EX_USAGE
+                    return 1
+                fi
+                delete_profile "$target"
+                ;;
+            "")
+                error "Profile subcommand required. Use: profile save|load|list|delete"
+                echo "  ${COLOR_GREEN}profile save <name>${COLOR_RESET}   - save current settings as profile"
+                echo "  ${COLOR_GREEN}profile load <name>${COLOR_RESET}   - load a saved profile"
+                echo "  ${COLOR_GREEN}profile list${COLOR_RESET}          - list all saved profiles"
+                echo "  ${COLOR_GREEN}profile delete <name>${COLOR_RESET} - delete a profile"
+                EXITCODE=$EX_USAGE
+                return 1
+                ;;
+            *)
+                # Quick access: profile <name> loads the profile
+                load_profile "$subcommand"
+                ;;
+        esac
+    }
+
     get_all_sinks() {
         # Returns array of sink IDs
         local sinks
@@ -1020,6 +1296,14 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                               commands:
                                   list        - list available ports
                                   set <port>  - set active port
+  ${COLOR_GREEN}profile <cmd> [name]${COLOR_RESET}       manage volume profiles
+                              commands:
+                                  save <name>   - save current settings as profile
+                                  load <name>   - load a saved profile
+                                  list          - list all saved profiles
+                                  delete <name> - delete a profile
+                              quick access:
+                                  profile <name> - load profile (shortcut for load)
   ${COLOR_GREEN}output <format>${COLOR_RESET}             display volume in a custom format
                               format placeholders:
                                   %v = volume
@@ -1419,6 +1703,14 @@ exec_command() {
                 *) usage ;;
             esac
             ;;
+        profile)
+            case "$#" in
+                0) profile "" ;;
+                1) profile "$1" ;;
+                2) profile "$1" "$2" ;;
+                *) usage ;;
+            esac
+            ;;
         output)
             case "$#" in 0) usage ;; esac
             output_volume "$*"
@@ -1486,6 +1778,7 @@ main() {
         next
         prev
         port
+        profile
     )
 
     # Exit codes

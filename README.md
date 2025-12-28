@@ -65,6 +65,14 @@ Commands:
                               commands:
                                   list        - list available ports
                                   set <port>  - set active port
+  profile <cmd> [name]        manage volume profiles
+                              commands:
+                                  save <name>   - save current settings as profile
+                                  load <name>   - load a saved profile
+                                  list          - list all saved profiles
+                                  delete <name> - delete a profile
+                              quick access:
+                                  profile <name> - load profile (shortcut for load)
   output <format>             display volume in a custom format
                               format placeholders:
                                   %v = volume level
