@@ -474,6 +474,242 @@ define_commands() {
         esac
     }
 
+    get_all_sinks() {
+        # Returns array of sink IDs
+        local sinks
+        readarray -t sinks < <(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Sink") | .id' 2>/dev/null)
+        echo "${sinks[@]}"
+    }
+
+    get_default_sink_id() {
+        # Returns the ID of the current default sink
+        local default_sink_name
+        default_sink_name=$(wpctl inspect @DEFAULT_AUDIO_SINK@ 2>/dev/null | awk '/[ \*]+node\.name/{gsub(/"/, "", $4); print $4}')
+        pw_dump | jq -r --arg name "$default_sink_name" '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."node.name" == $name) | .id' 2>/dev/null
+    }
+
+    get_sink_display_name_by_id() {
+        local -r sink_id=$1
+        local sink_name sink_nick display_name
+
+        sink_name=$(pw_dump | jq -r --argjson id "$sink_id" '.[] | select(.id == $id) | .info.props."node.name"' 2>/dev/null)
+        sink_nick=$(pw_dump | jq -r --argjson id "$sink_id" '.[] | select(.id == $id) | .info.props."node.nick" // "N/A"' 2>/dev/null)
+
+        # Apply alias if available
+        display_name="$sink_nick"
+        if isset NODE_ALIASES["$sink_id"]; then
+            display_name="${NODE_ALIASES[$sink_id]}"
+        elif isset NODE_ALIASES["$sink_name"]; then
+            display_name="${NODE_ALIASES[$sink_name]}"
+        elif isset NODE_ALIASES["$sink_nick"]; then
+            display_name="${NODE_ALIASES[$sink_nick]}"
+        fi
+
+        echo "$display_name"
+    }
+
+    find_sink_by_name_or_id() {
+        # Find sink by ID, name, nick, or alias
+        local -r search=$1
+        local sink_id sink_name sink_nick
+
+        # Try as ID first
+        sink_id=$(pw_dump | jq -r --argjson id "$search" '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Sink" and .id == ($id | tonumber? // empty)) | .id' 2>/dev/null)
+
+        if not_empty "$sink_id"; then
+            echo "$sink_id"
+            return 0
+        fi
+
+        # Try as name
+        sink_id=$(pw_dump | jq -r --arg name "$search" '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Sink" and .info.props."node.name" == $name) | .id' 2>/dev/null)
+
+        if not_empty "$sink_id"; then
+            echo "$sink_id"
+            return 0
+        fi
+
+        # Try as nick
+        sink_id=$(pw_dump | jq -r --arg nick "$search" '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Sink" and .info.props."node.nick" == $nick) | .id' 2>/dev/null)
+
+        if not_empty "$sink_id"; then
+            echo "$sink_id"
+            return 0
+        fi
+
+        # Try as alias
+        local alias_key
+        for alias_key in "${!NODE_ALIASES[@]}"; do
+            if [[ "${NODE_ALIASES[$alias_key]}" == "$search" ]]; then
+                # Found alias, now find the sink
+                sink_id=$(pw_dump | jq -r --arg key "$alias_key" '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Sink" and (.id == ($key | tonumber? // empty) or .info.props."node.name" == $key or .info.props."node.nick" == $key)) | .id' 2>/dev/null)
+                if not_empty "$sink_id"; then
+                    echo "$sink_id"
+                    return 0
+                fi
+            fi
+        done
+
+        return 1
+    }
+
+    switch_sink() {
+        local target_sink_id target_sink_name
+        local -r target=${1:-}
+
+        # Get all available sinks
+        local -a all_sinks
+        readarray -t all_sinks < <(get_all_sinks)
+
+        if [[ ${#all_sinks[@]} -eq 0 ]]; then
+            error "No audio sinks found."
+            return 1
+        fi
+
+        if [[ ${#all_sinks[@]} -eq 1 ]]; then
+            error "Only one sink available. Nothing to switch to."
+            return 1
+        fi
+
+        # If no target specified, cycle to next sink
+        if empty "$target"; then
+            local current_sink_id
+            current_sink_id=$(get_default_sink_id)
+
+            if empty "$current_sink_id"; then
+                error "Could not determine current default sink."
+                return 1
+            fi
+
+            # Find current sink index
+            local idx=0
+            local found=false
+            for sink in "${all_sinks[@]}"; do
+                if [[ "$sink" == "$current_sink_id" ]]; then
+                    found=true
+                    break
+                fi
+                ((idx++))
+            done
+
+            if ! $found; then
+                error "Current sink not found in available sinks."
+                return 1
+            fi
+
+            # Move to next sink (wrap around)
+            idx=$(( (idx + 1) % ${#all_sinks[@]} ))
+            target_sink_id="${all_sinks[$idx]}"
+        else
+            # Find sink by name, ID, or alias
+            target_sink_id=$(find_sink_by_name_or_id "$target")
+
+            if empty "$target_sink_id"; then
+                error "Sink not found: $target"
+                echo "Use 'volume list sinks' to see available sinks."
+                return 1
+            fi
+
+            # Check if it's already the default
+            local current_sink_id
+            current_sink_id=$(get_default_sink_id)
+            if [[ "$target_sink_id" == "$current_sink_id" ]]; then
+                echo "Sink is already the default."
+                return 0
+            fi
+        fi
+
+        # Switch to the target sink
+        if ! wpctl set-default "$target_sink_id" &>/dev/null; then
+            error "Failed to switch to sink ID $target_sink_id"
+            return 1
+        fi
+
+        # Get display name and volume for notification
+        target_sink_name=$(get_sink_display_name_by_id "$target_sink_id")
+        local target_vol target_muted
+        target_vol=$(wpctl get-volume "$target_sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
+        target_muted=$(wpctl get-volume "$target_sink_id" 2>/dev/null | grep -q '\[MUTED\]' && echo true || echo false)
+
+        # Invalidate cache and reinitialize audio
+        invalidate_cache
+
+        # Update NODE_ID and NODE_NAME to the new sink for potential future use
+        NODE_ID="$target_sink_id"
+        NODE_NAME=$(pw_dump | jq -r --argjson id "$target_sink_id" '.[] | select(.id == $id) | .info.props."node.name"' 2>/dev/null)
+
+        # Show notification if enabled
+        if $DISPLAY_NOTIFICATIONS; then
+            local icon summary
+            if $target_muted; then
+                icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[0]}" || echo "${ICONS_SYMBOLIC[0]}")
+                summary="Switched to: $target_sink_name (MUTED)"
+            else
+                icon=$(get_volume_icon "$target_vol")
+                printf -v summary "Switched to: %s (%s%%)" "$target_sink_name" "$target_vol"
+            fi
+
+            case "$NOTIFICATION_METHOD" in
+                xosd    ) notify_volume_xosd "$target_vol" "$summary" ;;
+                herbe   ) notify_volume_herbe "$summary" ;;
+                volnoti ) notify_volume_volnoti "$target_vol" ;;
+                kosd    ) notify_volume_kosd "$target_vol" ;;
+                *       ) notify_volume_libnotify "$target_vol" "$icon" "$summary" "" ;;
+            esac
+        else
+            if $target_muted; then
+                echo "Switched to: $target_sink_name (MUTED, ${target_vol}%)"
+            else
+                echo "Switched to: $target_sink_name (${target_vol}%)"
+            fi
+        fi
+
+        # Update statusbar if configured
+        update_statusbar || true
+    }
+
+    next_sink() { switch_sink; }
+    prev_sink() {
+        local -a all_sinks
+        readarray -t all_sinks < <(get_all_sinks)
+
+        if [[ ${#all_sinks[@]} -le 1 ]]; then
+            error "Only one sink available. Nothing to switch to."
+            return 1
+        fi
+
+        local current_sink_id
+        current_sink_id=$(get_default_sink_id)
+
+        if empty "$current_sink_id"; then
+            error "Could not determine current default sink."
+            return 1
+        fi
+
+        # Find current sink index
+        local idx=0
+        local found=false
+        for sink in "${all_sinks[@]}"; do
+            if [[ "$sink" == "$current_sink_id" ]]; then
+                found=true
+                break
+            fi
+            ((idx++))
+        done
+
+        if ! $found; then
+            error "Current sink not found in available sinks."
+            return 1
+        fi
+
+        # Move to previous sink (wrap around)
+        idx=$(( (idx - 1 + ${#all_sinks[@]}) % ${#all_sinks[@]} ))
+        local target_sink_id="${all_sinks[$idx]}"
+
+        # Switch using the main function
+        switch_sink "$target_sink_id"
+    }
+
     usage() {
         cat <<- EOF 1>&2
 ${COLOR_YELLOW}Usage:${COLOR_RESET} $0 [<options>] <command> [<args>]
@@ -490,6 +726,9 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   sinks   - list all audio output sinks
                                   sources - list all audio input sources
                                   ports   - list ports for current sink
+  ${COLOR_GREEN}switch [sink]${COLOR_RESET}               switch to next sink or specified sink
+  ${COLOR_GREEN}next${COLOR_RESET}                        switch to next sink
+  ${COLOR_GREEN}prev${COLOR_RESET}                        switch to previous sink
   ${COLOR_GREEN}output <format>${COLOR_RESET}             display volume in a custom format
                               format placeholders:
                                   %v = volume
@@ -817,6 +1056,15 @@ exec_command() {
                 *) usage ;;
             esac
             ;;
+        switch)
+            case "$#" in
+                0) switch_sink ;;
+                1) switch_sink "$1" ;;
+                *) usage ;;
+            esac
+            ;;
+        next) next_sink ;;
+        prev|previous) prev_sink ;;
         output)
             case "$#" in 0) usage ;; esac
             output_volume "$*"
@@ -873,6 +1121,9 @@ main() {
         notifications
         outputs
         list
+        switch
+        next
+        prev
     )
 
     # Exit codes

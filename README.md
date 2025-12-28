@@ -52,6 +52,9 @@ Commands:
                                   sinks   - list all audio output sinks
                                   sources - list all audio input sources
                                   ports   - list ports for current sink
+  switch [sink]                switch to next sink or specified sink
+  next                         switch to next sink
+  prev                         switch to previous sink
   output <format>             display volume in a custom format
                               format placeholders:
                                   %v = volume level
