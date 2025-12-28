@@ -54,6 +54,41 @@ define_notify() {
         esac
     }
 
+    notify_mic() {
+        if empty "$SOURCE_ID"; then
+            init_source
+        fi
+
+        if empty "$SOURCE_ID"; then
+            return 1
+        fi
+
+        local -r vol=$(get_mic_volume)
+        local icon summary body=""
+
+        if is_mic_muted; then
+            summary="Microphone muted"
+            icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[0]}" || echo "${ICONS_SYMBOLIC[0]}")
+        else
+            printf -v summary "Microphone %3s%%" "$vol"
+            icon=$(get_volume_icon "$vol")
+
+            if $SHOW_VOLUME_PROGRESS; then
+                local -r progress=$(progress_bar "$vol")
+                if has_capability body && [[ $PROGRESS_PLACEMENT == body ]]; then body="$progress"
+                else summary="$summary $progress"; fi
+            fi
+        fi
+
+        case "$NOTIFICATION_METHOD" in
+            xosd    ) notify_volume_xosd "$vol" "$summary $body" ;;
+            herbe   ) notify_volume_herbe "$summary $body" ;;
+            volnoti ) notify_volume_volnoti "$vol" ;;
+            kosd    ) notify_volume_kosd "$vol" ;;
+            *       ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
+        esac
+    }
+
     list_notification_methods() {
         local source="${BASH_SOURCE[0]}"
         awk -v source="$source" 'match($0, / +notify_volume_([[:alnum:]]+)\(\)/) { print substr($0, RSTART + 18, RLENGTH - 20) }' "$source" || EXITCODE=$EX_USAGE
@@ -202,6 +237,18 @@ define_output_formats() {
         string=${string//\%p/$(progress_bar "$vol")}
         string=${string//\%i/$(get_volume_emoji "$vol")}
 
+        # Replace %m with microphone volume
+        if [[ $string == *%m* ]]; then
+            local mic_vol
+            if is_mic_muted 2>/dev/null; then
+                mic_vol="MUTED"
+            else
+                mic_vol=$(get_mic_volume 2>/dev/null || echo "N/A")
+                mic_vol="${mic_vol}%"
+            fi
+            string=${string//%m/$mic_vol}
+        fi
+
         if is_muted; then echo -ne "${string//\%v/MUTED}"
         else echo -ne "$string"; fi
     }
@@ -263,6 +310,56 @@ define_commands() {
     increase_volume() { set_volume "${1:?$(error 'Step is required')}" "+"; }
     decrease_volume() { set_volume "${1:?$(error 'Step is required')}" "-"; }
     toggle_mute() { invalidate_cache; wpctl set-mute "$NODE_ID" toggle; }
+
+    set_mic_volume() {
+        local -r vol=${1:?$(error 'Volume is required')}
+        local -r op=${2:-}
+
+        if empty "$SOURCE_ID"; then
+            init_source
+        fi
+
+        if empty "$SOURCE_ID"; then
+            error "No audio source available."
+            return 1
+        fi
+
+        invalidate_cache
+
+        case "$op" in
+            +) wpctl set-volume "$SOURCE_ID" "${vol}%+" ;;
+            -) wpctl set-volume "$SOURCE_ID" "${vol}%-" ;;
+            *) wpctl set-volume "$SOURCE_ID" "${vol}%" ;;
+        esac
+    }
+
+    increase_mic_volume() { set_mic_volume "${1:?$(error 'Step is required')}" "+"; }
+    decrease_mic_volume() { set_mic_volume "${1:?$(error 'Step is required')}" "-"; }
+    toggle_mic_mute() {
+        if empty "$SOURCE_ID"; then
+            init_source
+        fi
+
+        if empty "$SOURCE_ID"; then
+            error "No audio source available."
+            return 1
+        fi
+
+        invalidate_cache
+        wpctl set-mute "$SOURCE_ID" toggle
+    }
+
+    show_mic_notification() {
+        $DISPLAY_NOTIFICATIONS || return
+
+        if empty "$NOTIFICATION_METHOD"; then
+            load_notify_server_info
+            NOTIFICATION_METHOD=$NOTIFY_SERVER
+        fi
+
+        setup_notification_icons
+        notify_mic
+    }
 
     output_volume() {
         local -r for=${1:?$(error 'Output method is required')}
@@ -720,6 +817,12 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
   ${COLOR_GREEN}down <value>${COLOR_RESET}                decrease volume
   ${COLOR_GREEN}set <value>${COLOR_RESET}                 set volume
   ${COLOR_GREEN}mute${COLOR_RESET}                        toggle mute
+  ${COLOR_GREEN}mic <cmd> [value]${COLOR_RESET}           control microphone
+                              commands:
+                                  up <value>    - increase microphone volume
+                                  down <value>  - decrease microphone volume
+                                  set <value>   - set microphone volume
+                                  mute          - toggle microphone mute
   ${COLOR_GREEN}listen${COLOR_RESET}                      monitor volume changes on a sink
   ${COLOR_GREEN}list <type>${COLOR_RESET}                 list sinks, sources, or ports
                               types:
@@ -736,6 +839,7 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   %p = volume progress bar
                                   %i = volume icon/emoji
                                   %P = active port description
+                                  %m = microphone volume
 
                                   examples:
                                       "Volume is %v" = Volume is 50%
@@ -750,6 +854,7 @@ ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-P${COLOR_RESET}                          play sound for volume changes
   ${COLOR_GREEN}-j <muted,high,low,medium>${COLOR_RESET}  custom volume emojis
   ${COLOR_GREEN}-s <sink>${COLOR_RESET}                   specify sink (${COLOR_MAGENTA}default: @DEFAULT_AUDIO_SINK@${COLOR_RESET})
+  ${COLOR_GREEN}-I <source>${COLOR_RESET}                 specify input source (${COLOR_MAGENTA}default: @DEFAULT_AUDIO_SOURCE@${COLOR_RESET})
   ${COLOR_GREEN}-t <process_name>${COLOR_RESET}           status bar process name (${COLOR_MAGENTA}requires -u${COLOR_RESET})
   ${COLOR_GREEN}-A <node.nick:alias>${COLOR_RESET}        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   ${COLOR_GREEN}-u <signal>${COLOR_RESET}                 signal to update status bar (${COLOR_MAGENTA}requires -t${COLOR_RESET})
@@ -783,6 +888,20 @@ EOF
 
 get_volume() { wpctl get-volume "$NODE_ID" | awk '{print $2 * 100}'; }
 is_muted() { wpctl get-volume "$NODE_ID" | grep -q '\[MUTED\]'; }
+
+get_mic_volume() {
+    if empty "$SOURCE_ID"; then
+        init_source
+    fi
+    wpctl get-volume "$SOURCE_ID" 2>/dev/null | awk '{print $2 * 100}'
+}
+
+is_mic_muted() {
+    if empty "$SOURCE_ID"; then
+        init_source
+    fi
+    wpctl get-volume "$SOURCE_ID" 2>/dev/null | grep -q '\[MUTED\]'
+}
 
 get_volume_icon() {
     local -r vol=${1:?$(error 'Volume is required')}
@@ -876,8 +995,20 @@ init_audio() {
     MAX_VOL=$(get_max_volume)
 }
 
+init_source() {
+    if empty "$SOURCE_NAME"; then
+        SOURCE_NAME=$(wpctl inspect @DEFAULT_AUDIO_SOURCE@ 2>/dev/null | awk '/[ \*]+node\.name/{gsub(/"/, "", $4); print $4}')
+    fi
+    SOURCE_ID=$(get_source_id)
+    # shellcheck disable=SC2034  # SOURCE_NICK may be used in future features
+    SOURCE_NICK=$(get_source_nick)
+}
+
 get_node_id() { pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."node.name" == "'"$NODE_NAME"'") | .id'; }
 get_node_nick() { pw_dump | jq -r '.[] | select(.id == '"$NODE_ID"') | .info.props."node.nick"'; }
+
+get_source_id() { pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."node.name" == "'"$SOURCE_NAME"'") | .id'; }
+get_source_nick() { pw_dump | jq -r '.[] | select(.id == '"$SOURCE_ID"') | .info.props."node.nick"'; }
 
 get_node_display_name() {
     if isset NODE_ALIASES["$NODE_ID"]; then echo "${NODE_ALIASES[$NODE_ID]}"
@@ -991,7 +1122,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:A:Ce:hj:lL:nN:pPs:S:t:u:y
+    local optstring=:A:Ce:hj:lL:nN:pPs:S:t:u:yI:
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -1015,6 +1146,7 @@ parse_opts() {
             S    ) SYMBOLIC_ICON_SUFFIX=$OPTARG ;;
             t    ) STATUSLINE=$OPTARG ;;
             u    ) SIGNAL=$OPTARG ;;
+            I    ) SOURCE_NAME=$OPTARG ;;
             y    ) USE_DUNSTIFY=true ;;
             h | *) usage ;;
         esac
@@ -1048,6 +1180,32 @@ exec_command() {
             esac
             ;;
         mute) toggle_mute ;;
+        mic)
+            case "$#" in
+                0) usage ;;
+                1)
+                    case "$1" in
+                        mute) toggle_mic_mute ;;
+                        *) usage ;;
+                    esac
+                    ;;
+                2)
+                    case "$1" in
+                        up|raise|increase) increase_mic_volume "$2" ;;
+                        down|lower|decrease) decrease_mic_volume "$2" ;;
+                        set)
+                            case "$2" in
+                                +*) increase_mic_volume "${2:1}" ;;
+                                -*) decrease_mic_volume "${2:1}" ;;
+                                *) set_mic_volume "$2" ;;
+                            esac
+                            ;;
+                        *) usage ;;
+                    esac
+                    ;;
+                *) usage ;;
+            esac
+            ;;
         listen) listen "$*" ;;
         list)
             case "$#" in
@@ -1099,9 +1257,16 @@ ca_play() {
 
 post_command_hook() {
     if is_command_hookable "$COMMAND"; then
-        show_volume_notification
-        play_volume_changed
-        update_statusbar || usage
+        # Check if this was a mic command
+        if [[ $COMMAND == "mic" ]]; then
+            show_mic_notification
+            play_volume_changed
+            update_statusbar || usage
+        else
+            show_volume_notification
+            play_volume_changed
+            update_statusbar || usage
+        fi
     fi
 }
 
@@ -1209,6 +1374,8 @@ main() {
         SIGNAL="" \
         NODE_NAME="" \
         NODE_ID="" \
+        SOURCE_NAME="" \
+        SOURCE_ID="" \
         STATUSLINE="" \
         SYMBOLIC_ICON_SUFFIX="" \
         PLAY_SOUND=false \
@@ -1228,6 +1395,7 @@ main() {
 
     # Requires options to be parsed first
     init_audio
+    init_source
 
     exec_command "${CMDARGS[*]}" && post_command_hook
 

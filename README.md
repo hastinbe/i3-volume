@@ -46,6 +46,12 @@ Commands:
   down <value>                decrease volume
   set <value>                 set volume
   mute                        toggle mute
+  mic <cmd> [value]           control microphone
+                              commands:
+                                  up <value>    - increase microphone volume
+                                  down <value>  - decrease microphone volume
+                                  set <value>   - set microphone volume
+                                  mute          - toggle microphone mute
   listen                      monitor volume changes on a sink
   list <type>                 list sinks, sources, or ports
                               types:
@@ -62,6 +68,7 @@ Commands:
                                   %p = volume progress bar
                                   %i = volume icon/emoji
                                   %P = active port description
+                                  %m = microphone volume
 
                                   examples:
                                       "Volume is %v" = Volume is 50%
@@ -76,6 +83,7 @@ Options:
   -P                          play sound for volume changes
   -j <muted,high,low,medium>  custom volume emojis
   -s <sink>                   specify sink (default: @DEFAULT_AUDIO_SINK@)
+  -I <source>                 specify input source (default: @DEFAULT_AUDIO_SOURCE@)
   -t <process_name>           status bar process name (requires -u)
   -A <node.nick:alias>        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   -u <signal>                 signal to update status bar (requires -t)
