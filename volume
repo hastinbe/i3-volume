@@ -249,6 +249,13 @@ define_output_formats() {
             string=${string//%m/$mic_vol}
         fi
 
+        # Replace %P with active port description
+        if [[ $string == *%P* ]]; then
+            local port_desc
+            port_desc=$(get_active_port_description 2>/dev/null || echo "")
+            string=${string//%P/$port_desc}
+        fi
+
         if is_muted; then echo -ne "${string//\%v/MUTED}"
         else echo -ne "$string"; fi
     }
@@ -571,6 +578,183 @@ define_commands() {
         esac
     }
 
+    get_active_port_description() {
+        if empty "$NODE_ID"; then
+            return 1
+        fi
+
+        # Get active port ID
+        local active_port_id
+        active_port_id=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .value' 2>/dev/null)
+
+        if empty "$active_port_id"; then
+            return 1
+        fi
+
+        # Get port description
+        pw_dump | jq -r --argjson node_id "$NODE_ID" --arg port_id "$active_port_id" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | select(.id == $port_id) | .description // .name' 2>/dev/null
+    }
+
+    get_all_ports() {
+        if empty "$NODE_ID"; then
+            return 1
+        fi
+
+        # Get all ports for the current sink
+        local ports
+        readarray -t ports < <(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | "\(.id)|\(.name)|\(.description // "N/A")"' 2>/dev/null)
+
+        if [[ ${#ports[@]} -eq 0 ]]; then
+            return 1
+        fi
+
+        echo "${ports[@]}"
+    }
+
+    find_port_by_name_or_id() {
+        local -r search=$1
+        local port_id port_name port_desc
+
+        if empty "$NODE_ID"; then
+            return 1
+        fi
+
+        # Get all ports
+        local -a all_ports
+        readarray -t all_ports < <(get_all_ports)
+
+        if [[ ${#all_ports[@]} -eq 0 ]]; then
+            return 1
+        fi
+
+        # Search for port
+        for port in "${all_ports[@]}"; do
+            IFS='|' read -r port_id port_name port_desc <<< "$port"
+
+            # Try as ID
+            if [[ "$port_id" == "$search" ]]; then
+                echo "$port_id"
+                return 0
+            fi
+
+            # Try as name
+            if [[ "$port_name" == "$search" ]]; then
+                echo "$port_id"
+                return 0
+            fi
+
+            # Try as description (case-insensitive partial match)
+            if [[ "${port_desc,,}" == *"${search,,}"* ]]; then
+                echo "$port_id"
+                return 0
+            fi
+        done
+
+        return 1
+    }
+
+    set_port() {
+        local -r port_target=${1:?$(error 'Port name or ID is required')}
+
+        if empty "$NODE_ID"; then
+            error "No sink specified. Use -s <sink> or ensure default sink is available."
+            return 1
+        fi
+
+        # Find the port
+        local port_id
+        port_id=$(find_port_by_name_or_id "$port_target")
+
+        if empty "$port_id"; then
+            error "Port not found: $port_target"
+            echo "Use 'volume port list' or 'volume list ports' to see available ports."
+            return 1
+        fi
+
+        # Get current active port
+        local current_port
+        current_port=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .value' 2>/dev/null)
+
+        if [[ "$port_id" == "$current_port" ]]; then
+            echo "Port is already active."
+            return 0
+        fi
+
+        # Set the port using pw-cli set-param
+        # Note: This requires the EnumPort param to be available on the node
+        # The param format uses PipeWire's POD format for Props
+        # To test port switching on a device with ports:
+        #   1. Use 'volume port list' to see available ports
+        #   2. Use 'volume port set <port_id>' to switch ports
+        #   3. Verify with 'wpctl inspect <node_id>' that the port changed
+        if ! pw-cli set-param "$NODE_ID" Props '{"EnumPort":"'"$port_id"'"}' &>/dev/null; then
+            error "Failed to set port to $port_id"
+            echo "Note: Port switching may not be supported on this device, or the port ID may be incorrect."
+            echo "Verify ports are available with: volume port list"
+            return 1
+        fi
+
+        # Get port description for notification
+        local port_desc
+        port_desc=$(pw_dump | jq -r --argjson node_id "$NODE_ID" --arg port_id "$port_id" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | select(.id == $port_id) | .description // .name' 2>/dev/null)
+
+        # Invalidate cache
+        invalidate_cache
+
+        # Show notification if enabled
+        if $DISPLAY_NOTIFICATIONS; then
+            local icon summary
+            icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[1]}" || echo "${ICONS_SYMBOLIC[1]}")
+            summary="Port switched to: $port_desc"
+
+            case "$NOTIFICATION_METHOD" in
+                xosd    ) notify_volume_xosd 0 "$summary" ;;
+                herbe   ) notify_volume_herbe "$summary" ;;
+                volnoti ) notify_volume_volnoti 0 ;;
+                kosd    ) notify_volume_kosd 0 ;;
+                *       ) notify_volume_libnotify 0 "$icon" "$summary" "" ;;
+            esac
+        else
+            echo "Port switched to: $port_desc"
+        fi
+
+        # Update statusbar if configured
+        update_statusbar || true
+    }
+
+    port() {
+        local -r subcommand=${1:-}
+        local -r target=${2:-}
+
+        case "$subcommand" in
+            list)
+                list_ports
+                ;;
+            set)
+                if empty "$target"; then
+                    error "Port name or ID required. Use: port set <port>"
+                    echo "Use 'volume port list' to see available ports."
+                    EXITCODE=$EX_USAGE
+                    return 1
+                fi
+                set_port "$target"
+                ;;
+            "")
+                error "Port subcommand required. Use: port list|set"
+                echo "  ${COLOR_GREEN}port list${COLOR_RESET}        - list available ports"
+                echo "  ${COLOR_GREEN}port set <port>${COLOR_RESET}  - set active port"
+                EXITCODE=$EX_USAGE
+                return 1
+                ;;
+            *)
+                error "Unknown port subcommand: $subcommand"
+                echo "Valid subcommands: list, set"
+                EXITCODE=$EX_USAGE
+                return 1
+                ;;
+        esac
+    }
+
     get_all_sinks() {
         # Returns array of sink IDs
         local sinks
@@ -832,6 +1016,10 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
   ${COLOR_GREEN}switch [sink]${COLOR_RESET}               switch to next sink or specified sink
   ${COLOR_GREEN}next${COLOR_RESET}                        switch to next sink
   ${COLOR_GREEN}prev${COLOR_RESET}                        switch to previous sink
+  ${COLOR_GREEN}port <cmd> [port]${COLOR_RESET}           control audio ports
+                              commands:
+                                  list        - list available ports
+                                  set <port>  - set active port
   ${COLOR_GREEN}output <format>${COLOR_RESET}             display volume in a custom format
                               format placeholders:
                                   %v = volume
@@ -1223,6 +1411,14 @@ exec_command() {
             ;;
         next) next_sink ;;
         prev|previous) prev_sink ;;
+        port)
+            case "$#" in
+                0) port "" ;;
+                1) port "$1" ;;
+                2) port "$1" "$2" ;;
+                *) usage ;;
+            esac
+            ;;
         output)
             case "$#" in 0) usage ;; esac
             output_volume "$*"
@@ -1289,6 +1485,7 @@ main() {
         switch
         next
         prev
+        port
     )
 
     # Exit codes

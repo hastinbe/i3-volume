@@ -61,6 +61,10 @@ Commands:
   switch [sink]                switch to next sink or specified sink
   next                         switch to next sink
   prev                         switch to previous sink
+  port <cmd> [port]            control audio ports
+                              commands:
+                                  list        - list available ports
+                                  set <port>  - set active port
   output <format>             display volume in a custom format
                               format placeholders:
                                   %v = volume level
