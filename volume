@@ -373,6 +373,13 @@ define_commands() {
     set_volume() {
         local -r vol=${1:?$(error 'Volume is required')}
         local -r op=${2:-}
+
+        # Check if operating on all sinks
+        if $ALL_SINKS; then
+            set_volume_all "$vol" "$op"
+            return
+        fi
+
         local target_vol current_vol
 
         if not_empty "$MAX_VOL"; then
@@ -440,6 +447,11 @@ define_commands() {
         set_volume "$step" "-"
     }
     toggle_mute() {
+        # Check if operating on all sinks
+        if $ALL_SINKS; then
+            toggle_mute_all
+            return
+        fi
         if not_empty "$FADE_DURATION"; then
             if is_muted; then
                 # Fade in (unmute)
@@ -1513,6 +1525,184 @@ define_commands() {
         echo "${sinks[@]}"
     }
 
+    set_volume_all() {
+        local -r vol=$1
+        local -r op=${2:-}
+        local -a all_sinks
+        readarray -t all_sinks < <(get_all_sinks)
+
+        if [[ ${#all_sinks[@]} -eq 0 ]]; then
+            error "No audio sinks found."
+            return 1
+        fi
+
+        local sink_id
+        for sink_id in "${all_sinks[@]}"; do
+            local target_vol current_vol
+
+            if not_empty "$MAX_VOL"; then
+                case "$op" in
+                    +)  # Increase volume
+                        current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
+                        if (( current_vol + vol > MAX_VOL )); then
+                            local -r step=$( max "0" "$(( MAX_VOL - current_vol ))" )
+                            if not_empty "$FADE_DURATION"; then
+                                fade_volume "$MAX_VOL" "$FADE_DURATION" "$sink_id"
+                            else
+                                wpctl set-volume "$sink_id" "$step%+"
+                            fi
+                            continue
+                        fi
+                        ;;
+                    *)  # Set absolute volume
+                        if (( vol > MAX_VOL )); then
+                            continue
+                        fi
+                        ;;
+                esac
+            fi
+
+            # Handle fade if requested
+            if not_empty "$FADE_DURATION"; then
+                case "$op" in
+                    +)
+                        current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
+                        target_vol=$(( current_vol + vol ))
+                        fade_volume "$target_vol" "$FADE_DURATION" "$sink_id"
+                        ;;
+                    -)
+                        current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
+                        target_vol=$(( current_vol - vol ))
+                        fade_volume "$target_vol" "$FADE_DURATION" "$sink_id"
+                        ;;
+                    *)
+                        fade_volume "$vol" "$FADE_DURATION" "$sink_id"
+                        ;;
+                esac
+            else
+                case "$op" in
+                    +) wpctl set-volume "$sink_id" "${vol}%+" ;;
+                    -) wpctl set-volume "$sink_id" "${vol}%-" ;;
+                    *) wpctl set-volume "$sink_id" "${vol}%" ;;
+                esac
+            fi
+        done
+
+        invalidate_cache
+    }
+
+    toggle_mute_all() {
+        local -a all_sinks
+        readarray -t all_sinks < <(get_all_sinks)
+
+        if [[ ${#all_sinks[@]} -eq 0 ]]; then
+            error "No audio sinks found."
+            return 1
+        fi
+
+        local sink_id
+        for sink_id in "${all_sinks[@]}"; do
+            local is_muted
+            is_muted=$(wpctl get-volume "$sink_id" 2>/dev/null | grep -q '\[MUTED\]' && echo true || echo false)
+
+            if not_empty "$FADE_DURATION"; then
+                if $is_muted; then
+                    # Fade in (unmute)
+                    wpctl set-mute "$sink_id" 0
+                    local current_vol
+                    current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
+                    if (( current_vol == 0 )); then
+                        fade_volume "${DEFAULT_VOL:-50}" "$FADE_DURATION" "$sink_id"
+                    else
+                        wpctl set-volume "$sink_id" "0%"
+                        fade_volume "$current_vol" "$FADE_DURATION" "$sink_id"
+                    fi
+                else
+                    # Fade out (mute)
+                    wpctl set-mute "$sink_id" 0 &>/dev/null
+                    local current_vol
+                    current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
+                    fade_volume 0 "$FADE_DURATION" "$sink_id" "$current_vol"
+                    wpctl set-volume "$sink_id" "0%" &>/dev/null
+                    wpctl set-mute "$sink_id" 1
+                    wpctl set-volume "$sink_id" "0%" &>/dev/null
+                fi
+            else
+                wpctl set-mute "$sink_id" toggle
+            fi
+        done
+
+        invalidate_cache
+    }
+
+    sync_volume() {
+        # Get volume from default sink and sync to all other sinks
+        local -a all_sinks
+        readarray -t all_sinks < <(get_all_sinks)
+
+        if [[ ${#all_sinks[@]} -eq 0 ]]; then
+            error "No audio sinks found."
+            return 1
+        fi
+
+        if [[ ${#all_sinks[@]} -eq 1 ]]; then
+            echo "Only one sink available. Nothing to sync."
+            return 0
+        fi
+
+        # Get volume and mute status from default sink
+        local default_sink_id
+        default_sink_id=$(get_default_sink_id)
+
+        if empty "$default_sink_id"; then
+            error "Could not determine default sink."
+            return 1
+        fi
+
+        local target_vol target_muted
+        target_vol=$(wpctl get-volume "$default_sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
+        target_muted=$(wpctl get-volume "$default_sink_id" 2>/dev/null | grep -q '\[MUTED\]' && echo true || echo false)
+
+        # Sync to all sinks
+        local sink_id synced_count=0
+        for sink_id in "${all_sinks[@]}"; do
+            # Skip the default sink (already at target)
+            if [[ "$sink_id" == "$default_sink_id" ]]; then
+                continue
+            fi
+
+            # Set volume
+            if not_empty "$FADE_DURATION"; then
+                fade_volume "$target_vol" "$FADE_DURATION" "$sink_id"
+            else
+                wpctl set-volume "$sink_id" "${target_vol}%"
+            fi
+
+            # Set mute status
+            local current_muted
+            current_muted=$(wpctl get-volume "$sink_id" 2>/dev/null | grep -q '\[MUTED\]' && echo true || echo false)
+            if [[ "$target_muted" == "true" && "$current_muted" != "true" ]]; then
+                wpctl set-mute "$sink_id" 1
+            elif [[ "$target_muted" != "true" && "$current_muted" == "true" ]]; then
+                wpctl set-mute "$sink_id" 0
+            fi
+
+            ((synced_count++))
+        done
+
+        invalidate_cache
+
+        if (( synced_count > 0 )); then
+            local mute_text=""
+            if $target_muted; then
+                mute_text=" (MUTED)"
+            fi
+            echo "Synced volume to $synced_count sink(s): ${target_vol}%${mute_text}"
+        else
+            echo "All sinks already synchronized."
+        fi
+    }
+
     get_default_sink_id() {
         # Returns the ID of the current default sink
         local default_sink_name
@@ -1788,6 +1978,7 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   boost 20        - boost by 20% for 30s (default)
                                   boost 20 60    - boost by 20% for 60s
                                   boost off      - cancel active boost
+  ${COLOR_GREEN}sync${COLOR_RESET}                        sync volume across all active sinks
   ${COLOR_GREEN}output <format>${COLOR_RESET}             display volume in a custom format
                               format placeholders:
                                   %v = volume
@@ -1811,6 +2002,7 @@ ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-j <muted,high,low,medium>${COLOR_RESET}  custom volume emojis
   ${COLOR_GREEN}-s <sink>${COLOR_RESET}                   specify sink (${COLOR_MAGENTA}default: @DEFAULT_AUDIO_SINK@${COLOR_RESET})
   ${COLOR_GREEN}-I <source>${COLOR_RESET}                 specify input source (${COLOR_MAGENTA}default: @DEFAULT_AUDIO_SOURCE@${COLOR_RESET})
+  ${COLOR_GREEN}-a${COLOR_RESET}                          operate on all sinks (${COLOR_MAGENTA}for up/down/set/mute${COLOR_RESET})
   ${COLOR_GREEN}-t <process_name>${COLOR_RESET}           status bar process name (${COLOR_MAGENTA}requires -u${COLOR_RESET})
   ${COLOR_GREEN}-A <node.nick:alias>${COLOR_RESET}        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   ${COLOR_GREEN}-u <signal>${COLOR_RESET}                 signal to update status bar (${COLOR_MAGENTA}requires -t${COLOR_RESET})
@@ -2123,7 +2315,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:A:Ce:f:hj:lL:nN:pPs:S:t:u:yI:D:
+    local optstring=:A:Ce:af:hj:lL:nN:pPs:S:t:u:yI:D:
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -2136,6 +2328,7 @@ parse_opts() {
                    NODE_ALIASES[$node]=$alias ;;
             C    ) USE_CANBERRA=true ;;
             e    ) EXPIRES=$OPTARG ;;
+            a    ) ALL_SINKS=true ;;
             f    ) FADE_DURATION=$OPTARG ;;
             j    ) IFS=, read -ra ICONS_EMOJI <<< "$OPTARG" ;;
             l    ) USE_FULLCOLOR_ICONS=true ;;
@@ -2297,6 +2490,12 @@ exec_command() {
                 *) usage ;;
             esac
             ;;
+        sync)
+            case "$#" in
+                0) sync_volume ;;
+                *) usage ;;
+            esac
+            ;;
         output)
             case "$#" in 0) usage ;; esac
             output_volume "$*"
@@ -2365,6 +2564,7 @@ main() {
         prev
         port
         profile
+        sync
     )
 
     # Exit codes
@@ -2457,7 +2657,8 @@ main() {
         SYMBOLIC_ICON_SUFFIX="" \
         PLAY_SOUND=false \
         USE_CANBERRA=false \
-        FADE_DURATION=""
+        FADE_DURATION="" \
+        ALL_SINKS=false
 
     declare -i EXPIRES=1500
 
