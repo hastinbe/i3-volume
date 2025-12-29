@@ -96,12 +96,33 @@ define_notify() {
             sink_info=" ($sink_display_name)"
         fi
 
-        # Get port information if available
+        # Get current port information
         local port_info=""
-        local port_desc
+        local port_desc current_port_id
+        current_port_id=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .value' 2>/dev/null)
+        if empty "$current_port_id"; then
+            current_port_id=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.props."audio.port" // empty' 2>/dev/null)
+        fi
+
         port_desc=$(get_active_port_description 2>/dev/null || echo "")
         if not_empty "$port_desc"; then
             port_info=" - $port_desc"
+        fi
+
+        # Check if port changed
+        local last_port_id port_changed=false
+        last_port_id=$(get_last_port 2>/dev/null || echo "")
+        if not_empty "$current_port_id" && not_empty "$last_port_id" && [[ "$current_port_id" != "$last_port_id" ]]; then
+            port_changed=true
+            # Enhance port info to indicate change
+            if not_empty "$port_desc"; then
+                port_info=" - $port_desc ${COLOR_YELLOW}[changed]${COLOR_RESET}"
+            fi
+        fi
+
+        # Save current port for next comparison
+        if not_empty "$current_port_id"; then
+            save_last_port "$current_port_id" 2>/dev/null || true
         fi
 
         if is_muted; then
@@ -125,6 +146,11 @@ define_notify() {
             kosd    ) notify_volume_kosd "$vol" ;;
             *       ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
         esac
+
+        # Check for newly available ports and suggest switching (only if port didn't just change)
+        if [[ "$port_changed" == "false" ]]; then
+            detect_and_suggest_port_switch || true
+        fi
     }
 
     notify_mic() {
@@ -414,11 +440,33 @@ define_output_formats() {
             string=${string//%c/$color_code}
         fi
 
-        # Replace %P with active port description
+        # Replace %P with active port description (with availability if available)
         if [[ $string == *%P* ]]; then
-            local port_desc
+            local port_desc port_id port_availability port_info
+            port_id=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .value' 2>/dev/null)
+            if empty "$port_id"; then
+                port_id=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.props."audio.port" // empty' 2>/dev/null)
+            fi
+
             port_desc=$(get_active_port_description 2>/dev/null || echo "")
-            string=${string//%P/$port_desc}
+            if not_empty "$port_id" && not_empty "$port_desc"; then
+                # Check availability
+                port_availability=$(get_port_availability "$port_id" 2>/dev/null || echo "unknown")
+                case "$port_availability" in
+                    available)
+                        port_info="$port_desc [plugged]"
+                        ;;
+                    unavailable)
+                        port_info="$port_desc [unplugged]"
+                        ;;
+                    *)
+                        port_info="$port_desc"
+                        ;;
+                esac
+            else
+                port_info="$port_desc"
+            fi
+            string=${string//%P/$port_info}
         fi
 
         # Replace %a with active application name
@@ -1019,13 +1067,13 @@ define_commands() {
         echo "${COLOR_YELLOW}Ports for sink: ${COLOR_GREEN}$sink_display_name${COLOR_RESET} (ID: ${COLOR_CYAN}$NODE_ID${COLOR_RESET})"
         echo
 
-        # Try to get ports from PropInfo first
+        # Try to get ports from PropInfo first with availability
         local ports
-        readarray -t ports < <(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | "\(.id)|\(.name)|\(.description // "N/A")"' 2>/dev/null)
+        readarray -t ports < <(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | "\(.id)|\(.name)|\(.description // "N/A")|\(.availability // "unknown")"' 2>/dev/null)
 
         # If no ports found via PropInfo, try alternative method using node properties
         if [[ ${#ports[@]} -eq 0 ]]; then
-            readarray -t ports < <(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.props | to_entries[] | select(.key | test("port\\..*")) | "\(.key)|\(.value)"' 2>/dev/null)
+            readarray -t ports < <(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.props | to_entries[] | select(.key | test("port\\..*")) | "\(.key)|\(.value)|N/A|unknown"' 2>/dev/null)
         fi
 
         if [[ ${#ports[@]} -eq 0 ]]; then
@@ -1044,22 +1092,49 @@ define_commands() {
             active_port=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.props."audio.port" // empty' 2>/dev/null)
         fi
 
-        local port_id port_name port_desc is_active
+        local port_id port_name port_desc port_availability is_active availability_status
         for port in "${ports[@]}"; do
-            IFS='|' read -r port_id port_name port_desc <<< "$port"
+            IFS='|' read -r port_id port_name port_desc port_availability <<< "$port"
 
             # Handle different port formats
             if [[ -z "$port_desc" || "$port_desc" == "N/A" ]]; then
                 port_desc="$port_name"
             fi
 
+            # Determine if port is active
             if [[ "$port_id" == "$active_port" || "$port_name" == "$active_port" ]]; then
                 is_active="${COLOR_GREEN}*${COLOR_RESET} "
             else
                 is_active="  "
             fi
 
-            printf "%s${COLOR_CYAN}%s${COLOR_RESET}  ${COLOR_GREEN}%s${COLOR_RESET}" "$is_active" "$port_id" "$port_desc"
+            # Format availability status
+            case "$port_availability" in
+                available|yes|1|true)
+                    availability_status="${COLOR_GREEN}[plugged]${COLOR_RESET}"
+                    ;;
+                unavailable|no|0|false)
+                    availability_status="${COLOR_RED}[unplugged]${COLOR_RESET}"
+                    ;;
+                *)
+                    # If availability is unknown, try to check it
+                    local checked_availability
+                    checked_availability=$(get_port_availability "$port_id" 2>/dev/null || echo "unknown")
+                    case "$checked_availability" in
+                        available)
+                            availability_status="${COLOR_GREEN}[plugged]${COLOR_RESET}"
+                            ;;
+                        unavailable)
+                            availability_status="${COLOR_RED}[unplugged]${COLOR_RESET}"
+                            ;;
+                        *)
+                            availability_status="${COLOR_YELLOW}[unknown]${COLOR_RESET}"
+                            ;;
+                    esac
+                    ;;
+            esac
+
+            printf "%s${COLOR_CYAN}%s${COLOR_RESET}  ${COLOR_GREEN}%s${COLOR_RESET}  %s" "$is_active" "$port_id" "$port_desc" "$availability_status"
             if [[ -n "$port_name" && "$port_name" != "$port_desc" ]]; then
                 echo "  ${COLOR_MAGENTA}($port_name)${COLOR_RESET}"
             else
@@ -1105,16 +1180,59 @@ define_commands() {
             return 1
         fi
 
-        # Get active port ID
+        # Get active port ID - try multiple methods
         local active_port_id
         active_port_id=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .value' 2>/dev/null)
+
+        # Fallback: try node properties
+        if empty "$active_port_id"; then
+            active_port_id=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.props."audio.port" // empty' 2>/dev/null)
+        fi
 
         if empty "$active_port_id"; then
             return 1
         fi
 
-        # Get port description
-        pw_dump | jq -r --argjson node_id "$NODE_ID" --arg port_id "$active_port_id" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | select(.id == $port_id) | .description // .name' 2>/dev/null
+        # Get port description - try multiple methods
+        local port_desc
+        port_desc=$(pw_dump | jq -r --argjson node_id "$NODE_ID" --arg port_id "$active_port_id" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | select(.id == $port_id) | .description // .name' 2>/dev/null)
+
+        # Fallback: try to get from port name if description not available
+        if empty "$port_desc"; then
+            port_desc=$(pw_dump | jq -r --argjson node_id "$NODE_ID" --arg port_id "$active_port_id" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | select(.id == $port_id) | .name' 2>/dev/null)
+        fi
+
+        # If still empty, use port_id as fallback
+        if empty "$port_desc"; then
+            port_desc="$active_port_id"
+        fi
+
+        echo "$port_desc"
+    }
+
+    get_port_availability() {
+        local -r port_id=$1
+        if empty "$NODE_ID" || empty "$port_id"; then
+            return 1
+        fi
+
+        # Check port availability from PropInfo
+        local availability
+        availability=$(pw_dump | jq -r --argjson node_id "$NODE_ID" --arg port_id "$port_id" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | select(.id == $port_id) | .availability // "unknown"' 2>/dev/null)
+
+        # If availability is not in PropInfo, try to infer from port properties
+        if [[ "$availability" == "unknown" || -z "$availability" ]]; then
+            # Check if port exists in available ports list (if it's listed, it's likely available)
+            local port_exists
+            port_exists=$(pw_dump | jq -r --argjson node_id "$NODE_ID" --arg port_id "$port_id" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | select(.id == $port_id) | .id' 2>/dev/null)
+            if [[ -n "$port_exists" ]]; then
+                availability="available"
+            else
+                availability="unavailable"
+            fi
+        fi
+
+        echo "$availability"
     }
 
     get_all_ports() {
@@ -1122,15 +1240,100 @@ define_commands() {
             return 1
         fi
 
-        # Get all ports for the current sink
+        # Get all ports for the current sink with availability information
+        # Format: port_id|port_name|port_description|availability
         local ports
-        readarray -t ports < <(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | "\(.id)|\(.name)|\(.description // "N/A")"' 2>/dev/null)
+        readarray -t ports < <(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .values[]? | "\(.id)|\(.name)|\(.description // "N/A")|\(.availability // "unknown")"' 2>/dev/null)
 
         if [[ ${#ports[@]} -eq 0 ]]; then
             return 1
         fi
 
         echo "${ports[@]}"
+    }
+
+    check_for_newly_available_ports() {
+        if empty "$NODE_ID"; then
+            return 1
+        fi
+
+        # Get current active port
+        local current_port
+        current_port=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "EnumPort") | .value' 2>/dev/null)
+
+        # Get all available ports
+        local -a all_ports
+        readarray -t all_ports < <(get_all_ports)
+
+        if [[ ${#all_ports[@]} -eq 0 ]]; then
+            return 1
+        fi
+
+        # Find newly available ports (available but not currently active)
+        local port_id port_name port_desc port_availability
+        local -a newly_available_ports
+        for port in "${all_ports[@]}"; do
+            IFS='|' read -r port_id port_name port_desc port_availability <<< "$port"
+
+            # Check if port is available and not the current one
+            if [[ "$port_id" != "$current_port" ]]; then
+                # Check availability
+                local availability
+                availability=$(get_port_availability "$port_id" 2>/dev/null || echo "unknown")
+                if [[ "$availability" == "available" ]] || [[ "$port_availability" == "available" ]]; then
+                    # Format: port_id|port_description
+                    newly_available_ports+=("$port_id|$port_desc")
+                fi
+            fi
+        done
+
+        # If we found newly available ports, suggest switching
+        if [[ ${#newly_available_ports[@]} -gt 0 ]]; then
+            # Return the first newly available port (most likely the one just plugged in)
+            echo "${newly_available_ports[0]}"
+            return 0
+        fi
+
+        return 1
+    }
+
+    detect_and_suggest_port_switch() {
+        if empty "$NODE_ID" || ! $DISPLAY_NOTIFICATIONS; then
+            return 0
+        fi
+
+        # Check for newly available ports
+        local new_port_info
+        new_port_info=$(check_for_newly_available_ports 2>/dev/null)
+
+        if not_empty "$new_port_info"; then
+            IFS='|' read -r new_port_id new_port_desc <<< "$new_port_info"
+
+            # Only suggest if we have a meaningful description
+            if not_empty "$new_port_desc" && [[ "$new_port_desc" != "N/A" ]]; then
+                local icon summary body
+                icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[1]}" || echo "${ICONS_SYMBOLIC[1]}")
+
+                # Include sink name if multiple sinks available
+                local sink_info=""
+                if has_multiple_sinks; then
+                    local sink_display_name
+                    sink_display_name=$(get_node_display_name)
+                    sink_info=" on $sink_display_name"
+                fi
+
+                summary="New port available: $new_port_desc${sink_info}"
+                body="Switch with: volume port set $new_port_id"
+
+                case "$NOTIFICATION_METHOD" in
+                    xosd    ) notify_volume_xosd 0 "$summary" ;;
+                    herbe   ) notify_volume_herbe "$summary" ;;
+                    volnoti ) notify_volume_volnoti 0 ;;
+                    kosd    ) notify_volume_kosd 0 ;;
+                    *       ) notify_volume_libnotify 0 "$icon" "$summary" "$body" ;;
+                esac
+            fi
+        fi
     }
 
     find_port_by_name_or_id() {
@@ -1295,6 +1498,45 @@ define_commands() {
 
     get_config_dir() {
         echo "${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume"
+    }
+
+    get_port_cache_file() {
+        local config_dir
+        config_dir=$(get_config_dir)
+        echo "$config_dir/.last_port_${NODE_ID:-default}"
+    }
+
+    save_last_port() {
+        local -r port_id=$1
+        if empty "$port_id"; then
+            return 1
+        fi
+
+        local port_file
+        port_file=$(get_port_cache_file)
+        local config_dir
+        config_dir=$(get_config_dir)
+
+        # Create config directory if it doesn't exist
+        mkdir -p "$config_dir" || {
+            return 1
+        }
+
+        # Save the port ID to file
+        echo "$port_id" > "$port_file" 2>/dev/null || {
+            return 1
+        }
+    }
+
+    get_last_port() {
+        local port_file
+        port_file=$(get_port_cache_file)
+
+        if [[ ! -f "$port_file" ]]; then
+            return 1
+        fi
+
+        cat "$port_file" 2>/dev/null
     }
 
     save_volume_before_mute() {
@@ -3099,14 +3341,15 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                               types:
                                   sinks   - list all audio output sinks
                                   sources - list all audio input sources
-                                  ports   - list ports for current sink
+                                  ports   - list ports for current sink (BETA: shows availability status)
   ${COLOR_GREEN}switch [sink]${COLOR_RESET}               switch to next sink or specified sink
   ${COLOR_GREEN}next${COLOR_RESET}                        switch to next sink
   ${COLOR_GREEN}prev${COLOR_RESET}                        switch to previous sink
-  ${COLOR_GREEN}port <cmd> [port]${COLOR_RESET}           control audio ports
+  ${COLOR_GREEN}port <cmd> [port]${COLOR_RESET}           control audio ports (BETA/EXPERIMENTAL)
                               commands:
-                                  list        - list available ports
+                                  list        - list available ports with availability status
                                   set <port>  - set active port
+                              note: Port features are experimental and may not work on all devices
   ${COLOR_GREEN}profile <cmd> [name]${COLOR_RESET}       manage volume profiles
                               commands:
                                   save <name>   - save current settings as profile
@@ -3140,7 +3383,7 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   %s = sink name
                                   %p = volume progress bar
                                   %i = volume icon/emoji
-                                  %P = active port description
+                                  %P = active port description (BETA: includes availability status when available)
                                   %m = microphone volume
                                   %a = active application name
                                   %b = balance (L=left, R=right, C=center)
@@ -3201,7 +3444,9 @@ ${COLOR_YELLOW}Notification Options:${COLOR_RESET}
 
 ${COLOR_YELLOW}Notification Features:${COLOR_RESET}
   Notifications show sink name when multiple sinks are available
-  Port information is displayed in notifications when available
+  Port information is displayed in notifications when available (BETA/EXPERIMENTAL)
+  Port change detection shows when active port changes (BETA/EXPERIMENTAL)
+  Auto-suggestions for newly available ports (BETA/EXPERIMENTAL)
   Sink and port changes trigger enhanced notifications
   Set ${COLOR_CYAN}NOTIFICATION_GROUP=true${COLOR_RESET} in config to group volume change notifications
 

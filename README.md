@@ -80,14 +80,15 @@ Commands:
                               types:
                                   sinks   - list all audio output sinks
                                   sources - list all audio input sources
-                                  ports   - list ports for current sink
+                                  ports   - list ports for current sink (BETA: shows availability status)
   switch [sink]               switch to next sink or specified sink
   next                        switch to next sink
   prev                        switch to previous sink
-  port <cmd> [port]           control audio ports
+  port <cmd> [port]           control audio ports (BETA/EXPERIMENTAL)
                               commands:
-                                  list        - list available ports
+                                  list        - list available ports with availability status
                                   set <port>  - set active port
+                              note: Port features are experimental and may not work on all devices
   profile <cmd> [name]       manage volume profiles
                               commands:
                                   save <name>   - save current settings as profile
@@ -121,7 +122,7 @@ Commands:
                                   %s = sink name
                                   %p = volume progress bar
                                   %i = volume icon/emoji
-                                  %P = active port description
+                                  %P = active port description (BETA: includes availability status when available)
                                   %m = microphone volume
                                   %a = active application name
                                   %b = balance (L=left, R=right, C=center)
@@ -177,7 +178,9 @@ Notification Options:
 
 Notification Features:
   - Notifications show sink name when multiple sinks are available
-  - Port information is displayed in notifications when available
+  - Port information is displayed in notifications when available (BETA/EXPERIMENTAL)
+  - Port change detection shows when active port changes (BETA/EXPERIMENTAL)
+  - Auto-suggestions for newly available ports (BETA/EXPERIMENTAL)
   - Sink and port changes trigger enhanced notifications with context
   - Set NOTIFICATION_GROUP=true in config to group volume change notifications (dunst only)
 
@@ -226,6 +229,31 @@ volume -D 10 up
 ```
 
 This will save `DEFAULT_STEP=10` to your config file automatically, making it persistent for future invocations. To find more variables, check the [source code](https://github.com/hastinbe/i3-volume/blob/master/volume) of the `parse_opts` and `main` functions.
+
+### Port Information Features (BETA/EXPERIMENTAL)
+
+**⚠️ Note:** Port information features are currently in beta/experimental status. They may not work on all audio devices and may have limited functionality depending on your hardware and PipeWire configuration.
+
+The port information system provides enhanced visibility into audio port status and management:
+
+- **Port Listing**: Use `volume port list` to see all available ports for the current sink with availability status (plugged/unplugged)
+- **Port Switching**: Use `volume port set <port_id>` to switch between available ports
+- **Port Detection**: Enhanced port detection with multiple fallback methods for better compatibility
+- **Availability Status**: Ports are marked with their availability status:
+  - `[plugged]` - Port is available and ready to use
+  - `[unplugged]` - Port is not currently available
+  - `[unknown]` - Availability status cannot be determined
+- **Port Change Notifications**: Notifications automatically show when the active port changes
+- **Auto-Suggestions**: When a new port becomes available, you'll receive a notification suggesting to switch to it
+- **%P Placeholder**: The `%P` placeholder in output formats includes port description and availability status when available
+
+**Limitations:**
+- Not all audio devices support port switching
+- Port availability detection may vary by device
+- Some devices may not expose port information through PipeWire
+- Features are actively being improved and may change in future versions
+
+If your device doesn't show ports, this is normal - not all audio hardware supports port switching or exposes port information.
 
 ## Migrating
 
