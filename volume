@@ -71,6 +71,13 @@ define_helpers() {
 }
 
 define_notify() {
+    # Check if multiple sinks are available
+    has_multiple_sinks() {
+        local sinks
+        readarray -t sinks < <(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Sink") | .id' 2>/dev/null)
+        [[ ${#sinks[@]} -gt 1 ]]
+    }
+
     notify_volume() {
         local -r vol=$(get_volume)
         local icon summary body=""
@@ -81,11 +88,27 @@ define_notify() {
             boost_info=" (+${BOOST_AMOUNT}% boost)"
         fi
 
+        # Build summary with sink name if multiple sinks available
+        local sink_info=""
+        if has_multiple_sinks; then
+            local sink_display_name
+            sink_display_name=$(get_node_display_name)
+            sink_info=" ($sink_display_name)"
+        fi
+
+        # Get port information if available
+        local port_info=""
+        local port_desc
+        port_desc=$(get_active_port_description 2>/dev/null || echo "")
+        if not_empty "$port_desc"; then
+            port_info=" - $port_desc"
+        fi
+
         if is_muted; then
-            summary="Volume muted"
+            summary="Volume muted${sink_info}${port_info}"
             icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[0]}" || echo "${ICONS_SYMBOLIC[0]}")
         else
-            printf -v summary "Volume %3s%%%s" "$vol" "$boost_info"
+            printf -v summary "Volume %3s%%%s%s%s" "$vol" "$boost_info" "$sink_info" "$port_info"
             icon=$(get_volume_icon "$vol")
 
             if $SHOW_VOLUME_PROGRESS; then
@@ -194,7 +217,12 @@ define_notify() {
 
         # Dunst-specific options
         if [[ $NOTIFICATION_METHOD == "dunst" ]]; then
-            hints+=( "string:x-dunst-stack-tag:volume" )
+            # Use grouping tag if notification grouping is enabled
+            local group_tag="volume"
+            if isset NOTIFICATION_GROUP && [[ "$NOTIFICATION_GROUP" == "true" ]]; then
+                group_tag="volume-group"
+            fi
+            hints+=( "string:x-dunst-stack-tag:$group_tag" )
             if ! isset NO_NOTIFY_COLOR; then
                 local color
                 if is_muted; then color=$COLOR_MUTED; else color=$(volume_color "$vol"); fi
@@ -1003,16 +1031,25 @@ define_commands() {
 
         # Show notification if enabled
         if $DISPLAY_NOTIFICATIONS; then
-            local icon summary
+            local icon summary body=""
             icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[1]}" || echo "${ICONS_SYMBOLIC[1]}")
-            summary="Port switched to: $port_desc"
+
+            # Include sink name if multiple sinks available
+            local sink_info=""
+            if has_multiple_sinks; then
+                local sink_display_name
+                sink_display_name=$(get_node_display_name)
+                sink_info=" on $sink_display_name"
+            fi
+
+            summary="Port switched to: $port_desc${sink_info}"
 
             case "$NOTIFICATION_METHOD" in
                 xosd    ) notify_volume_xosd 0 "$summary" ;;
                 herbe   ) notify_volume_herbe "$summary" ;;
                 volnoti ) notify_volume_volnoti 0 ;;
                 kosd    ) notify_volume_kosd 0 ;;
-                *       ) notify_volume_libnotify 0 "$icon" "$summary" "" ;;
+                *       ) notify_volume_libnotify 0 "$icon" "$summary" "$body" ;;
             esac
         else
             echo "Port switched to: $port_desc"
@@ -2080,13 +2117,22 @@ define_commands() {
 
         # Show notification if enabled
         if $DISPLAY_NOTIFICATIONS; then
-            local icon summary
+            local icon summary body=""
+
+            # Get port information if available
+            local port_info=""
+            local port_desc
+            port_desc=$(get_active_port_description 2>/dev/null || echo "")
+            if not_empty "$port_desc"; then
+                port_info=" - $port_desc"
+            fi
+
             if $target_muted; then
                 icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[0]}" || echo "${ICONS_SYMBOLIC[0]}")
-                summary="Switched to: $target_sink_name (MUTED)"
+                printf -v summary "Switched to: %s (MUTED)%s" "$target_sink_name" "$port_info"
             else
                 icon=$(get_volume_icon "$target_vol")
-                printf -v summary "Switched to: %s (%s%%)" "$target_sink_name" "$target_vol"
+                printf -v summary "Switched to: %s (%s%%)%s" "$target_sink_name" "$target_vol" "$port_info"
             fi
 
             case "$NOTIFICATION_METHOD" in
@@ -2094,7 +2140,7 @@ define_commands() {
                 herbe   ) notify_volume_herbe "$summary" ;;
                 volnoti ) notify_volume_volnoti "$target_vol" ;;
                 kosd    ) notify_volume_kosd "$target_vol" ;;
-                *       ) notify_volume_libnotify "$target_vol" "$icon" "$summary" "" ;;
+                *       ) notify_volume_libnotify "$target_vol" "$icon" "$summary" "$body" ;;
             esac
         else
             if $target_muted; then
@@ -2540,6 +2586,7 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
 
 ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-n${COLOR_RESET}                          enable notifications
+  ${COLOR_GREEN}-q${COLOR_RESET}, ${COLOR_GREEN}--no-notify${COLOR_RESET}          disable notifications (quiet mode)
   ${COLOR_GREEN}-C${COLOR_RESET}                          play event sounds using libcanberra
   ${COLOR_GREEN}-P${COLOR_RESET}                          play sound for volume changes
   ${COLOR_GREEN}-j <muted,high,low,medium>${COLOR_RESET}  custom volume emojis
@@ -2567,6 +2614,12 @@ ${COLOR_YELLOW}Notification Options:${COLOR_RESET}
   ${COLOR_GREEN}-S <suffix>${COLOR_RESET}                 add suffix to symbolic icon names
   ${COLOR_GREEN}-y${COLOR_RESET}                          use dunstify (${COLOR_MAGENTA}default: notify-send${COLOR_RESET})
 
+${COLOR_YELLOW}Notification Features:${COLOR_RESET}
+  Notifications show sink name when multiple sinks are available
+  Port information is displayed in notifications when available
+  Sink and port changes trigger enhanced notifications
+  Set ${COLOR_CYAN}NOTIFICATION_GROUP=true${COLOR_RESET} in config to group volume change notifications
+
 ${COLOR_YELLOW}Environment Variables:${COLOR_RESET}
   ${COLOR_CYAN}XOSD_PATH${COLOR_RESET}                   path to osd_cat
   ${COLOR_CYAN}HERBE_PATH${COLOR_RESET}                  path to herbe
@@ -2575,6 +2628,7 @@ ${COLOR_YELLOW}Environment Variables:${COLOR_RESET}
   ${COLOR_CYAN}NOTIFY_PATH${COLOR_RESET}                 path to command that sends notifications
   ${COLOR_CYAN}NO_NOTIFY_COLOR${COLOR_RESET}             flag to disable colors in notifications
   ${COLOR_CYAN}USE_NOTIFY_SEND_PY${COLOR_RESET}          flag to use notify-send.py instead of notify-send
+  ${COLOR_CYAN}NOTIFICATION_GROUP${COLOR_RESET}          set to "true" to group volume change notifications (dunst only)
 EOF
         exit "$EX_USAGE"
     }
@@ -2894,6 +2948,9 @@ arrange_opts() {
                 args+=("$@")
                 break;
                 ;;
+            --no-notify)
+                flags+=("-q")
+                ;;
             -*)
                 flags+=("$1")
                 if [[ $optstr == *"${1: -1}:"* ]]; then
@@ -2911,7 +2968,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:A:Ce:af:hj:lL:nN:pPs:S:t:u:vyI:D:
+    local optstring=:A:Ce:af:hj:lL:nN:pPs:S:t:u:vyI:D:q
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -2942,6 +2999,7 @@ parse_opts() {
             D    ) DEFAULT_STEP=$OPTARG
                    save_config_value "DEFAULT_STEP" "$OPTARG" ;;
             y    ) USE_DUNSTIFY=true ;;
+            q    ) DISPLAY_NOTIFICATIONS=false ;;
             h | *) usage ;;
         esac
     done
