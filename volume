@@ -286,11 +286,16 @@ define_commands() {
         local -r target_vol=$1
         local -r duration_ms=$2
         local -r node_id=$3
+        local -r start_vol=${4:-}  # Optional starting volume
         local current_vol target_vol_int
         local -i steps=50  # Number of steps for smooth fade
         local -i step_delay
 
-        current_vol=$(get_volume)
+        if not_empty "$start_vol"; then
+            current_vol=${start_vol%.*}  # Use provided starting volume
+        else
+            current_vol=$(get_volume)
+        fi
         target_vol_int=${target_vol%.*}  # Convert to integer
 
         # Calculate step delay in milliseconds
@@ -430,14 +435,19 @@ define_commands() {
     }
     toggle_mute() {
         if not_empty "$FADE_DURATION"; then
-            local current_muted
-            current_muted=$(is_muted)
-            if $current_muted; then
+            if is_muted; then
                 # Fade in (unmute)
                 wpctl set-mute "$NODE_ID" 0
-                local current_vol
+                local current_vol saved_vol
                 current_vol=$(get_volume)
-                if (( current_vol == 0 )); then
+                # Try to restore saved volume from before mute
+                saved_vol=$(restore_volume_after_mute)
+                if not_empty "$saved_vol"; then
+                    # Restore to saved volume
+                    wpctl set-volume "$NODE_ID" "0%"
+                    fade_volume "$saved_vol" "$FADE_DURATION" "$NODE_ID"
+                    clear_saved_volume
+                elif (( current_vol == 0 )); then
                     # If volume is 0, fade from 0 to a reasonable level
                     fade_volume "${DEFAULT_VOL:-50}" "$FADE_DURATION" "$NODE_ID"
                 else
@@ -447,10 +457,24 @@ define_commands() {
                 fi
             else
                 # Fade out (mute)
+                # Ensure device is not muted before starting fade
+                wpctl set-mute "$NODE_ID" 0 &>/dev/null
+                # Invalidate cache to ensure we get the current volume
+                invalidate_cache
                 local current_vol
                 current_vol=$(get_volume)
-                fade_volume 0 "$FADE_DURATION" "$NODE_ID"
+                # Save the current volume before muting so we can restore it later
+                save_volume_before_mute "$current_vol"
+                # Fade down to 0 from current volume
+                # Pass current_vol as starting volume to ensure we fade from the correct value
+                fade_volume 0 "$FADE_DURATION" "$NODE_ID" "$current_vol"
+                # Now that fade is complete, mute the device
+                # Set volume to 0 one more time to ensure it's at 0, then mute
+                wpctl set-volume "$NODE_ID" "0%" &>/dev/null
                 wpctl set-mute "$NODE_ID" 1
+                # Some systems restore volume when muting, so set it to 0 again after mute
+                wpctl set-volume "$NODE_ID" "0%" &>/dev/null
+                invalidate_cache
             fi
         else
             invalidate_cache
@@ -909,6 +933,60 @@ define_commands() {
 
     get_profiles_dir() {
         echo "${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume/profiles"
+    }
+
+    get_config_dir() {
+        echo "${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume"
+    }
+
+    save_volume_before_mute() {
+        local -r vol=$1
+        local config_dir volume_file
+        config_dir=$(get_config_dir)
+        volume_file="$config_dir/.volume_before_mute"
+
+        # Create config directory if it doesn't exist
+        mkdir -p "$config_dir" || {
+            error "Failed to create config directory: $config_dir"
+            return 1
+        }
+
+        # Save the volume to file
+        echo "$vol" > "$volume_file" || {
+            error "Failed to save volume to: $volume_file"
+            return 1
+        }
+    }
+
+    restore_volume_after_mute() {
+        local config_dir volume_file
+        config_dir=$(get_config_dir)
+        volume_file="$config_dir/.volume_before_mute"
+
+        # Check if the file exists
+        if [[ ! -f "$volume_file" ]]; then
+            return 1
+        fi
+
+        # Read the saved volume
+        local saved_vol
+        saved_vol=$(cat "$volume_file" 2>/dev/null)
+
+        # Validate the volume
+        if empty "$saved_vol" || ! [[ "$saved_vol" =~ ^[0-9]+$ ]]; then
+            rm -f "$volume_file"
+            return 1
+        fi
+
+        # Return the saved volume
+        echo "$saved_vol"
+    }
+
+    clear_saved_volume() {
+        local config_dir volume_file
+        config_dir=$(get_config_dir)
+        volume_file="$config_dir/.volume_before_mute"
+        rm -f "$volume_file"
     }
 
     save_profile() {
