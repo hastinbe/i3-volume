@@ -100,6 +100,8 @@ Commands:
                                   app firefox up 5        - increase Firefox volume by 5%
                                   app mpv mute            - mute/unmute mpv
   output <format>             display volume in a custom format
+                              special formats:
+                                  json                        - JSON output with all volume information
                               format placeholders:
                                   %v = volume
                                   %s = sink name
@@ -110,6 +112,7 @@ Commands:
                                   %a = active application name
 
                                   examples:
+                                      output json              - JSON format for programmatic use
                                       "Volume is %v" = Volume is 50%
                                       "%i %v %p \n"  = 奔 50% ██████████
   outputs                     show supported output formats

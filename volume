@@ -364,6 +364,115 @@ define_output_formats() {
     }
 
     output_volume_xob() { echo "$(get_volume)$(is_muted && echo "!")"; }
+
+    output_volume_json() {
+        local vol muted display_name port_desc app_name mic_vol mic_muted
+        local json_output
+
+        # Get volume and muted status
+        vol=$(get_volume)
+        if is_muted; then
+            muted="true"
+        else
+            muted="false"
+        fi
+
+        # Get display name
+        display_name=$(get_node_display_name)
+
+        # Get port description (may be empty)
+        port_desc=$(get_active_port_description 2>/dev/null || echo "")
+
+        # Get active app name (may be empty)
+        app_name=$(get_active_app_name 2>/dev/null || echo "")
+
+        # Get microphone information (may not be available)
+        if is_mic_muted 2>/dev/null; then
+            mic_muted="true"
+            mic_vol=""
+        else
+            mic_muted="false"
+            mic_vol=$(get_mic_volume 2>/dev/null || echo "")
+        fi
+
+        # Build JSON using jq for proper escaping and formatting
+        json_output=$(jq -n \
+            --arg volume "$vol" \
+            --arg sink_name "${NODE_NAME:-}" \
+            --arg node_id "${NODE_ID:-}" \
+            --arg display_name "$display_name" \
+            --arg port "${port_desc:-}" \
+            --arg active_app "${app_name:-}" \
+            --arg mic_volume "${mic_vol:-}" \
+            --arg muted_str "$muted" \
+            --arg mic_muted_str "$mic_muted" \
+            '{
+                volume: ($volume | tonumber),
+                muted: ($muted_str == "true"),
+                sink_name: (if $sink_name == "" then null else $sink_name end),
+                node_id: (if $node_id == "" then null else ($node_id | tonumber) end),
+                display_name: (if $display_name == "" then null else $display_name end),
+                port: (if $port == "" then null else $port end),
+                active_app: (if $active_app == "" then null else $active_app end),
+                microphone: {
+                    volume: (if $mic_volume == "" then null else ($mic_volume | tonumber) end),
+                    muted: ($mic_muted_str == "true")
+                }
+            }' 2>/dev/null)
+
+        # Fallback to manual JSON construction if jq fails
+        if [[ -z "$json_output" ]]; then
+            # Escape strings for JSON (simple escaping)
+            escape_json() {
+                echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g; s/\r/\\r/g; s/\t/\\t/g'
+            }
+
+            local esc_display_name esc_port esc_app_name esc_sink_name
+            esc_display_name=$(escape_json "$display_name")
+            esc_port=$(escape_json "$port_desc")
+            esc_app_name=$(escape_json "$app_name")
+            esc_sink_name=$(escape_json "${NODE_NAME:-}")
+
+            json_output="{"
+            json_output="${json_output}\"volume\":${vol},"
+            json_output="${json_output}\"muted\":${muted},"
+            if [[ -n "$NODE_NAME" ]]; then
+                json_output="${json_output}\"sink_name\":\"${esc_sink_name}\","
+            else
+                json_output="${json_output}\"sink_name\":null,"
+            fi
+            if [[ -n "$NODE_ID" ]]; then
+                json_output="${json_output}\"node_id\":${NODE_ID},"
+            else
+                json_output="${json_output}\"node_id\":null,"
+            fi
+            if [[ -n "$display_name" ]]; then
+                json_output="${json_output}\"display_name\":\"${esc_display_name}\","
+            else
+                json_output="${json_output}\"display_name\":null,"
+            fi
+            if [[ -n "$port_desc" ]]; then
+                json_output="${json_output}\"port\":\"${esc_port}\","
+            else
+                json_output="${json_output}\"port\":null,"
+            fi
+            if [[ -n "$app_name" ]]; then
+                json_output="${json_output}\"active_app\":\"${esc_app_name}\","
+            else
+                json_output="${json_output}\"active_app\":null,"
+            fi
+            json_output="${json_output}\"microphone\":{"
+            if [[ -n "$mic_vol" ]]; then
+                json_output="${json_output}\"volume\":${mic_vol},"
+            else
+                json_output="${json_output}\"volume\":null,"
+            fi
+            json_output="${json_output}\"muted\":${mic_muted}"
+            json_output="${json_output}}}"
+        fi
+
+        echo "$json_output"
+    }
 }
 
 define_commands() {
@@ -688,6 +797,7 @@ define_commands() {
         case "$for" in
             i3blocks ) output_volume_i3blocks ;;
             xob      ) output_volume_xob ;;
+            json     ) output_volume_json ;;
             default  ) output_volume_default ;;
             *        ) output_volume_custom "$*" ;;
         esac
@@ -2568,6 +2678,8 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   app firefox up 5        - increase Firefox volume by 5%
                                   app mpv mute            - mute/unmute mpv
   ${COLOR_GREEN}output <format>${COLOR_RESET}             display volume in a custom format
+                              special formats:
+                                  json                        - JSON output with all volume information
                               format placeholders:
                                   %v = volume
                                   %s = sink name
@@ -2578,6 +2690,7 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   %a = active application name
 
                                   examples:
+                                      output json              - JSON format for programmatic use
                                       "Volume is %v" = Volume is 50%
                                       "%i %v %p \n"  = 奔 50% ██████████
   ${COLOR_GREEN}outputs${COLOR_RESET}                     show supported output formats
