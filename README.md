@@ -118,6 +118,7 @@ Commands:
 
 Options:
   -n                          enable notifications
+  -q, --no-notify             disable notifications (quiet mode)
   -C                          play event sounds using libcanberra
   -P                          play sound for volume changes
   -j <muted,high,low,medium>  custom volume emojis
@@ -130,6 +131,7 @@ Options:
   -D <value>                  set default step size (default: 5)
   -f <duration_ms>            fade duration in milliseconds (for set/up/down/mute)
   -x <value>                  set maximum volume
+  -v                          verbose mode (detailed error information)
   -h                          show help
 
 Notification Options:
@@ -144,6 +146,12 @@ Notification Options:
   -S <suffix>                 add suffix to symbolic icon names
   -y                          use dunstify (default: notify-send)
 
+Notification Features:
+  - Notifications show sink name when multiple sinks are available
+  - Port information is displayed in notifications when available
+  - Sink and port changes trigger enhanced notifications with context
+  - Set NOTIFICATION_GROUP=true in config to group volume change notifications (dunst only)
+
 Environment Variables:
   XOSD_PATH                   path to osd_cat
   HERBE_PATH                  path to herbe
@@ -152,6 +160,7 @@ Environment Variables:
   NOTIFY_PATH                 path to command that sends notifications
   NO_NOTIFY_COLOR             flag to disable colors in notifications
   USE_NOTIFY_SEND_PY          flag to use notify-send.py instead of notify-send
+  NOTIFICATION_GROUP          set to "true" to group volume change notifications (dunst only)
 ```
 
 ### Configuration
