@@ -46,6 +46,10 @@ Commands:
   down [value]                decrease volume (uses default step if value omitted)
   set <value>                 set volume
   mute                        toggle mute
+  fade <from> <to> [duration_ms] fade volume smoothly
+                              examples:
+                                  fade 0 100        - fade from 0% to 100% (500ms)
+                                  fade 0 100 2000  - fade from 0% to 100% over 2 seconds
   mic <cmd> [value]           control microphone
                               commands:
                                   up [value]    - increase microphone volume (uses default step if value omitted)
@@ -100,6 +104,7 @@ Options:
   -A <node.nick:alias>        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   -u <signal>                 signal to update status bar (requires -t)
   -D <value>                  set default step size (default: 5)
+  -f <duration_ms>            fade duration in milliseconds (for set/up/down/mute)
   -x <value>                  set maximum volume
   -h                          display help
 

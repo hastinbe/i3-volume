@@ -282,18 +282,100 @@ define_output_formats() {
 }
 
 define_commands() {
+    fade_volume() {
+        local -r target_vol=$1
+        local -r duration_ms=$2
+        local -r node_id=$3
+        local current_vol target_vol_int
+        local -i steps=50  # Number of steps for smooth fade
+        local -i step_delay
+
+        current_vol=$(get_volume)
+        target_vol_int=${target_vol%.*}  # Convert to integer
+
+        # Calculate step delay in milliseconds
+        if (( duration_ms > 0 && steps > 0 )); then
+            step_delay=$(( duration_ms / steps ))
+        else
+            step_delay=10  # Default 10ms per step
+        fi
+
+        # Calculate volume difference
+        local -i vol_diff=$(( target_vol_int - current_vol ))
+
+        if (( vol_diff == 0 )); then
+            return 0  # Already at target
+        fi
+
+        # Calculate step size
+        local -i step_size
+        if (( vol_diff > 0 )); then
+            step_size=$(( (vol_diff + steps - 1) / steps ))  # Ceiling division
+        else
+            step_size=$(( (vol_diff - steps + 1) / steps ))  # Floor division
+        fi
+
+        # Perform fade
+        local -i i
+        for (( i = 0; i < steps; i++ )); do
+            local -i new_vol=$(( current_vol + step_size * (i + 1) ))
+
+            # Clamp to target
+            if (( vol_diff > 0 && new_vol > target_vol_int )); then
+                new_vol=$target_vol_int
+            elif (( vol_diff < 0 && new_vol < target_vol_int )); then
+                new_vol=$target_vol_int
+            fi
+
+            # Clamp to valid range
+            if (( new_vol < 0 )); then
+                new_vol=0
+            elif not_empty "$MAX_VOL" && (( new_vol > MAX_VOL )); then
+                new_vol=$MAX_VOL
+            fi
+
+            wpctl set-volume "$node_id" "${new_vol}%" &>/dev/null
+
+            # Sleep between steps (convert ms to microseconds for usleep, or use sleep)
+            if (( i < steps - 1 )); then
+                if command -v usleep &>/dev/null; then
+                    # usleep takes microseconds
+                    usleep $(( step_delay * 1000 )) 2>/dev/null || sleep 0.01
+                else
+                    # sleep with decimal seconds (bash 4+ supports this)
+                    local sleep_time
+                    sleep_time=$(awk "BEGIN {printf \"%.3f\", $step_delay / 1000}" 2>/dev/null)
+                    if [[ -n "$sleep_time" ]]; then
+                        sleep "$sleep_time" 2>/dev/null || sleep 0.01
+                    else
+                        sleep 0.01
+                    fi
+                fi
+            fi
+        done
+
+        # Ensure we end at exact target
+        wpctl set-volume "$node_id" "${target_vol_int}%" &>/dev/null
+        invalidate_cache
+    }
+
     set_volume() {
         local -r vol=${1:?$(error 'Volume is required')}
         local -r op=${2:-}
+        local target_vol current_vol
 
         if not_empty "$MAX_VOL"; then
             case "$op" in
                 +)  # Increase volume
-                    local -r curr_vol=$(get_volume)
-                    if (( curr_vol + vol > MAX_VOL )); then
+                    current_vol=$(get_volume)
+                    if (( current_vol + vol > MAX_VOL )); then
                         # Instead of doing nothing, step to max_volume
-                        local -r step=$( max "0" "$(( MAX_VOL - curr_vol ))" )
-                        wpctl set-volume "$NODE_ID" "$step%+"
+                        local -r step=$( max "0" "$(( MAX_VOL - current_vol ))" )
+                        if not_empty "$FADE_DURATION"; then
+                            fade_volume "$MAX_VOL" "$FADE_DURATION" "$NODE_ID"
+                        else
+                            wpctl set-volume "$NODE_ID" "$step%+"
+                        fi
                         return
                     fi
                     ;;
@@ -305,13 +387,31 @@ define_commands() {
             esac
         fi
 
-        invalidate_cache
-
-        case "$op" in
-            +) wpctl set-volume "$NODE_ID" "${vol}%+" ;;
-            -) wpctl set-volume "$NODE_ID" "${vol}%-" ;;
-            *) wpctl set-volume "$NODE_ID" "${vol}%" ;;
-        esac
+        # Handle fade if requested
+        if not_empty "$FADE_DURATION"; then
+            case "$op" in
+                +)
+                    current_vol=$(get_volume)
+                    target_vol=$(( current_vol + vol ))
+                    fade_volume "$target_vol" "$FADE_DURATION" "$NODE_ID"
+                    ;;
+                -)
+                    current_vol=$(get_volume)
+                    target_vol=$(( current_vol - vol ))
+                    fade_volume "$target_vol" "$FADE_DURATION" "$NODE_ID"
+                    ;;
+                *)
+                    fade_volume "$vol" "$FADE_DURATION" "$NODE_ID"
+                    ;;
+            esac
+        else
+            invalidate_cache
+            case "$op" in
+                +) wpctl set-volume "$NODE_ID" "${vol}%+" ;;
+                -) wpctl set-volume "$NODE_ID" "${vol}%-" ;;
+                *) wpctl set-volume "$NODE_ID" "${vol}%" ;;
+            esac
+        fi
     }
 
     increase_volume() {
@@ -328,7 +428,35 @@ define_commands() {
         fi
         set_volume "$step" "-"
     }
-    toggle_mute() { invalidate_cache; wpctl set-mute "$NODE_ID" toggle; }
+    toggle_mute() {
+        if not_empty "$FADE_DURATION"; then
+            local current_muted
+            current_muted=$(is_muted)
+            if $current_muted; then
+                # Fade in (unmute)
+                wpctl set-mute "$NODE_ID" 0
+                local current_vol
+                current_vol=$(get_volume)
+                if (( current_vol == 0 )); then
+                    # If volume is 0, fade from 0 to a reasonable level
+                    fade_volume "${DEFAULT_VOL:-50}" "$FADE_DURATION" "$NODE_ID"
+                else
+                    # Fade from 0 to current volume
+                    wpctl set-volume "$NODE_ID" "0%"
+                    fade_volume "$current_vol" "$FADE_DURATION" "$NODE_ID"
+                fi
+            else
+                # Fade out (mute)
+                local current_vol
+                current_vol=$(get_volume)
+                fade_volume 0 "$FADE_DURATION" "$NODE_ID"
+                wpctl set-mute "$NODE_ID" 1
+            fi
+        else
+            invalidate_cache
+            wpctl set-mute "$NODE_ID" toggle
+        fi
+    }
 
     set_mic_volume() {
         local -r vol=${1:?$(error 'Volume is required')}
@@ -1301,6 +1429,10 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
   ${COLOR_GREEN}down [value]${COLOR_RESET}                decrease volume (uses default step if value omitted)
   ${COLOR_GREEN}set <value>${COLOR_RESET}                 set volume
   ${COLOR_GREEN}mute${COLOR_RESET}                        toggle mute
+  ${COLOR_GREEN}fade <from> <to> [duration_ms]${COLOR_RESET} fade volume smoothly
+                              examples:
+                                  fade 0 100        - fade from 0% to 100% (500ms)
+                                  fade 0 100 2000  - fade from 0% to 100% over 2 seconds
   ${COLOR_GREEN}mic <cmd> [value]${COLOR_RESET}           control microphone
                               commands:
                                   up <value>    - increase microphone volume
@@ -1355,6 +1487,7 @@ ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-A <node.nick:alias>${COLOR_RESET}        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   ${COLOR_GREEN}-u <signal>${COLOR_RESET}                 signal to update status bar (${COLOR_MAGENTA}requires -t${COLOR_RESET})
   ${COLOR_GREEN}-D <value>${COLOR_RESET}                  set default step size (${COLOR_MAGENTA}default: 5${COLOR_RESET})
+  ${COLOR_GREEN}-f <duration_ms>${COLOR_RESET}            fade duration in milliseconds (${COLOR_MAGENTA}for set/up/down/mute${COLOR_RESET})
   ${COLOR_GREEN}-x <value>${COLOR_RESET}                  set maximum volume
   ${COLOR_GREEN}-h${COLOR_RESET}                          show help
 
@@ -1662,7 +1795,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:A:Ce:hj:lL:nN:pPs:S:t:u:yI:D:
+    local optstring=:A:Ce:f:hj:lL:nN:pPs:S:t:u:yI:D:
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -1675,6 +1808,7 @@ parse_opts() {
                    NODE_ALIASES[$node]=$alias ;;
             C    ) USE_CANBERRA=true ;;
             e    ) EXPIRES=$OPTARG ;;
+            f    ) FADE_DURATION=$OPTARG ;;
             j    ) IFS=, read -ra ICONS_EMOJI <<< "$OPTARG" ;;
             l    ) USE_FULLCOLOR_ICONS=true ;;
             L    ) PROGRESS_PLACEMENT=$OPTARG ;;
@@ -1728,6 +1862,44 @@ exec_command() {
             esac
             ;;
         mute) toggle_mute ;;
+        fade)
+            case "$#" in
+                2)
+                    # fade <from> <to> - uses default duration (500ms)
+                    local -r from_vol=$1
+                    local -r to_vol=$2
+                    local current_vol
+                    current_vol=$(get_volume)
+                    # Set to from_vol first if needed
+                    if (( current_vol != from_vol )); then
+                        wpctl set-volume "$NODE_ID" "${from_vol}%" &>/dev/null
+                        invalidate_cache
+                    fi
+                    fade_volume "$to_vol" 500 "$NODE_ID"
+                    ;;
+                3)
+                    # fade <from> <to> <duration_ms>
+                    local -r from_vol=$1
+                    local -r to_vol=$2
+                    local -r duration=$3
+                    local current_vol
+                    current_vol=$(get_volume)
+                    # Set to from_vol first if needed
+                    if (( current_vol != from_vol )); then
+                        wpctl set-volume "$NODE_ID" "${from_vol}%" &>/dev/null
+                        invalidate_cache
+                    fi
+                    fade_volume "$to_vol" "$duration" "$NODE_ID"
+                    ;;
+                *)
+                    error "Usage: fade <from> <to> [duration_ms]"
+                    echo "  ${COLOR_GREEN}fade 0 100${COLOR_RESET}        - fade from 0% to 100% (default 500ms)"
+                    echo "  ${COLOR_GREEN}fade 0 100 2000${COLOR_RESET}  - fade from 0% to 100% over 2000ms"
+                    EXITCODE=$EX_USAGE
+                    return 1
+                    ;;
+            esac
+            ;;
         mic)
             case "$#" in
                 0) usage ;;
@@ -1948,7 +2120,8 @@ main() {
         STATUSLINE="" \
         SYMBOLIC_ICON_SUFFIX="" \
         PLAY_SOUND=false \
-        USE_CANBERRA=false
+        USE_CANBERRA=false \
+        FADE_DURATION=""
 
     declare -i EXPIRES=1500
 
