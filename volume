@@ -19,11 +19,55 @@ define_helpers() {
     isset() { [[ -v $1 ]]; }
     command_exists() { command -v "$1" &>/dev/null; }
     error() { echo "$COLOR_RED$*$COLOR_RESET"; }
+    error_with_suggestion() {
+        local msg="$1"
+        shift
+        error "$msg"
+        while [[ $# -gt 0 ]]; do
+            echo "  ${COLOR_YELLOW}→${COLOR_RESET} $1" >&2
+            shift
+        done
+    }
     has_color() { [ "$(tput colors)" -ge 8 ] &>/dev/null && [ -t 1 ]; }
     ms_to_secs() { echo "scale=0; (${1} + 999) / 1000" | bc; }
     is_command_hookable() { ! [[ ${POST_HOOK_EXEMPT_COMMANDS[*]} =~ $1 ]]; }
     has_capability() { [[ "${NOTIFY_CAPS[*]}" =~ $1 ]]; }
     max() { echo $(( $1 > $2 ? $1 : $2 )); }
+
+    # Check if PipeWire is running
+    check_pipewire_running() {
+        if ! command_exists pw-dump; then
+            return 1
+        fi
+        if ! pw-dump &>/dev/null; then
+            return 1
+        fi
+        return 0
+    }
+
+    # Check if wpctl is available and working
+    check_wpctl_available() {
+        if ! command_exists wpctl; then
+            return 1
+        fi
+        return 0
+    }
+
+    # Get diagnostic information for verbose mode
+    get_pipewire_diagnostics() {
+        local diag=""
+        if ! check_pipewire_running; then
+            diag="PipeWire service may not be running. Try: systemctl --user status pipewire pipewire-pulse"
+        elif ! check_wpctl_available; then
+            diag="wpctl command not found. Install WirePlumber package."
+        else
+            # Try to get default sink info
+            if ! wpctl inspect @DEFAULT_AUDIO_SINK@ &>/dev/null; then
+                diag="Cannot access default audio sink. PipeWire may not be fully initialized."
+            fi
+        fi
+        echo "$diag"
+    }
 }
 
 define_notify() {
@@ -553,7 +597,9 @@ define_commands() {
         fi
 
         if empty "$SOURCE_ID"; then
-            error "No audio source available."
+            error_with_suggestion "No audio source available." \
+                "Check if a microphone or audio input device is connected." \
+                "Use 'volume list sources' to see available sources."
             return 1
         fi
 
@@ -586,7 +632,9 @@ define_commands() {
         fi
 
         if empty "$SOURCE_ID"; then
-            error "No audio source available."
+            error_with_suggestion "No audio source available." \
+                "Check if a microphone or audio input device is connected." \
+                "Use 'volume list sources' to see available sources."
             return 1
         fi
 
@@ -679,7 +727,9 @@ define_commands() {
         readarray -t sources < <(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Source") | "\(.id)|\(.info.props."node.name")|\(.info.props."node.nick" // "N/A")"' 2>/dev/null)
 
         if [[ ${#sources[@]} -eq 0 ]]; then
-            error "No audio sources found."
+            error_with_suggestion "No audio sources found." \
+                "Check if a microphone or audio input device is connected." \
+                "Ensure PipeWire is running: systemctl --user status pipewire pipewire-pulse"
             return 1
         fi
 
@@ -725,7 +775,16 @@ define_commands() {
 
     list_ports() {
         if empty "$NODE_ID"; then
-            error "No sink specified. Use -s <sink> or ensure default sink is available."
+            error_with_suggestion "No sink specified. Use -s <sink> or ensure default sink is available." \
+                "Use 'volume list sinks' to see available sinks." \
+                "Specify a sink with: volume -s <sink_name> port list"
+            if [[ "${VERBOSE:-false}" == "true" ]]; then
+                local diag
+                diag=$(get_pipewire_diagnostics)
+                if not_empty "$diag"; then
+                    echo "${COLOR_CYAN}[verbose]${COLOR_RESET} $diag" >&2
+                fi
+            fi
             return 1
         fi
 
@@ -904,8 +963,9 @@ define_commands() {
         port_id=$(find_port_by_name_or_id "$port_target")
 
         if empty "$port_id"; then
-            error "Port not found: $port_target"
-            echo "Use 'volume port list' or 'volume list ports' to see available ports."
+            error_with_suggestion "Port not found: $port_target" \
+                "Use 'volume port list' to see available ports for the current sink." \
+                "Port names are case-sensitive."
             return 1
         fi
 
@@ -926,7 +986,9 @@ define_commands() {
         #   2. Use 'volume port set <port_id>' to switch ports
         #   3. Verify with 'wpctl inspect <node_id>' that the port changed
         if ! pw-cli set-param "$NODE_ID" Props '{"EnumPort":"'"$port_id"'"}' &>/dev/null; then
-            error "Failed to set port to $port_id"
+            error_with_suggestion "Failed to set port to $port_id" \
+                "The port may not be available for this sink." \
+                "Use 'volume port list' to verify the port exists and is available."
             echo "Note: Port switching may not be supported on this device, or the port ID may be incorrect."
             echo "Verify ports are available with: volume port list"
             return 1
@@ -1417,8 +1479,9 @@ define_commands() {
         profile_file="$profiles_dir/$profile_name.json"
 
         if [[ ! -f "$profile_file" ]]; then
-            error "Profile not found: $profile_name"
-            echo "Use 'volume profile list' to see available profiles."
+            error_with_suggestion "Profile not found: $profile_name" \
+                "Use 'volume profile list' to see available profiles." \
+                "Create a profile with: volume profile save <name>"
             return 1
         fi
 
@@ -1547,7 +1610,9 @@ define_commands() {
         profile_file="$profiles_dir/$profile_name.json"
 
         if [[ ! -f "$profile_file" ]]; then
-            error "Profile not found: $profile_name"
+            error_with_suggestion "Profile not found: $profile_name" \
+                "Use 'volume profile list' to see available profiles." \
+                "Create a profile with: volume profile save <name>"
             return 1
         fi
 
@@ -1621,7 +1686,16 @@ define_commands() {
         readarray -t all_sinks < <(get_all_sinks)
 
         if [[ ${#all_sinks[@]} -eq 0 ]]; then
-            error "No audio sinks found."
+            error_with_suggestion "No audio sinks found." \
+                "Check if PipeWire is running: systemctl --user status pipewire pipewire-pulse" \
+                "Ensure audio devices are connected and recognized by the system."
+            if [[ "${VERBOSE:-false}" == "true" ]]; then
+                local diag
+                diag=$(get_pipewire_diagnostics)
+                if not_empty "$diag"; then
+                    echo "${COLOR_CYAN}[verbose]${COLOR_RESET} $diag" >&2
+                fi
+            fi
             return 1
         fi
 
@@ -1685,7 +1759,16 @@ define_commands() {
         readarray -t all_sinks < <(get_all_sinks)
 
         if [[ ${#all_sinks[@]} -eq 0 ]]; then
-            error "No audio sinks found."
+            error_with_suggestion "No audio sinks found." \
+                "Check if PipeWire is running: systemctl --user status pipewire pipewire-pulse" \
+                "Ensure audio devices are connected and recognized by the system."
+            if [[ "${VERBOSE:-false}" == "true" ]]; then
+                local diag
+                diag=$(get_pipewire_diagnostics)
+                if not_empty "$diag"; then
+                    echo "${COLOR_CYAN}[verbose]${COLOR_RESET} $diag" >&2
+                fi
+            fi
             return 1
         fi
 
@@ -1730,7 +1813,16 @@ define_commands() {
         readarray -t all_sinks < <(get_all_sinks)
 
         if [[ ${#all_sinks[@]} -eq 0 ]]; then
-            error "No audio sinks found."
+            error_with_suggestion "No audio sinks found." \
+                "Check if PipeWire is running: systemctl --user status pipewire pipewire-pulse" \
+                "Ensure audio devices are connected and recognized by the system."
+            if [[ "${VERBOSE:-false}" == "true" ]]; then
+                local diag
+                diag=$(get_pipewire_diagnostics)
+                if not_empty "$diag"; then
+                    echo "${COLOR_CYAN}[verbose]${COLOR_RESET} $diag" >&2
+                fi
+            fi
             return 1
         fi
 
@@ -1744,7 +1836,17 @@ define_commands() {
         default_sink_id=$(get_default_sink_id)
 
         if empty "$default_sink_id"; then
-            error "Could not determine default sink."
+            error_with_suggestion "Could not determine default sink." \
+                "Check if PipeWire is running: systemctl --user status pipewire pipewire-pulse" \
+                "Use 'volume list sinks' to see available sinks." \
+                "Set a default sink manually if needed."
+            if [[ "${VERBOSE:-false}" == "true" ]]; then
+                local diag
+                diag=$(get_pipewire_diagnostics)
+                if not_empty "$diag"; then
+                    echo "${COLOR_CYAN}[verbose]${COLOR_RESET} $diag" >&2
+                fi
+            fi
             return 1
         fi
 
@@ -1873,7 +1975,16 @@ define_commands() {
         readarray -t all_sinks < <(get_all_sinks)
 
         if [[ ${#all_sinks[@]} -eq 0 ]]; then
-            error "No audio sinks found."
+            error_with_suggestion "No audio sinks found." \
+                "Check if PipeWire is running: systemctl --user status pipewire pipewire-pulse" \
+                "Ensure audio devices are connected and recognized by the system."
+            if [[ "${VERBOSE:-false}" == "true" ]]; then
+                local diag
+                diag=$(get_pipewire_diagnostics)
+                if not_empty "$diag"; then
+                    echo "${COLOR_CYAN}[verbose]${COLOR_RESET} $diag" >&2
+                fi
+            fi
             return 1
         fi
 
@@ -1916,8 +2027,20 @@ define_commands() {
             target_sink_id=$(find_sink_by_name_or_id "$target")
 
             if empty "$target_sink_id"; then
-                error "Sink not found: $target"
-                echo "Use 'volume list sinks' to see available sinks."
+                error_with_suggestion "Sink not found: $target" \
+                    "Use 'volume list sinks' to see available sinks." \
+                    "You can use sink ID, name, or nick to switch sinks."
+                if [[ "${VERBOSE:-false}" == "true" ]]; then
+                    echo "${COLOR_CYAN}[verbose]${COLOR_RESET} Searched for: $target" >&2
+                    local available_sinks
+                    available_sinks=$(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Sink") | "\(.id)|\(.info.props."node.name")|\(.info.props."node.nick" // "N/A")"' 2>/dev/null | head -5)
+                    if not_empty "$available_sinks"; then
+                        echo "${COLOR_CYAN}[verbose]${COLOR_RESET} Available sinks:" >&2
+                        echo "$available_sinks" | while IFS='|' read -r id name nick; do
+                            echo "${COLOR_CYAN}[verbose]${COLOR_RESET}   ID: $id, Name: $name, Nick: $nick" >&2
+                        done
+                    fi
+                fi
                 return 1
             fi
 
@@ -1931,8 +2054,14 @@ define_commands() {
         fi
 
         # Switch to the target sink
-        if ! wpctl set-default "$target_sink_id" &>/dev/null; then
-            error "Failed to switch to sink ID $target_sink_id"
+        local switch_output
+        if ! switch_output=$(wpctl set-default "$target_sink_id" 2>&1); then
+            error_with_suggestion "Failed to switch to sink ID $target_sink_id" \
+                "The sink may not be available or accessible." \
+                "Use 'volume list sinks' to verify the sink exists."
+            if [[ "${VERBOSE:-false}" == "true" ]]; then
+                echo "${COLOR_CYAN}[verbose]${COLOR_RESET} wpctl output: $switch_output" >&2
+            fi
             return 1
         fi
 
@@ -2112,8 +2241,9 @@ define_commands() {
         stream_id=$(find_app_stream "$app_name")
 
         if empty "$stream_id"; then
-            error "Application not found: $app_name"
-            echo "Use 'volume app list' to see available applications."
+            error_with_suggestion "Application not found: $app_name" \
+                "Use 'volume app list' to see available applications." \
+                "Application names are case-sensitive."
             return 1
         fi
 
@@ -2123,22 +2253,34 @@ define_commands() {
         case "$op" in
             +)
                 if ! result=$(wpctl set-volume "$stream_id" "${vol}%+" 2>&1); then
-                    error "Failed to set volume for application: $app_name"
-                    not_empty "$result" && error "$result"
+                    error_with_suggestion "Failed to set volume for application: $app_name" \
+                        "The application may have closed or the stream may be unavailable." \
+                        "Use 'volume app list' to see currently available applications."
+                    if [[ "${VERBOSE:-false}" == "true" ]] && not_empty "$result"; then
+                        echo "${COLOR_CYAN}[verbose]${COLOR_RESET} wpctl output: $result" >&2
+                    fi
                     return 1
                 fi
                 ;;
             -)
                 if ! result=$(wpctl set-volume "$stream_id" "${vol}%-" 2>&1); then
-                    error "Failed to set volume for application: $app_name"
-                    not_empty "$result" && error "$result"
+                    error_with_suggestion "Failed to set volume for application: $app_name" \
+                        "The application may have closed or the stream may be unavailable." \
+                        "Use 'volume app list' to see currently available applications."
+                    if [[ "${VERBOSE:-false}" == "true" ]] && not_empty "$result"; then
+                        echo "${COLOR_CYAN}[verbose]${COLOR_RESET} wpctl output: $result" >&2
+                    fi
                     return 1
                 fi
                 ;;
             *)
                 if ! result=$(wpctl set-volume "$stream_id" "${vol}%" 2>&1); then
-                    error "Failed to set volume for application: $app_name"
-                    not_empty "$result" && error "$result"
+                    error_with_suggestion "Failed to set volume for application: $app_name" \
+                        "The application may have closed or the stream may be unavailable." \
+                        "Use 'volume app list' to see currently available applications."
+                    if [[ "${VERBOSE:-false}" == "true" ]] && not_empty "$result"; then
+                        echo "${COLOR_CYAN}[verbose]${COLOR_RESET} wpctl output: $result" >&2
+                    fi
                     return 1
                 fi
                 # Small delay to ensure volume change takes effect
@@ -2173,8 +2315,9 @@ define_commands() {
         stream_id=$(find_app_stream "$app_name")
 
         if empty "$stream_id"; then
-            error "Application not found: $app_name"
-            echo "Use 'volume app list' to see available applications."
+            error_with_suggestion "Application not found: $app_name" \
+                "Use 'volume app list' to see available applications." \
+                "Application names are case-sensitive."
             return 1
         fi
 
@@ -2409,6 +2552,7 @@ ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-D <value>${COLOR_RESET}                  set default step size (${COLOR_MAGENTA}default: 5${COLOR_RESET})
   ${COLOR_GREEN}-f <duration_ms>${COLOR_RESET}            fade duration in milliseconds (${COLOR_MAGENTA}for set/up/down/mute${COLOR_RESET})
   ${COLOR_GREEN}-x <value>${COLOR_RESET}                  set maximum volume
+  ${COLOR_GREEN}-v${COLOR_RESET}                          verbose mode (detailed error information)
   ${COLOR_GREEN}-h${COLOR_RESET}                          show help
 
 ${COLOR_YELLOW}Notification Options:${COLOR_RESET}
@@ -2535,10 +2679,62 @@ update_statusbar() {
 }
 
 init_audio() {
-    if empty "$NODE_NAME"; then
-        NODE_NAME=$(wpctl inspect @DEFAULT_AUDIO_SINK@ | awk '/[ \*]+node\.name/{gsub(/"/, "", $4); print $4}')
+    # Check if PipeWire is running
+    if ! check_pipewire_running; then
+        error_with_suggestion "PipeWire is not running or not accessible." \
+            "Check if PipeWire is running: systemctl --user status pipewire pipewire-pulse" \
+            "Start PipeWire if needed: systemctl --user start pipewire pipewire-pulse"
+        if [[ "${VERBOSE:-false}" == "true" ]]; then
+            local diag
+            diag=$(get_pipewire_diagnostics)
+            if not_empty "$diag"; then
+                echo "${COLOR_CYAN}[verbose]${COLOR_RESET} $diag" >&2
+            fi
+        fi
+        exit "$EX_UNAVAILABLE"
     fi
+
+    # Check if wpctl is available
+    if ! check_wpctl_available; then
+        error_with_suggestion "wpctl command not found." \
+            "Install WirePlumber package for your distribution."
+        exit "$EX_UNAVAILABLE"
+    fi
+
+    if empty "$NODE_NAME"; then
+        local default_sink_output
+        if ! default_sink_output=$(wpctl inspect @DEFAULT_AUDIO_SINK@ 2>&1); then
+            error_with_suggestion "Cannot access default audio sink." \
+                "PipeWire may not be fully initialized. Try: systemctl --user restart pipewire pipewire-pulse" \
+                "Use 'volume list sinks' to see available sinks."
+            if [[ "${VERBOSE:-false}" == "true" ]]; then
+                echo "${COLOR_CYAN}[verbose]${COLOR_RESET} wpctl output: $default_sink_output" >&2
+            fi
+            exit "$EX_UNAVAILABLE"
+        fi
+        NODE_NAME=$(echo "$default_sink_output" | awk '/[ \*]+node\.name/{gsub(/"/, "", $4); print $4}')
+    fi
+
     NODE_ID=$(get_node_id)
+
+    if empty "$NODE_ID"; then
+        error_with_suggestion "Sink not found: $NODE_NAME" \
+            "Use 'volume list sinks' to see available sinks." \
+            "Specify a different sink with: volume -s <sink_name> <command>"
+        if [[ "${VERBOSE:-false}" == "true" ]]; then
+            echo "${COLOR_CYAN}[verbose]${COLOR_RESET} Attempted to find sink: $NODE_NAME" >&2
+            local available_sinks
+            available_sinks=$(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Sink") | .info.props."node.name"' 2>/dev/null | head -5)
+            if not_empty "$available_sinks"; then
+                echo "${COLOR_CYAN}[verbose]${COLOR_RESET} Available sinks:" >&2
+                echo "$available_sinks" | while read -r sink; do
+                    echo "${COLOR_CYAN}[verbose]${COLOR_RESET}   - $sink" >&2
+                done
+            fi
+        fi
+        exit "$EX_UNAVAILABLE"
+    fi
+
     NODE_NICK=$(get_node_nick)
     DEFAULT_VOL=$(get_default_volume)
     MIN_VOL=$(get_min_volume)
@@ -2715,7 +2911,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:A:Ce:af:hj:lL:nN:pPs:S:t:u:yI:D:
+    local optstring=:A:Ce:af:hj:lL:nN:pPs:S:t:u:vyI:D:
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -2741,6 +2937,7 @@ parse_opts() {
             S    ) SYMBOLIC_ICON_SUFFIX=$OPTARG ;;
             t    ) STATUSLINE=$OPTARG ;;
             u    ) SIGNAL=$OPTARG ;;
+            v    ) VERBOSE=true ;;
             I    ) SOURCE_NAME=$OPTARG ;;
             D    ) DEFAULT_STEP=$OPTARG
                    save_config_value "DEFAULT_STEP" "$OPTARG" ;;
@@ -3086,7 +3283,8 @@ main() {
         PLAY_SOUND=false \
         USE_CANBERRA=false \
         FADE_DURATION="" \
-        ALL_SINKS=false
+        ALL_SINKS=false \
+        VERBOSE=false
 
     declare -i EXPIRES=1500
 
