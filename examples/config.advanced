@@ -1,0 +1,42 @@
+# i3-volume Configuration Example: Advanced Setup
+# Copy this file to ~/.config/i3-volume/config or $XDG_CONFIG_HOME/i3-volume/config
+
+# Notification settings
+NOTIFICATION_METHOD="dunst"
+DISPLAY_NOTIFICATIONS=true
+USE_DUNSTIFY=true
+USE_FULLCOLOR_ICONS=true
+SHOW_VOLUME_PROGRESS=true
+PROGRESS_PLACEMENT="body"
+EXPIRES=3000
+NOTIFICATION_GROUP=true
+
+# Volume control
+DEFAULT_STEP=10
+MAX_VOL=120
+FADE_DURATION=500
+
+# Status bar integration
+STATUSLINE="i3blocks"
+SIGNAL="SIGRTMIN+10"
+
+# Sound feedback
+PLAY_SOUND=true
+USE_CANBERRA=false
+
+# Audio device settings
+# NODE_NAME="alsa_output.pci-0000_00_1f.3.analog-stereo"
+# SOURCE_NAME="alsa_input.pci-0000_00_1f.3.analog-stereo"
+
+# Node aliases (customize for your audio devices)
+# NODE_ALIASES[ALC287 Analog]="Speakers"
+# NODE_ALIASES[USB Audio]="USB Headphones"
+
+# Port aliases (customize for your ports)
+# PORT_ALIASES[analog-output-speaker]="Speaker"
+# PORT_ALIASES[analog-output-headphones]="Headphones"
+
+# Other settings
+VERBOSE=false
+ALL_SINKS=false
+

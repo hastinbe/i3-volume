@@ -1,0 +1,10 @@
+# i3-volume Configuration Example: Minimal Setup
+# Copy this file to ~/.config/i3-volume/config or $XDG_CONFIG_HOME/i3-volume/config
+
+# Basic notification settings
+NOTIFICATION_METHOD="libnotify"
+DISPLAY_NOTIFICATIONS=true
+
+# Volume control
+DEFAULT_STEP=5
+

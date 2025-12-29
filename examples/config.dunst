@@ -1,0 +1,24 @@
+# i3-volume Configuration Example: Dunst Notifications
+# Copy this file to ~/.config/i3-volume/config or $XDG_CONFIG_HOME/i3-volume/config
+
+# Notification settings
+NOTIFICATION_METHOD="dunst"
+DISPLAY_NOTIFICATIONS=true
+USE_DUNSTIFY=true
+
+# Notification appearance
+USE_FULLCOLOR_ICONS=true
+SHOW_VOLUME_PROGRESS=true
+PROGRESS_PLACEMENT="summary"
+EXPIRES=2000
+
+# Group notifications (dunst only)
+NOTIFICATION_GROUP=true
+
+# Volume control
+DEFAULT_STEP=5
+MAX_VOL=100
+
+# Sound feedback
+PLAY_SOUND=false
+

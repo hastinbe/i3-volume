@@ -1,0 +1,12 @@
+# Notification Settings for Dunst
+# This file can be included in your main config using: source notifications.dunst
+
+NOTIFICATION_METHOD="dunst"
+DISPLAY_NOTIFICATIONS=true
+USE_DUNSTIFY=true
+USE_FULLCOLOR_ICONS=true
+SHOW_VOLUME_PROGRESS=true
+PROGRESS_PLACEMENT="summary"
+EXPIRES=2000
+NOTIFICATION_GROUP=true
+

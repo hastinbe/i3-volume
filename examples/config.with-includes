@@ -1,0 +1,18 @@
+# i3-volume Configuration Example: Using Includes
+# Copy this file to ~/.config/i3-volume/config or $XDG_CONFIG_HOME/i3-volume/config
+#
+# This example shows how to use config file includes to organize your configuration.
+# You can split your config into multiple files for better organization.
+
+# Include base notification settings
+source notifications.dunst
+
+# Include volume control settings
+source volume-control.conf
+
+# Include device-specific settings (if the file exists)
+# source devices.conf
+
+# Local overrides
+DEFAULT_STEP=10
+

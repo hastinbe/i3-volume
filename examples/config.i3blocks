@@ -1,0 +1,29 @@
+# i3-volume Configuration Example: i3blocks Integration
+# Copy this file to ~/.config/i3-volume/config or $XDG_CONFIG_HOME/i3-volume/config
+
+# Status bar integration
+STATUSLINE="i3blocks"
+SIGNAL="SIGRTMIN+10"
+
+# Notification settings
+NOTIFICATION_METHOD="dunst"
+DISPLAY_NOTIFICATIONS=true
+USE_DUNSTIFY=true
+
+# Notification appearance
+USE_FULLCOLOR_ICONS=true
+SHOW_VOLUME_PROGRESS=true
+PROGRESS_PLACEMENT="summary"
+
+# Volume control
+DEFAULT_STEP=5
+MAX_VOL=100
+
+# Node aliases (customize for your audio devices)
+# NODE_ALIASES[ALC287 Analog]="Speakers"
+# NODE_ALIASES[USB Audio]="USB Headphones"
+
+# Port aliases (customize for your ports)
+# PORT_ALIASES[analog-output-speaker]="Speaker"
+# PORT_ALIASES[analog-output-headphones]="Headphones"
+

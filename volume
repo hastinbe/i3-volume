@@ -1906,6 +1906,294 @@ define_commands() {
         esac
     }
 
+    get_config_file() {
+        echo "${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume/config"
+    }
+
+    show_config() {
+        local config_file
+        config_file=$(get_config_file)
+
+        if [[ ! -f "$config_file" ]]; then
+            echo "${COLOR_YELLOW}No configuration file found.${COLOR_RESET}"
+            echo "Config file location: ${COLOR_CYAN}$config_file${COLOR_RESET}"
+            echo ""
+            echo "Create a config file to customize i3-volume behavior."
+            echo "Use ${COLOR_GREEN}volume config validate${COLOR_RESET} to check config syntax."
+            return 0
+        fi
+
+        echo "${COLOR_YELLOW}Current Configuration:${COLOR_RESET}"
+        echo "Config file: ${COLOR_CYAN}$config_file${COLOR_RESET}"
+        echo ""
+
+        # Show all config variables with their current values
+        local line_num=0
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            ((line_num++))
+            local trimmed_line
+            trimmed_line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+            # Skip empty lines and comments
+            [[ -z "$trimmed_line" ]] && continue
+            [[ "$trimmed_line" =~ ^# ]] && continue
+
+            # Check for include directive
+            if [[ "$trimmed_line" =~ ^source[[:space:]]+ ]] || [[ "$trimmed_line" =~ ^\.[[:space:]]+ ]]; then
+                local include_file
+                include_file=$(echo "$trimmed_line" | sed -E 's/^(source|\.)[[:space:]]+["'\'']?([^"'\'']+)["'\'']?.*/\2/')
+                printf "  ${COLOR_MAGENTA}%s${COLOR_RESET} ${COLOR_CYAN}(include: %s)${COLOR_RESET}\n" "$trimmed_line" "$include_file"
+                continue
+            fi
+
+            # Extract variable name and value
+            if [[ "$trimmed_line" =~ ^([A-Z_][A-Z0-9_]*(\[.*\])?)=(.*)$ ]]; then
+                local var_name="${BASH_REMATCH[1]}"
+                local var_value="${BASH_REMATCH[3]}"
+
+                # Remove quotes if present
+                var_value=$(echo "$var_value" | sed "s/^[\"']//;s/[\"']$//")
+
+                # Get current value from environment (try to evaluate safely)
+                local current_value="<not set>"
+                if [[ "$var_name" =~ \[ ]]; then
+                    # Array variable - show as-is
+                    current_value="$var_value"
+                else
+                    # Regular variable - try to get from environment
+                    local var_ref="${var_name}"
+                    if [[ -n "${!var_ref:-}" ]]; then
+                        current_value="${!var_ref}"
+                    else
+                        current_value="$var_value ${COLOR_MAGENTA}(from config, not yet loaded)${COLOR_RESET}"
+                    fi
+                fi
+
+                printf "  ${COLOR_CYAN}%s${COLOR_RESET} = ${COLOR_GREEN}%s${COLOR_RESET}\n" "$var_name" "$current_value"
+            fi
+        done < "$config_file"
+
+        echo ""
+        echo "Use ${COLOR_GREEN}volume config validate${COLOR_RESET} to check config syntax."
+        echo "Use ${COLOR_GREEN}volume config docs${COLOR_RESET} to see all configurable variables."
+    }
+
+    validate_config() {
+        local config_file
+        config_file=$(get_config_file)
+
+        if [[ ! -f "$config_file" ]]; then
+            echo "${COLOR_YELLOW}No configuration file found.${COLOR_RESET}"
+            echo "Config file location: ${COLOR_CYAN}$config_file${COLOR_RESET}"
+            return 0
+        fi
+
+        echo "${COLOR_YELLOW}Validating configuration file:${COLOR_RESET} ${COLOR_CYAN}$config_file${COLOR_RESET}"
+        echo ""
+
+        local errors=0
+        local line_num=0
+
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            ((line_num++))
+            local trimmed_line
+            trimmed_line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+            # Skip empty lines and comments
+            [[ -z "$trimmed_line" ]] && continue
+            [[ "$trimmed_line" =~ ^# ]] && continue
+
+            # Check for include directive
+            if [[ "$trimmed_line" =~ ^source[[:space:]]+ ]] || [[ "$trimmed_line" =~ ^\.[[:space:]]+ ]]; then
+                local include_file
+                include_file=$(echo "$trimmed_line" | sed -E 's/^(source|\.)[[:space:]]+["'\'']?([^"'\'']+)["'\'']?.*/\2/')
+                if [[ ! -f "$include_file" ]]; then
+                    # Try relative to config directory
+                    local config_dir
+                    config_dir=$(get_config_dir)
+                    if [[ ! -f "$config_dir/$include_file" ]]; then
+                        echo "${COLOR_RED}Error on line $line_num:${COLOR_RESET} Include file not found: ${COLOR_CYAN}$include_file${COLOR_RESET}"
+                        ((errors++))
+                    fi
+                fi
+                continue
+            fi
+
+            # Check for valid variable assignment
+            if [[ ! "$trimmed_line" =~ ^[A-Z_][A-Z0-9_]*= ]]; then
+                # Check if it's an array assignment
+                if [[ "$trimmed_line" =~ ^[A-Z_][A-Z0-9_]*\[.*\]= ]]; then
+                    # Valid array assignment
+                    continue
+                else
+                    echo "${COLOR_RED}Error on line $line_num:${COLOR_RESET} Invalid syntax: ${COLOR_CYAN}$trimmed_line${COLOR_RESET}"
+                    echo "  Expected format: VARIABLE_NAME=value or VARIABLE_NAME[key]=value"
+                    ((errors++))
+                fi
+            fi
+        done < "$config_file"
+
+        # Try to source the config to check for syntax errors
+        if (( errors == 0 )); then
+            # Use a subshell to avoid affecting current environment
+            if ! (bash -n "$config_file" 2>&1); then
+                echo "${COLOR_RED}Syntax errors found when parsing config file:${COLOR_RESET}"
+                bash -n "$config_file" 2>&1 | while IFS= read -r err_line; do
+                    echo "  $err_line"
+                done
+                ((errors++))
+            fi
+        fi
+
+        if (( errors == 0 )); then
+            echo "${COLOR_GREEN}✓ Configuration file is valid${COLOR_RESET}"
+            return 0
+        else
+            echo ""
+            echo "${COLOR_RED}✗ Found $errors error(s)${COLOR_RESET}"
+            return 1
+        fi
+    }
+
+    show_config_docs() {
+        cat <<- EOF
+${COLOR_YELLOW}i3-volume Configuration Variables${COLOR_RESET}
+
+Configuration file location: ${COLOR_CYAN}~/.config/i3-volume/config${COLOR_RESET} or ${COLOR_CYAN}\$XDG_CONFIG_HOME/i3-volume/config${COLOR_RESET}
+
+${COLOR_YELLOW}Notification Settings:${COLOR_RESET}
+  ${COLOR_CYAN}NOTIFICATION_METHOD${COLOR_RESET}
+    Notification method to use (default: libnotify)
+    Options: libnotify, dunst, xosd, herbe, volnoti, kosd
+
+  ${COLOR_CYAN}DISPLAY_NOTIFICATIONS${COLOR_RESET}
+    Enable/disable notifications (default: false)
+    Values: true, false
+
+  ${COLOR_CYAN}USE_DUNSTIFY${COLOR_RESET}
+    Use dunstify instead of notify-send (default: false)
+    Values: true, false
+
+  ${COLOR_CYAN}USE_FULLCOLOR_ICONS${COLOR_RESET}
+    Use full-color icons instead of symbolic (default: false)
+    Values: true, false
+
+  ${COLOR_CYAN}SHOW_VOLUME_PROGRESS${COLOR_RESET}
+    Show progress bar in notifications (default: false)
+    Values: true, false
+
+  ${COLOR_CYAN}PROGRESS_PLACEMENT${COLOR_RESET}
+    Where to place progress bar (default: summary)
+    Options: summary, body
+
+  ${COLOR_CYAN}EXPIRES${COLOR_RESET}
+    Notification expiration time in milliseconds (default: 1500)
+    Values: integer (milliseconds)
+
+  ${COLOR_CYAN}SYMBOLIC_ICON_SUFFIX${COLOR_RESET}
+    Suffix to add to symbolic icon names
+    Values: string
+
+  ${COLOR_CYAN}NOTIFICATION_GROUP${COLOR_RESET}
+    Group volume change notifications (dunst only) (default: false)
+    Values: true, false
+
+${COLOR_YELLOW}Volume Control Settings:${COLOR_RESET}
+  ${COLOR_CYAN}DEFAULT_STEP${COLOR_RESET}
+    Default step size for volume changes (default: 5)
+    Values: integer (percentage)
+
+  ${COLOR_CYAN}MAX_VOL${COLOR_RESET}
+    Maximum volume limit (optional)
+    Values: integer (percentage, 0-200)
+
+  ${COLOR_CYAN}FADE_DURATION${COLOR_RESET}
+    Fade duration in milliseconds for volume changes (optional)
+    Values: integer (milliseconds)
+
+${COLOR_YELLOW}Status Bar Settings:${COLOR_RESET}
+  ${COLOR_CYAN}STATUSLINE${COLOR_RESET}
+    Status bar process name (e.g., i3blocks)
+    Values: string
+
+  ${COLOR_CYAN}SIGNAL${COLOR_RESET}
+    Signal to send to status bar (requires STATUSLINE)
+    Values: string (e.g., SIGRTMIN+10)
+
+${COLOR_YELLOW}Audio Device Settings:${COLOR_RESET}
+  ${COLOR_CYAN}NODE_NAME${COLOR_RESET}
+    Default sink name (optional)
+    Values: string
+
+  ${COLOR_CYAN}SOURCE_NAME${COLOR_RESET}
+    Default source name (optional)
+    Values: string
+
+  ${COLOR_CYAN}NODE_ALIASES${COLOR_RESET}
+    Aliases for node names (associative array)
+    Example: NODE_ALIASES[ALC287 Analog]="Speakers"
+
+  ${COLOR_CYAN}PORT_ALIASES${COLOR_RESET}
+    Aliases for port names (associative array)
+    Example: PORT_ALIASES[analog-output-speaker]="Speaker"
+
+${COLOR_YELLOW}Sound Settings:${COLOR_RESET}
+  ${COLOR_CYAN}PLAY_SOUND${COLOR_RESET}
+    Play sound for volume changes (default: false)
+    Values: true, false
+
+  ${COLOR_CYAN}USE_CANBERRA${COLOR_RESET}
+    Use libcanberra for sound playback (default: false)
+    Values: true, false
+
+${COLOR_YELLOW}Other Settings:${COLOR_RESET}
+  ${COLOR_CYAN}ALL_SINKS${COLOR_RESET}
+    Operate on all sinks (default: false)
+    Values: true, false
+
+  ${COLOR_CYAN}VERBOSE${COLOR_RESET}
+    Enable verbose mode (default: false)
+    Values: true, false
+
+${COLOR_YELLOW}Config File Includes:${COLOR_RESET}
+  You can include other config files using:
+    source /path/to/other/config
+    . /path/to/other/config
+
+  Paths can be relative to the config directory or absolute.
+
+${COLOR_YELLOW}Example Configuration:${COLOR_RESET}
+  See example configs in: ${COLOR_CYAN}~/.config/i3-volume/examples/${COLOR_RESET}
+
+EOF
+    }
+
+    config() {
+        local -r subcommand=${1:-}
+        local -r target=${2:-}
+
+        case "$subcommand" in
+            show|list|"")
+                show_config
+                ;;
+            validate|check)
+                validate_config
+                ;;
+            docs|help|variables)
+                show_config_docs
+                ;;
+            *)
+                error "Unknown config subcommand: $subcommand"
+                echo "Valid subcommands:"
+                echo "  ${COLOR_GREEN}config${COLOR_RESET}              - show current configuration"
+                echo "  ${COLOR_GREEN}config validate${COLOR_RESET}    - validate config file syntax"
+                echo "  ${COLOR_GREEN}config docs${COLOR_RESET}         - show all configurable variables"
+                EXITCODE=$EX_USAGE
+                return 1
+                ;;
+        esac
+    }
+
     get_all_sinks() {
         # Returns array of sink IDs
         local sinks
@@ -2853,6 +3141,11 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                       "%v{>50:high:low}" = "high" if volume > 50%, else "low"
   ${COLOR_GREEN}outputs${COLOR_RESET}                     show supported output formats
   ${COLOR_GREEN}notifications${COLOR_RESET}               list notification methods
+  ${COLOR_GREEN}config <cmd>${COLOR_RESET}                manage configuration
+                              commands:
+                                  show        - show current configuration
+                                  validate    - validate config file syntax
+                                  docs        - show all configurable variables
   ${COLOR_GREEN}help${COLOR_RESET}                        show help
 
 ${COLOR_YELLOW}Options:${COLOR_RESET}
@@ -3156,8 +3449,75 @@ init_color() {
 
 load_config() {
     local -r config=${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume/config
-    # shellcheck source=/dev/null
-    [[ -f $config ]] && source "$config"
+    local config_dir
+    config_dir=$(dirname "$config")
+
+    if [[ ! -f "$config" ]]; then
+        # Set defaults if no config file
+        : "${NOTIFICATION_METHOD:=libnotify}"
+        return 0
+    fi
+
+    # Process config file line by line to handle includes
+    local processed_includes=()
+    process_config_file() {
+        local file_to_process=$1
+        local file_dir
+        file_dir=$(dirname "$file_to_process")
+
+        # Prevent infinite loops from circular includes
+        local file_abs
+        file_abs=$(readlink -f "$file_to_process" 2>/dev/null || echo "$file_to_process")
+        if [[ " ${processed_includes[*]} " =~ ${file_abs} ]]; then
+            error "Circular include detected: $file_to_process"
+            return 1
+        fi
+        processed_includes+=("$file_abs")
+
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            local trimmed_line
+            trimmed_line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+            # Skip empty lines and comments
+            [[ -z "$trimmed_line" ]] && continue
+            [[ "$trimmed_line" =~ ^# ]] && continue
+
+            # Check for include directive
+            if [[ "$trimmed_line" =~ ^source[[:space:]]+ ]] || [[ "$trimmed_line" =~ ^\.[[:space:]]+ ]]; then
+                local include_file
+                include_file=$(echo "$trimmed_line" | sed -E 's/^(source|\.)[[:space:]]+["'\'']?([^"'\'']+)["'\'']?.*/\2/')
+
+                # Try relative to current file's directory first, then config directory
+                local resolved_include=""
+                if [[ -f "$file_dir/$include_file" ]]; then
+                    resolved_include="$file_dir/$include_file"
+                elif [[ -f "$config_dir/$include_file" ]]; then
+                    resolved_include="$config_dir/$include_file"
+                elif [[ -f "$include_file" ]]; then
+                    resolved_include="$include_file"
+                fi
+
+                if [[ -n "$resolved_include" ]]; then
+                    process_config_file "$resolved_include" || return 1
+                else
+                    error "Include file not found: $include_file"
+                    return 1
+                fi
+            else
+                # Regular config line - evaluate it
+                eval "$line" 2>/dev/null || {
+                    error "Error processing config line: $line"
+                    return 1
+                }
+            fi
+        done < "$file_to_process"
+    }
+
+    # Process main config file
+    process_config_file "$config" || {
+        error "Failed to load config file: $config"
+        return 1
+    }
 
     # Set defaults if not defined in config
     : "${NOTIFICATION_METHOD:=libnotify}"
@@ -3456,6 +3816,14 @@ exec_command() {
             ;;
         outputs) list_output_formats ;;
         notifications) list_notification_methods ;;
+        config)
+            case "$#" in
+                0) config "" ;;
+                1) config "$1" ;;
+                2) config "$1" "$2" ;;
+                *) usage ;;
+            esac
+            ;;
         *) usage ;;
     esac
 }
@@ -3519,6 +3887,7 @@ main() {
         profile
         sync
         app
+        config
     )
 
     # Exit codes
