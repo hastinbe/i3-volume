@@ -162,6 +162,7 @@ Options:
   -f <duration_ms>            fade duration in milliseconds (for set/up/down/mute)
   -x <value>                  set maximum volume
   -v                          verbose mode (detailed error information)
+  --exit-code                 show detailed exit code information
   -h                          show help
 
 Notification Options:
@@ -193,6 +194,36 @@ Environment Variables:
   NO_NOTIFY_COLOR             flag to disable colors in notifications
   USE_NOTIFY_SEND_PY          flag to use notify-send.py instead of notify-send
   NOTIFICATION_GROUP          set to "true" to group volume change notifications (dunst only)
+```
+
+### Exit Codes
+
+`i3-volume` uses standard exit codes to indicate the result of command execution. This is particularly useful for scripts that need to handle errors properly.
+
+| Code | Constant | Description |
+|------|----------|-------------|
+| 0 | `EX_OK` | Success - command executed successfully |
+| 33 | `EX_URGENT` | Urgent - volume exceeds maximum limit (MAX_VOL) |
+| 64 | `EX_USAGE` | Usage error - invalid command, option, or argument |
+| 69 | `EX_UNAVAILABLE` | Unavailable - required tool or feature not available |
+
+To view detailed information about exit codes, use the `--exit-code` option:
+
+```bash
+volume --exit-code
+```
+
+**Example usage in scripts:**
+
+```bash
+#!/bin/bash
+if ! volume up 5; then
+    case $? in
+        64) echo "Usage error - check command syntax" ;;
+        69) echo "Tool unavailable - check dependencies" ;;
+        33) echo "Volume limit exceeded" ;;
+    esac
+fi
 ```
 
 ### Configuration

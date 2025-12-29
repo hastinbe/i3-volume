@@ -3428,6 +3428,7 @@ ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-f <duration_ms>${COLOR_RESET}            fade duration in milliseconds (${COLOR_MAGENTA}for set/up/down/mute${COLOR_RESET})
   ${COLOR_GREEN}-x <value>${COLOR_RESET}                  set maximum volume
   ${COLOR_GREEN}-v${COLOR_RESET}                          verbose mode (detailed error information)
+  ${COLOR_GREEN}--exit-code${COLOR_RESET}                 show detailed exit code information
   ${COLOR_GREEN}-h${COLOR_RESET}                          show help
 
 ${COLOR_YELLOW}Notification Options:${COLOR_RESET}
@@ -3459,8 +3460,59 @@ ${COLOR_YELLOW}Environment Variables:${COLOR_RESET}
   ${COLOR_CYAN}NO_NOTIFY_COLOR${COLOR_RESET}             flag to disable colors in notifications
   ${COLOR_CYAN}USE_NOTIFY_SEND_PY${COLOR_RESET}          flag to use notify-send.py instead of notify-send
   ${COLOR_CYAN}NOTIFICATION_GROUP${COLOR_RESET}          set to "true" to group volume change notifications (dunst only)
+
+${COLOR_YELLOW}Exit Codes:${COLOR_RESET}
+  ${COLOR_GREEN}0${COLOR_RESET}   Success - command executed successfully
+  ${COLOR_GREEN}33${COLOR_RESET}  Urgent - volume exceeds maximum limit (MAX_VOL)
+  ${COLOR_GREEN}64${COLOR_RESET}  Usage error - invalid command, option, or argument
+  ${COLOR_GREEN}69${COLOR_RESET}  Unavailable - required tool or feature not available
+
+  Use ${COLOR_GREEN}--exit-code${COLOR_RESET} to display detailed exit code information.
 EOF
         exit "$EX_USAGE"
+    }
+
+    show_exit_codes() {
+        cat <<- EOF
+${COLOR_YELLOW}Exit Codes:${COLOR_RESET}
+
+${COLOR_GREEN}0${COLOR_RESET}   ${COLOR_CYAN}EX_OK${COLOR_RESET}
+        Success - command executed successfully
+        All operations completed without errors
+
+${COLOR_GREEN}33${COLOR_RESET}  ${COLOR_CYAN}EX_URGENT${COLOR_RESET}
+        Urgent - volume exceeds maximum limit
+        Returned when volume is set above MAX_VOL threshold
+        Indicates potential audio distortion or hardware limits
+
+${COLOR_GREEN}64${COLOR_RESET}  ${COLOR_CYAN}EX_USAGE${COLOR_RESET}
+        Usage error - invalid command, option, or argument
+        Common causes:
+          - Invalid command name
+          - Missing required arguments
+          - Invalid option values
+          - Incorrect command syntax
+        Check command usage with: ${COLOR_GREEN}$0 help${COLOR_RESET}
+
+${COLOR_GREEN}69${COLOR_RESET}  ${COLOR_CYAN}EX_UNAVAILABLE${COLOR_RESET}
+        Unavailable - required tool or feature not available
+        Common causes:
+          - Required notification tool not found (notify-send, dunstify, etc.)
+          - Audio system not available (PipeWire/PulseAudio)
+          - Required external command missing
+        Check verbose mode with: ${COLOR_GREEN}$0 -v <command>${COLOR_RESET}
+
+${COLOR_YELLOW}Usage in Scripts:${COLOR_RESET}
+  Check exit codes in your scripts:
+    if ! $0 up 5; then
+        case \$? in
+            64) echo "Usage error" ;;
+            69) echo "Tool unavailable" ;;
+            33) echo "Volume limit exceeded" ;;
+        esac
+    fi
+
+EOF
     }
 }
 
@@ -4135,6 +4187,10 @@ arrange_opts() {
             --no-notify)
                 flags+=("-q")
                 ;;
+            --exit-code)
+                # Handle this in main() before command execution
+                flags+=("--exit-code")
+                ;;
             --watch|--all|--input|--volume-only|--mute-only)
                 # These are listen command options, not global flags
                 # Pass them through as command arguments
@@ -4552,7 +4608,23 @@ main() {
     init_color
 
     load_config
+
+    # Handle --exit-code option before parsing (to avoid triggering usage())
+    for arg in "$@"; do
+        if [[ "$arg" == "--exit-code" ]]; then
+            show_exit_codes
+            exit "$EX_OK"
+        fi
+    done
+
     parse_opts "$@"
+
+    # Remove --exit-code from CMDARGS if it somehow ended up there
+    local temp=()
+    for arg in "${CMDARGS[@]}"; do
+        [[ "$arg" != "--exit-code" ]] && temp+=("$arg")
+    done
+    CMDARGS=("${temp[@]}")
 
     # Requires options to be parsed first
     init_audio
