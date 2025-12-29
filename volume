@@ -453,6 +453,43 @@ define_commands() {
         fi
         set_volume "$step" "-"
     }
+
+    wheel_volume() {
+        local -r delta_change=${1:?$(error 'Wheel delta is required')}
+        local step threshold current_delta new_delta volume_change threshold_reached
+
+        # Use DEFAULT_STEP as the base for threshold
+        step=${DEFAULT_STEP:-5}
+        # Threshold is based on step size - accumulate until we reach one step
+        threshold=$(awk "BEGIN {printf \"%.2f\", $step}")
+
+        # Get current accumulated delta
+        current_delta=$(get_wheel_delta)
+
+        # Add the new change to accumulated delta
+        new_delta=$(awk "BEGIN {printf \"%.2f\", $current_delta + $delta_change}")
+
+        # Check if we've reached the threshold
+        threshold_reached=$(awk "BEGIN {if ($new_delta >= $threshold || $new_delta <= -$threshold) print 1; else print 0}")
+        if (( threshold_reached == 1 )); then
+            # Calculate how many whole steps to apply
+            volume_change=$(awk "BEGIN {printf \"%.0f\", $new_delta}")
+
+            # Apply the volume change
+            if (( volume_change > 0 )); then
+                increase_volume "$volume_change"
+            elif (( volume_change < 0 )); then
+                decrease_volume "${volume_change#-}"  # Remove negative sign
+            fi
+
+            # Reset accumulated delta (keep remainder)
+            new_delta=$(awk "BEGIN {printf \"%.2f\", $new_delta - $volume_change}")
+        fi
+
+        # Save the new accumulated delta
+        save_wheel_delta "$new_delta"
+    }
+
     toggle_mute() {
         # Check if operating on all sinks
         if $ALL_SINKS; then
@@ -1012,6 +1049,51 @@ define_commands() {
         config_dir=$(get_config_dir)
         volume_file="$config_dir/.volume_before_mute"
         rm -f "$volume_file"
+    }
+
+    get_wheel_delta_file() {
+        local config_dir
+        config_dir=$(get_config_dir)
+        echo "$config_dir/.wheel_delta"
+    }
+
+    get_wheel_delta() {
+        local delta_file
+        delta_file=$(get_wheel_delta_file)
+
+        if [[ ! -f "$delta_file" ]]; then
+            echo "0"
+            return
+        fi
+
+        local delta
+        delta=$(cat "$delta_file" 2>/dev/null)
+
+        if empty "$delta" || ! [[ "$delta" =~ ^-?[0-9]+\.?[0-9]*$ ]]; then
+            echo "0"
+            return
+        fi
+
+        echo "$delta"
+    }
+
+    save_wheel_delta() {
+        local -r delta=$1
+        local config_dir delta_file
+        config_dir=$(get_config_dir)
+        delta_file=$(get_wheel_delta_file)
+
+        # Create config directory if it doesn't exist
+        mkdir -p "$config_dir" || {
+            error "Failed to create config directory: $config_dir"
+            return 1
+        }
+
+        # Save the delta to file
+        echo "$delta" > "$delta_file" || {
+            error "Failed to save wheel delta to: $delta_file"
+            return 1
+        }
     }
 
     get_boost_file() {
@@ -2242,6 +2324,11 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
   ${COLOR_GREEN}up [value]${COLOR_RESET}                  increase volume (uses default step if value omitted)
   ${COLOR_GREEN}down [value]${COLOR_RESET}                decrease volume (uses default step if value omitted)
   ${COLOR_GREEN}set <value>${COLOR_RESET}                 set volume
+  ${COLOR_GREEN}wheel <delta>${COLOR_RESET}               mouse wheel volume control (accumulates small changes)
+                              examples:
+                                  wheel 2.0   - scroll up (positive delta)
+                                  wheel -2.0 - scroll down (negative delta)
+                              note: accumulates changes until reaching DEFAULT_STEP threshold
   ${COLOR_GREEN}mute${COLOR_RESET}                        toggle mute
   ${COLOR_GREEN}fade <from> <to> [duration_ms]${COLOR_RESET} fade volume smoothly
                               examples:
@@ -2695,6 +2782,23 @@ exec_command() {
                 *) set_volume "$1" ;;
             esac
             ;;
+        wheel)
+            case "$#" in
+                0)
+                    error "Wheel delta required. Use: wheel <delta>"
+                    echo "  ${COLOR_GREEN}wheel 2.0${COLOR_RESET}   - scroll up (positive delta)"
+                    echo "  ${COLOR_GREEN}wheel -2.0${COLOR_RESET}  - scroll down (negative delta)"
+                    EXITCODE=$EX_USAGE
+                    return 1
+                    ;;
+                1)
+                    wheel_volume "$1"
+                    ;;
+                *)
+                    usage
+                    ;;
+            esac
+            ;;
         mute) toggle_mute ;;
         fade)
             case "$#" in
@@ -2999,6 +3103,27 @@ main() {
     # Requires options to be parsed first
     init_audio
     init_source
+
+    # Handle i3blocks mouse wheel events automatically
+    # When i3blocks calls with BLOCK_BUTTON set and output i3blocks command,
+    # handle wheel events before executing the output command
+    if not_empty "${BLOCK_BUTTON:-}" && [[ "${CMDARGS[0]:-}" == "output" ]] && [[ "${CMDARGS[1]:-}" == "i3blocks" ]]; then
+        local step
+        step=${DEFAULT_STEP:-5}
+
+        case "$BLOCK_BUTTON" in
+            4)  # Scroll up
+                exec_command "wheel $step"
+                post_command_hook
+                # Continue to output after handling wheel event
+                ;;
+            5)  # Scroll down
+                exec_command "wheel -$step"
+                post_command_hook
+                # Continue to output after handling wheel event
+                ;;
+        esac
+    fi
 
     exec_command "${CMDARGS[*]}" && post_command_hook
 

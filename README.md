@@ -45,6 +45,11 @@ Commands:
   up [value]                  increase volume (uses default step if value omitted)
   down [value]                decrease volume (uses default step if value omitted)
   set <value>                 set volume
+  wheel <delta>               mouse wheel volume control (accumulates small changes)
+                              examples:
+                                  wheel 2.0   - scroll up (positive delta)
+                                  wheel -2.0 - scroll down (negative delta)
+                              note: accumulates changes until reaching DEFAULT_STEP threshold
   mute                        toggle mute
   fade <from> <to> [duration_ms] fade volume smoothly
                               examples:
