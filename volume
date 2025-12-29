@@ -2201,6 +2201,13 @@ EOF
         echo "${sinks[@]}"
     }
 
+    get_all_sources() {
+        # Returns array of source IDs
+        local sources
+        readarray -t sources < <(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Source") | .id' 2>/dev/null)
+        echo "${sources[@]}"
+    }
+
     set_volume_all() {
         local -r vol=$1
         local -r op=${2:-}
@@ -3073,7 +3080,21 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   down <value>  - decrease microphone volume
                                   set <value>   - set microphone volume
                                   mute          - toggle microphone mute
-  ${COLOR_GREEN}listen${COLOR_RESET}                      monitor volume changes on a sink
+  ${COLOR_GREEN}listen [options] [output_format]${COLOR_RESET} monitor volume changes
+                              options:
+                                  -a, --all          - monitor all sinks
+                                  -I, --input        - monitor input sources
+                                  --watch            - show real-time updates in terminal
+                                  --volume-only      - only show volume change events
+                                  --mute-only        - only show mute change events
+                              examples:
+                                  listen                    - monitor default sink
+                                  listen -a                 - monitor all sinks
+                                  listen -I                 - monitor all input sources
+                                  listen --watch            - show terminal output
+                                  listen -a --watch         - monitor all sinks with terminal output
+                                  listen --volume-only      - only volume changes
+                                  listen i3blocks           - output in i3blocks format
   ${COLOR_GREEN}list <type>${COLOR_RESET}                 list sinks, sources, or ports
                               types:
                                   sinks   - list all audio output sinks
@@ -3402,19 +3423,306 @@ invalidate_cache() { PW_DUMP=""; }
 # Listens for PipeWire events
 #
 # Arguments:
-#   Output    (optional) (string) An output mode. When set, outputs volume in the output mode format.
+#   Options and output format (optional)
+#   -a, --all          Monitor all sinks
+#   -I, --input        Monitor input sources
+#   --watch            Show real-time updates in terminal
+#   --volume-only      Only show volume change events
+#   --mute-only        Only show mute change events
+#   Output format      (optional) An output mode. When set, outputs volume in the output mode format.
 listen() {
-    local -r output=$*
+    local watch_mode=false
+    local listen_all_sinks=false
+    local input_sources=false
+    local volume_only=false
+    local mute_only=false
+    local output=""
+    local node_ids=()
+    local node_type="sink"
 
-    # Output volume so status bars have something to display before any event occurs
-    not_empty "$output" && output_volume "$output"
+    # Check if global -a flag was set (for operating on all sinks)
+    if [[ "${ALL_SINKS:-false}" == "true" ]]; then
+        listen_all_sinks=true
+    fi
 
-    # Monitor events and filter for the sink ID
-    pw-cli subscribe | stdbuf -oL grep -F "object.id = $NODE_ID" | while IFS= read -r; do
-        show_volume_notification
-        update_statusbar
-        play_volume_changed
-        not_empty "$output" && output_volume "$output"
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -a|--all)
+                listen_all_sinks=true
+                shift
+                ;;
+            -I|--input)
+                input_sources=true
+                node_type="source"
+                shift
+                ;;
+            --watch)
+                watch_mode=true
+                shift
+                ;;
+            --volume-only)
+                volume_only=true
+                shift
+                ;;
+            --mute-only)
+                mute_only=true
+                shift
+                ;;
+            -*)
+                # Unknown option, might be output format or other option
+                # If it doesn't start with --, treat as output format
+                if [[ "$1" != --* ]]; then
+                    output="$*"
+                    break
+                else
+                    error "Unknown option: $1"
+                    EXITCODE=$EX_USAGE
+                    return 1
+                fi
+                ;;
+            *)
+                # Treat as output format
+                output="$*"
+                break
+                ;;
+        esac
+    done
+
+    # Build list of node IDs to monitor
+    if [[ "$input_sources" == true ]]; then
+        # Monitor input sources
+        if [[ "$listen_all_sinks" == true ]] || empty "$SOURCE_ID"; then
+            # Get all sources
+            local sources
+            readarray -t sources < <(get_all_sources)
+            if [[ ${#sources[@]} -eq 0 ]]; then
+                error "No audio sources found."
+                EXITCODE=$EX_UNAVAILABLE
+                return 1
+            fi
+            node_ids=("${sources[@]}")
+        else
+            # Monitor specific source
+            node_ids=("$SOURCE_ID")
+        fi
+    else
+        # Monitor sinks
+        if [[ "$listen_all_sinks" == true ]] || empty "$NODE_ID"; then
+            # Get all sinks
+            local sinks
+            readarray -t sinks < <(get_all_sinks)
+            if [[ ${#sinks[@]} -eq 0 ]]; then
+                error "No audio sinks found."
+                EXITCODE=$EX_UNAVAILABLE
+                return 1
+            fi
+            node_ids=("${sinks[@]}")
+        else
+            # Monitor specific sink
+            node_ids=("$NODE_ID")
+        fi
+    fi
+
+    # Build grep pattern for filtering node IDs
+    local grep_pattern=""
+    for node_id in "${node_ids[@]}"; do
+        if empty "$grep_pattern"; then
+            grep_pattern="object.id = $node_id"
+        else
+            grep_pattern="$grep_pattern|object.id = $node_id"
+        fi
+    done
+
+    # Output initial volume so status bars have something to display
+    if not_empty "$output"; then
+        output_volume "$output"
+    fi
+
+    # Show watch mode header
+    if [[ "$watch_mode" == true ]]; then
+        echo "${COLOR_YELLOW}Monitoring ${node_type}s:${COLOR_RESET}"
+        for node_id in "${node_ids[@]}"; do
+            local display_name
+            if [[ "$input_sources" == true ]]; then
+                display_name=$(pw_dump | jq -r --argjson id "$node_id" '.[] | select(.id == $id) | .info.props."node.nick" // .info.props."node.name" // "Unknown"' 2>/dev/null)
+            else
+                # Temporarily set NODE_ID to get display name
+                local old_node_id="$NODE_ID"
+                NODE_ID="$node_id"
+                display_name=$(get_node_display_name)
+                NODE_ID="$old_node_id"
+            fi
+            echo "  ${COLOR_CYAN}$node_id${COLOR_RESET}: ${COLOR_GREEN}$display_name${COLOR_RESET}"
+        done
+        echo ""
+        if [[ "$volume_only" == true ]]; then
+            echo "${COLOR_YELLOW}Filter: Volume changes only${COLOR_RESET}"
+        elif [[ "$mute_only" == true ]]; then
+            echo "${COLOR_YELLOW}Filter: Mute changes only${COLOR_RESET}"
+        fi
+        echo ""
+    fi
+
+    # Helper function to process each event
+    process_listen_event() {
+        local -r event_node_id="$1"
+        local -r event_type="$2"  # "volume" or "mute" or "change"
+
+        # Apply filters
+        if [[ "$volume_only" == true ]] && [[ "$event_type" != "volume" ]]; then
+            return 0
+        fi
+        if [[ "$mute_only" == true ]] && [[ "$event_type" != "mute" ]]; then
+            return 0
+        fi
+
+        # Update NODE_ID or SOURCE_ID for the event
+        if [[ "$input_sources" == true ]]; then
+            SOURCE_ID="$event_node_id"
+            # Update SOURCE_NAME
+            SOURCE_NAME=$(pw_dump | jq -r --argjson id "$event_node_id" '.[] | select(.id == $id) | .info.props."node.name"' 2>/dev/null)
+        else
+            NODE_ID="$event_node_id"
+            # Update NODE_NAME and NODE_NICK
+            NODE_NAME=$(pw_dump | jq -r --argjson id "$event_node_id" '.[] | select(.id == $id) | .info.props."node.name"' 2>/dev/null)
+            NODE_NICK=$(pw_dump | jq -r --argjson id "$event_node_id" '.[] | select(.id == $id) | .info.props."node.nick" // "N/A"' 2>/dev/null)
+        fi
+
+        # Show watch mode output
+        if [[ "$watch_mode" == true ]]; then
+            local display_name
+            local vol
+            local muted
+
+            if [[ "$input_sources" == true ]]; then
+                display_name=$(pw_dump | jq -r --argjson id "$event_node_id" '.[] | select(.id == $id) | .info.props."node.nick" // .info.props."node.name" // "Unknown"' 2>/dev/null)
+                vol=$(get_mic_volume 2>/dev/null || echo "N/A")
+                muted=$(is_mic_muted 2>/dev/null && echo "MUTED" || echo "")
+            else
+                display_name=$(get_node_display_name)
+                vol=$(get_volume 2>/dev/null || echo "N/A")
+                muted=$(is_muted 2>/dev/null && echo "MUTED" || echo "")
+            fi
+
+            local timestamp
+            timestamp=$(date '+%H:%M:%S')
+            printf "[%s] %s %s: " "$timestamp" "${COLOR_CYAN}$event_node_id${COLOR_RESET}" "${COLOR_GREEN}$display_name${COLOR_RESET}"
+            if [[ -n "$muted" ]]; then
+                printf "%s" "${COLOR_RED}[MUTED]${COLOR_RESET}"
+            else
+                printf "${COLOR_YELLOW}%3s%%${COLOR_RESET}" "$vol"
+            fi
+            printf " (%s%s%s)\n" "${COLOR_MAGENTA}" "$event_type" "${COLOR_RESET}"
+        fi
+
+        # Show notifications and update status bar (only for sinks, not sources in watch mode)
+        if [[ "$input_sources" != true ]]; then
+            show_volume_notification
+            update_statusbar
+            play_volume_changed
+        elif [[ "$watch_mode" != true ]]; then
+            # For sources, show mic notification if not in watch mode
+            show_mic_notification
+        fi
+
+        # Output volume in specified format
+        if not_empty "$output"; then
+            if [[ "$input_sources" == true ]]; then
+                # For sources, we'd need a mic output format - for now skip
+                :
+            else
+                output_volume "$output"
+            fi
+        fi
+    }
+
+    # Store previous states for each node to detect changes
+    declare -A prev_volumes
+    declare -A prev_muted
+
+    # Initialize previous states
+    for node_id in "${node_ids[@]}"; do
+        if [[ "$input_sources" == true ]]; then
+            local old_source_id="$SOURCE_ID"
+            SOURCE_ID="$node_id"
+            prev_volumes["$node_id"]=$(get_mic_volume 2>/dev/null || echo "0")
+            prev_muted["$node_id"]=$(is_mic_muted 2>/dev/null && echo "true" || echo "false")
+            SOURCE_ID="$old_source_id"
+        else
+            local old_node_id="$NODE_ID"
+            NODE_ID="$node_id"
+            prev_volumes["$node_id"]=$(get_volume 2>/dev/null || echo "0")
+            prev_muted["$node_id"]=$(is_muted 2>/dev/null && echo "true" || echo "false")
+            NODE_ID="$old_node_id"
+        fi
+    done
+
+    # Build node ID filter for pw-mon
+    local node_filter=""
+    for node_id in "${node_ids[@]}"; do
+        if empty "$node_filter"; then
+            node_filter="$node_id"
+        else
+            node_filter="$node_filter|$node_id"
+        fi
+    done
+
+    # Use efficient polling to detect volume/mute changes
+    # Poll every 100ms which is responsive enough for volume changes
+    while true; do
+        for node_id in "${node_ids[@]}"; do
+            local current_vol current_muted
+            local is_volume_event=false
+            local is_mute_event=false
+
+            # Get current state
+            if [[ "$input_sources" == true ]]; then
+                local old_source_id="$SOURCE_ID"
+                SOURCE_ID="$node_id"
+                current_vol=$(get_mic_volume 2>/dev/null || echo "0")
+                current_muted=$(is_mic_muted 2>/dev/null && echo "true" || echo "false")
+                SOURCE_ID="$old_source_id"
+            else
+                local old_node_id="$NODE_ID"
+                NODE_ID="$node_id"
+                current_vol=$(get_volume 2>/dev/null || echo "0")
+                current_muted=$(is_muted 2>/dev/null && echo "true" || echo "false")
+                NODE_ID="$old_node_id"
+            fi
+
+            # Check for volume change
+            if [[ "${prev_volumes[$node_id]}" != "$current_vol" ]]; then
+                is_volume_event=true
+            fi
+
+            # Check for mute change
+            if [[ "${prev_muted[$node_id]}" != "$current_muted" ]]; then
+                is_mute_event=true
+            fi
+
+            # Process event if there's a change
+            if [[ "$is_volume_event" == true ]] || [[ "$is_mute_event" == true ]]; then
+                local event_type="change"
+                if [[ "$is_volume_event" == true ]] && [[ "$is_mute_event" == true ]]; then
+                    event_type="volume+mute"
+                elif [[ "$is_volume_event" == true ]]; then
+                    event_type="volume"
+                elif [[ "$is_mute_event" == true ]]; then
+                    event_type="mute"
+                fi
+
+                # Process the event
+                process_listen_event "$node_id" "$event_type"
+
+                # Update previous states
+                prev_volumes["$node_id"]="$current_vol"
+                prev_muted["$node_id"]="$current_muted"
+            fi
+        done
+
+        # Sleep for 100ms before next poll
+        sleep 0.1
     done
 }
 
@@ -3581,6 +3889,11 @@ arrange_opts() {
                 ;;
             --no-notify)
                 flags+=("-q")
+                ;;
+            --watch|--all|--input|--volume-only|--mute-only)
+                # These are listen command options, not global flags
+                # Pass them through as command arguments
+                args+=("$1")
                 ;;
             -*)
                 flags+=("$1")

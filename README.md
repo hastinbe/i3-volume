@@ -61,7 +61,21 @@ Commands:
                                   down <value>  - decrease microphone volume
                                   set <value>   - set microphone volume
                                   mute          - toggle microphone mute
-  listen                      monitor volume changes on a sink
+  listen [options] [output_format] monitor volume changes
+                              options:
+                                  -a, --all          - monitor all sinks
+                                  -I, --input        - monitor input sources
+                                  --watch            - show real-time updates in terminal
+                                  --volume-only      - only show volume change events
+                                  --mute-only        - only show mute change events
+                              examples:
+                                  listen                    - monitor default sink
+                                  listen -a                 - monitor all sinks
+                                  listen -I                 - monitor all input sources
+                                  listen --watch            - show terminal output
+                                  listen -a --watch         - monitor all sinks with terminal output
+                                  listen --volume-only      - only volume changes
+                                  listen i3blocks           - output in i3blocks format
   list <type>                 list sinks, sources, or ports
                               types:
                                   sinks   - list all audio output sinks
