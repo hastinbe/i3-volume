@@ -262,6 +262,13 @@ define_output_formats() {
             string=${string//%P/$port_desc}
         fi
 
+        # Replace %a with active application name
+        if [[ $string == *%a* ]]; then
+            local app_name
+            app_name=$(get_active_app_name 2>/dev/null || echo "")
+            string=${string//%a/$app_name}
+        fi
+
         if is_muted; then echo -ne "${string//\%v/MUTED}"
         else echo -ne "$string"; fi
     }
@@ -1932,6 +1939,300 @@ define_commands() {
         switch_sink "$target_sink_id"
     }
 
+    list_apps() {
+        # List all applications with active audio streams
+        local streams
+        readarray -t streams < <(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Stream/Output/Audio") | "\(.id)|\(.info.props."application.name" // .info.props."media.name" // .info.props."application.process.binary" // "Unknown")|\(.info.props."node.name" // "N/A")"' 2>/dev/null)
+
+        if [[ ${#streams[@]} -eq 0 ]]; then
+            echo "${COLOR_YELLOW}No active audio streams found.${COLOR_RESET}"
+            echo "Start an application that plays audio to see it here."
+            return 0
+        fi
+
+        echo "${COLOR_YELLOW}Active Audio Applications:${COLOR_RESET}"
+        echo
+
+        local stream_id app_name stream_name vol muted
+        for stream in "${streams[@]}"; do
+            IFS='|' read -r stream_id app_name stream_name <<< "$stream"
+
+            # Get volume and mute status
+            vol=$(wpctl get-volume "$stream_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}' || echo "0")
+            muted=$(wpctl get-volume "$stream_id" 2>/dev/null | grep -q '\[MUTED\]' && echo "MUTED" || echo "")
+
+            printf "  ${COLOR_CYAN}%3s${COLOR_RESET}  ${COLOR_GREEN}%s${COLOR_RESET}" "$stream_id" "$app_name"
+            if not_empty "$muted"; then
+                printf "  ${COLOR_RED}[MUTED]${COLOR_RESET}  ${COLOR_YELLOW}%3s%%${COLOR_RESET}" "$vol"
+            else
+                printf "  ${COLOR_YELLOW}%3s%%${COLOR_RESET}" "$vol"
+            fi
+            if [[ "$stream_name" != "N/A" && "$stream_name" != "$app_name" ]]; then
+                echo "  ${COLOR_MAGENTA}($stream_name)${COLOR_RESET}"
+            else
+                echo
+            fi
+        done
+        echo
+    }
+
+    find_app_stream() {
+        # Find stream ID by application name (case-insensitive partial match)
+        local -r search=$1
+        local stream_id app_name
+
+        # Try exact match first
+        stream_id=$(pw_dump | jq -r --arg search "$search" '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Stream/Output/Audio" and (.info.props."application.name" == $search or .info.props."media.name" == $search or .info.props."application.process.binary" == $search)) | .id' 2>/dev/null | head -n1)
+
+        if not_empty "$stream_id"; then
+            echo "$stream_id"
+            return 0
+        fi
+
+        # Try case-insensitive partial match
+        # Get all streams and match in bash for better compatibility
+        local streams
+        readarray -t streams < <(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Stream/Output/Audio") | "\(.id)|\(.info.props."application.name" // .info.props."media.name" // .info.props."application.process.binary" // "")"' 2>/dev/null)
+
+        local stream_id_match app_name search_lower app_lower
+        search_lower=$(echo "$search" | tr '[:upper:]' '[:lower:]')
+        for stream in "${streams[@]}"; do
+            IFS='|' read -r stream_id_match app_name <<< "$stream"
+            if not_empty "$app_name"; then
+                app_lower=$(echo "$app_name" | tr '[:upper:]' '[:lower:]')
+                if [[ "$app_lower" == *"$search_lower"* ]]; then
+                    echo "$stream_id_match"
+                    return 0
+                fi
+            fi
+        done
+
+        return 1
+    }
+
+    get_app_volume() {
+        local -r stream_id=$1
+        wpctl get-volume "$stream_id" 2>/dev/null | awk '{print $2 * 100}'
+    }
+
+    is_app_muted() {
+        local -r stream_id=$1
+        wpctl get-volume "$stream_id" 2>/dev/null | grep -q '\[MUTED\]'
+    }
+
+    set_app_volume() {
+        local -r app_name=${1:?$(error 'Application name is required')}
+        local -r vol=${2:?$(error 'Volume is required')}
+        local -r op=${3:-}
+
+        # Find the stream
+        local stream_id
+        stream_id=$(find_app_stream "$app_name")
+
+        if empty "$stream_id"; then
+            error "Application not found: $app_name"
+            echo "Use 'volume app list' to see available applications."
+            return 1
+        fi
+
+        invalidate_cache
+
+        local result
+        case "$op" in
+            +)
+                if ! result=$(wpctl set-volume "$stream_id" "${vol}%+" 2>&1); then
+                    error "Failed to set volume for application: $app_name"
+                    not_empty "$result" && error "$result"
+                    return 1
+                fi
+                ;;
+            -)
+                if ! result=$(wpctl set-volume "$stream_id" "${vol}%-" 2>&1); then
+                    error "Failed to set volume for application: $app_name"
+                    not_empty "$result" && error "$result"
+                    return 1
+                fi
+                ;;
+            *)
+                if ! result=$(wpctl set-volume "$stream_id" "${vol}%" 2>&1); then
+                    error "Failed to set volume for application: $app_name"
+                    not_empty "$result" && error "$result"
+                    return 1
+                fi
+                # Small delay to ensure volume change takes effect
+                sleep 0.05
+                ;;
+        esac
+    }
+
+    increase_app_volume() {
+        local -r app_name=${1:?$(error 'Application name is required')}
+        local step=${2:-}
+        if empty "$step"; then
+            step=${DEFAULT_STEP:-5}
+        fi
+        set_app_volume "$app_name" "$step" "+"
+    }
+
+    decrease_app_volume() {
+        local -r app_name=${1:?$(error 'Application name is required')}
+        local step=${2:-}
+        if empty "$step"; then
+            step=${DEFAULT_STEP:-5}
+        fi
+        set_app_volume "$app_name" "$step" "-"
+    }
+
+    toggle_app_mute() {
+        local -r app_name=${1:?$(error 'Application name is required')}
+
+        # Find the stream
+        local stream_id
+        stream_id=$(find_app_stream "$app_name")
+
+        if empty "$stream_id"; then
+            error "Application not found: $app_name"
+            echo "Use 'volume app list' to see available applications."
+            return 1
+        fi
+
+        invalidate_cache
+        wpctl set-mute "$stream_id" toggle
+    }
+
+    notify_app_volume() {
+        local -r app_name=$1
+        local -r stream_id=$2
+        local -r vol=$(get_app_volume "$stream_id")
+        local icon summary body=""
+
+        if is_app_muted "$stream_id"; then
+            printf -v summary "%s: muted" "$app_name"
+            icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[0]}" || echo "${ICONS_SYMBOLIC[0]}")
+        else
+            printf -v summary "%s: %3s%%" "$app_name" "$vol"
+            icon=$(get_volume_icon "$vol")
+
+            if $SHOW_VOLUME_PROGRESS; then
+                local -r progress=$(progress_bar "$vol")
+                if has_capability body && [[ $PROGRESS_PLACEMENT == body ]]; then body="$progress"
+                else summary="$summary $progress"; fi
+            fi
+        fi
+
+        case "$NOTIFICATION_METHOD" in
+            xosd    ) notify_volume_xosd "$vol" "$summary $body" ;;
+            herbe   ) notify_volume_herbe "$summary $body" ;;
+            volnoti ) notify_volume_volnoti "$vol" ;;
+            kosd    ) notify_volume_kosd "$vol" ;;
+            *       ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
+        esac
+    }
+
+    show_app_notification() {
+        local -r app_name=$1
+        local stream_id
+
+        $DISPLAY_NOTIFICATIONS || return
+
+        # Find the stream
+        stream_id=$(find_app_stream "$app_name")
+        if empty "$stream_id"; then
+            return 1
+        fi
+
+        if empty "$NOTIFICATION_METHOD"; then
+            load_notify_server_info
+            NOTIFICATION_METHOD=$NOTIFY_SERVER
+        fi
+
+        setup_notification_icons
+        notify_app_volume "$app_name" "$stream_id"
+    }
+
+    get_active_app_name() {
+        # Get the name of the most recently active application (stream with highest volume or most recent)
+        # This is a simple heuristic - could be improved
+        local app_name
+        app_name=$(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Stream/Output/Audio") | .info.props."application.name" // .info.props."media.name" // .info.props."application.process.binary" // empty' 2>/dev/null | head -n1)
+
+        not_empty "$app_name" && echo "$app_name"
+    }
+
+    app() {
+        local -r subcommand=${1:-}
+        local -r app_name=${2:-}
+        local -r value=${3:-}
+
+        case "$subcommand" in
+            list)
+                list_apps
+                ;;
+            "")
+                error "App subcommand required. Use: app list|app <name> <cmd>"
+                echo "  ${COLOR_GREEN}app list${COLOR_RESET}              - list all applications with audio streams"
+                echo "  ${COLOR_GREEN}app <name> up [value]${COLOR_RESET}   - increase application volume"
+                echo "  ${COLOR_GREEN}app <name> down [value]${COLOR_RESET} - decrease application volume"
+                echo "  ${COLOR_GREEN}app <name> set <value>${COLOR_RESET} - set application volume"
+                echo "  ${COLOR_GREEN}app <name> mute${COLOR_RESET}        - toggle application mute"
+                EXITCODE=$EX_USAGE
+                return 1
+                ;;
+            *)
+                # subcommand is app name, app_name is the volume command
+                if empty "$app_name"; then
+                    error "Command required. Use: app <name> <cmd>"
+                    echo "Valid commands: up, down, set, mute"
+                    echo "Use 'volume app list' to see available applications."
+                    EXITCODE=$EX_USAGE
+                    return 1
+                fi
+
+                case "$app_name" in
+                    up|raise|increase)
+                        if empty "$value"; then
+                            increase_app_volume "$subcommand"
+                        else
+                            increase_app_volume "$subcommand" "$value"
+                        fi
+                        show_app_notification "$subcommand"
+                        ;;
+                    down|lower|decrease)
+                        if empty "$value"; then
+                            decrease_app_volume "$subcommand"
+                        else
+                            decrease_app_volume "$subcommand" "$value"
+                        fi
+                        show_app_notification "$subcommand"
+                        ;;
+                    set)
+                        if empty "$value"; then
+                            error "Volume value required. Use: app <name> set <value>"
+                            EXITCODE=$EX_USAGE
+                            return 1
+                        fi
+                        case "$value" in
+                            +*) increase_app_volume "$subcommand" "${value:1}" ;;
+                            -*) decrease_app_volume "$subcommand" "${value:1}" ;;
+                            *) set_app_volume "$subcommand" "$value" ;;
+                        esac
+                        show_app_notification "$subcommand"
+                        ;;
+                    mute)
+                        toggle_app_mute "$subcommand"
+                        show_app_notification "$subcommand"
+                        ;;
+                    *)
+                        error "Unknown app command: $app_name"
+                        echo "Valid commands: up, down, set, mute"
+                        EXITCODE=$EX_USAGE
+                        return 1
+                        ;;
+                esac
+                ;;
+        esac
+    }
+
     usage() {
         cat <<- EOF 1>&2
 ${COLOR_YELLOW}Usage:${COLOR_RESET} $0 [<options>] <command> [<args>]
@@ -1979,6 +2280,17 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   boost 20 60    - boost by 20% for 60s
                                   boost off      - cancel active boost
   ${COLOR_GREEN}sync${COLOR_RESET}                        sync volume across all active sinks
+  ${COLOR_GREEN}app <cmd> [args]${COLOR_RESET}            control per-application volume
+                              commands:
+                                  list                    - list all applications with audio streams
+                                  <name> up [value]       - increase application volume
+                                  <name> down [value]     - decrease application volume
+                                  <name> set <value>      - set application volume
+                                  <name> mute             - toggle application mute
+                              examples:
+                                  app list                - show all active applications
+                                  app firefox up 5        - increase Firefox volume by 5%
+                                  app mpv mute            - mute/unmute mpv
   ${COLOR_GREEN}output <format>${COLOR_RESET}             display volume in a custom format
                               format placeholders:
                                   %v = volume
@@ -1987,6 +2299,7 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   %i = volume icon/emoji
                                   %P = active port description
                                   %m = microphone volume
+                                  %a = active application name
 
                                   examples:
                                       "Volume is %v" = Volume is 50%
@@ -2496,6 +2809,16 @@ exec_command() {
                 *) usage ;;
             esac
             ;;
+        app)
+            case "$#" in
+                0) app "" ;;
+                1) app "$1" ;;
+                2) app "$1" "$2" ;;
+                3) app "$1" "$2" "$3" ;;
+                4) app "$1" "$2" "$3" "$4" ;;
+                *) usage ;;
+            esac
+            ;;
         output)
             case "$#" in 0) usage ;; esac
             output_volume "$*"
@@ -2565,6 +2888,7 @@ main() {
         port
         profile
         sync
+        app
     )
 
     # Exit codes
