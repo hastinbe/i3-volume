@@ -57,8 +57,8 @@ Commands:
                                   fade 0 100 2000  - fade from 0% to 100% over 2 seconds
   mic <cmd> [value]           control microphone
                               commands:
-                                  up [value]    - increase microphone volume (uses default step if value omitted)
-                                  down [value]  - decrease microphone volume (uses default step if value omitted)
+                                  up <value>    - increase microphone volume
+                                  down <value>  - decrease microphone volume
                                   set <value>   - set microphone volume
                                   mute          - toggle microphone mute
   listen                      monitor volume changes on a sink
@@ -67,14 +67,14 @@ Commands:
                                   sinks   - list all audio output sinks
                                   sources - list all audio input sources
                                   ports   - list ports for current sink
-  switch [sink]                switch to next sink or specified sink
-  next                         switch to next sink
-  prev                         switch to previous sink
-  port <cmd> [port]            control audio ports
+  switch [sink]               switch to next sink or specified sink
+  next                        switch to next sink
+  prev                        switch to previous sink
+  port <cmd> [port]           control audio ports
                               commands:
                                   list        - list available ports
                                   set <port>  - set active port
-  profile <cmd> [name]        manage volume profiles
+  profile <cmd> [name]       manage volume profiles
                               commands:
                                   save <name>   - save current settings as profile
                                   load <name>   - load a saved profile
@@ -82,21 +82,39 @@ Commands:
                                   delete <name> - delete a profile
                               quick access:
                                   profile <name> - load profile (shortcut for load)
+  boost <amount> [timeout]   temporarily boost volume
+                              examples:
+                                  boost 20        - boost by 20% for 30s (default)
+                                  boost 20 60    - boost by 20% for 60s
+                                  boost off      - cancel active boost
+  sync                        sync volume across all active sinks
+  app <cmd> [args]            control per-application volume
+                              commands:
+                                  list                    - list all applications with audio streams
+                                  <name> up [value]       - increase application volume
+                                  <name> down [value]     - decrease application volume
+                                  <name> set <value>      - set application volume
+                                  <name> mute             - toggle application mute
+                              examples:
+                                  app list                - show all active applications
+                                  app firefox up 5        - increase Firefox volume by 5%
+                                  app mpv mute            - mute/unmute mpv
   output <format>             display volume in a custom format
                               format placeholders:
-                                  %v = volume level
+                                  %v = volume
                                   %s = sink name
                                   %p = volume progress bar
                                   %i = volume icon/emoji
                                   %P = active port description
                                   %m = microphone volume
+                                  %a = active application name
 
                                   examples:
                                       "Volume is %v" = Volume is 50%
                                       "%i %v %p \n"  = 奔 50% ██████████
   outputs                     show supported output formats
   notifications               list notification methods
-  help                        display help
+  help                        show help
 
 Options:
   -n                          enable notifications
@@ -105,13 +123,14 @@ Options:
   -j <muted,high,low,medium>  custom volume emojis
   -s <sink>                   specify sink (default: @DEFAULT_AUDIO_SINK@)
   -I <source>                 specify input source (default: @DEFAULT_AUDIO_SOURCE@)
+  -a                          operate on all sinks (for up/down/set/mute)
   -t <process_name>           status bar process name (requires -u)
   -A <node.nick:alias>        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   -u <signal>                 signal to update status bar (requires -t)
   -D <value>                  set default step size (default: 5)
   -f <duration_ms>            fade duration in milliseconds (for set/up/down/mute)
   -x <value>                  set maximum volume
-  -h                          display help
+  -h                          show help
 
 Notification Options:
   -N <method>                 notification method (default: libnotify)
@@ -130,9 +149,9 @@ Environment Variables:
   HERBE_PATH                  path to herbe
   VOLNOTI_PATH                path to volnoti-show
   CANBERRA_PATH               path to canberra-gtk-play
-  NOTIFY_PATH                 path to notification command
-  NO_NOTIFY_COLOR             disable colors in notifications
-  USE_NOTIFY_SEND_PY          use notify-send.py instead of notify-send
+  NOTIFY_PATH                 path to command that sends notifications
+  NO_NOTIFY_COLOR             flag to disable colors in notifications
+  USE_NOTIFY_SEND_PY          flag to use notify-send.py instead of notify-send
 ```
 
 ### Configuration

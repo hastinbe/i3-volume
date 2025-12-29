@@ -2326,13 +2326,13 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
   ${COLOR_GREEN}set <value>${COLOR_RESET}                 set volume
   ${COLOR_GREEN}wheel <delta>${COLOR_RESET}               mouse wheel volume control (accumulates small changes)
                               examples:
-                                  wheel 2.0   - scroll up (positive delta)
+                                  wheel 2.0  - scroll up (positive delta)
                                   wheel -2.0 - scroll down (negative delta)
                               note: accumulates changes until reaching DEFAULT_STEP threshold
   ${COLOR_GREEN}mute${COLOR_RESET}                        toggle mute
   ${COLOR_GREEN}fade <from> <to> [duration_ms]${COLOR_RESET} fade volume smoothly
                               examples:
-                                  fade 0 100        - fade from 0% to 100% (500ms)
+                                  fade 0 100       - fade from 0% to 100% (500ms)
                                   fade 0 100 2000  - fade from 0% to 100% over 2 seconds
   ${COLOR_GREEN}mic <cmd> [value]${COLOR_RESET}           control microphone
                               commands:
@@ -2363,7 +2363,7 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   profile <name> - load profile (shortcut for load)
   ${COLOR_GREEN}boost <amount> [timeout]${COLOR_RESET}   temporarily boost volume
                               examples:
-                                  boost 20        - boost by 20% for 30s (default)
+                                  boost 20       - boost by 20% for 30s (default)
                                   boost 20 60    - boost by 20% for 60s
                                   boost off      - cancel active boost
   ${COLOR_GREEN}sync${COLOR_RESET}                        sync volume across all active sinks
