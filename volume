@@ -30,12 +30,18 @@ define_notify() {
     notify_volume() {
         local -r vol=$(get_volume)
         local icon summary body=""
+        local boost_info=""
+
+        # Check if boost is active
+        if is_boost_active 2>/dev/null; then
+            boost_info=" (+${BOOST_AMOUNT}% boost)"
+        fi
 
         if is_muted; then
             summary="Volume muted"
             icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[0]}" || echo "${ICONS_SYMBOLIC[0]}")
         else
-            printf -v summary "Volume %3s%%" "$vol"
+            printf -v summary "Volume %3s%%%s" "$vol" "$boost_info"
             icon=$(get_volume_icon "$vol")
 
             if $SHOW_VOLUME_PROGRESS; then
@@ -989,6 +995,245 @@ define_commands() {
         rm -f "$volume_file"
     }
 
+    get_boost_file() {
+        local config_dir
+        config_dir=$(get_config_dir)
+        echo "$config_dir/.volume_boost"
+    }
+
+    get_boost_pid_file() {
+        local config_dir
+        config_dir=$(get_config_dir)
+        echo "$config_dir/.volume_boost_pid"
+    }
+
+    save_boost_state() {
+        local -r original_vol=$1
+        local -r boost_amount=$2
+        local -r timeout_sec=$3
+        local boost_file
+        boost_file=$(get_boost_file)
+
+        # Create config directory if it doesn't exist
+        local config_dir
+        config_dir=$(get_config_dir)
+        mkdir -p "$config_dir" || {
+            error "Failed to create config directory: $config_dir"
+            return 1
+        }
+
+        # Save boost state: original_vol|boost_amount|timeout_sec|timestamp
+        echo "${original_vol}|${boost_amount}|${timeout_sec}|$(date +%s)" > "$boost_file" || {
+            error "Failed to save boost state"
+            return 1
+        }
+    }
+
+    get_boost_state() {
+        local boost_file
+        boost_file=$(get_boost_file)
+
+        if [[ ! -f "$boost_file" ]]; then
+            return 1
+        fi
+
+        # Read boost state
+        local boost_data
+        boost_data=$(cat "$boost_file" 2>/dev/null)
+
+        if empty "$boost_data"; then
+            return 1
+        fi
+
+        # Parse: original_vol|boost_amount|timeout_sec|timestamp
+        IFS='|' read -r BOOST_ORIGINAL_VOL BOOST_AMOUNT BOOST_TIMEOUT BOOST_TIMESTAMP <<< "$boost_data"
+
+        # Validate
+        if empty "$BOOST_ORIGINAL_VOL" || empty "$BOOST_AMOUNT" || empty "$BOOST_TIMEOUT" || empty "$BOOST_TIMESTAMP"; then
+            return 1
+        fi
+
+        # Check if boost has expired
+        local current_time elapsed_time
+        current_time=$(date +%s)
+        elapsed_time=$(( current_time - BOOST_TIMESTAMP ))
+
+        if (( elapsed_time >= BOOST_TIMEOUT )); then
+            # Boost has expired, clean up
+            clear_boost_state
+            return 1
+        fi
+
+        return 0
+    }
+
+    clear_boost_state() {
+        local boost_file pid_file
+        boost_file=$(get_boost_file)
+        pid_file=$(get_boost_pid_file)
+
+        # Kill background process if it exists
+        if [[ -f "$pid_file" ]]; then
+            local pid
+            pid=$(cat "$pid_file" 2>/dev/null)
+            if not_empty "$pid" && kill -0 "$pid" 2>/dev/null; then
+                kill "$pid" 2>/dev/null || true
+            fi
+            rm -f "$pid_file"
+        fi
+
+        rm -f "$boost_file"
+    }
+
+    is_boost_active() {
+        get_boost_state 2>/dev/null
+    }
+
+    enable_boost() {
+        local -r boost_amount=${1:?$(error 'Boost amount is required')}
+        local -r timeout_sec=${2:-30}  # Default 30 seconds
+        local current_vol original_vol target_vol actual_boost
+
+        # Validate boost amount
+        if ! [[ "$boost_amount" =~ ^[0-9]+$ ]] || (( boost_amount < 1 || boost_amount > 100 )); then
+            error "Invalid boost amount: $boost_amount (must be 1-100)"
+            return 1
+        fi
+
+        # Check if boost is already active
+        if is_boost_active; then
+            error "Boost is already active. Use 'volume boost off' to cancel first."
+            return 1
+        fi
+
+        # Get current volume
+        current_vol=$(get_volume)
+        original_vol=$current_vol
+
+        # Calculate target volume (boost is additive percentage)
+        target_vol=$(( current_vol + boost_amount ))
+        actual_boost=$boost_amount
+
+        # Respect MAX_VOL if set
+        if not_empty "$MAX_VOL" && (( target_vol > MAX_VOL )); then
+            target_vol=$MAX_VOL
+            # Adjust boost amount to what we can actually apply
+            actual_boost=$(( target_vol - original_vol ))
+            if (( actual_boost <= 0 )); then
+                error "Cannot boost: already at maximum volume"
+                return 1
+            fi
+        fi
+
+        # Don't exceed 200% (hard limit for safety)
+        if (( target_vol > 200 )); then
+            target_vol=200
+            actual_boost=$(( target_vol - original_vol ))
+        fi
+
+        # Save boost state (use actual_boost for what was actually applied)
+        save_boost_state "$original_vol" "$actual_boost" "$timeout_sec" || return 1
+
+        # Set boosted volume
+        if not_empty "$FADE_DURATION"; then
+            fade_volume "$target_vol" "$FADE_DURATION" "$NODE_ID"
+        else
+            invalidate_cache
+            wpctl set-volume "$NODE_ID" "${target_vol}%"
+        fi
+
+        # Start background process to auto-revert
+        # Capture values needed in subshell
+        local config_dir_boost node_id_boost
+        config_dir_boost=$(get_config_dir)
+        node_id_boost=$NODE_ID
+        (
+            sleep "$timeout_sec"
+            # Check if boost is still active (might have been cancelled)
+            local boost_file restore_vol
+            boost_file="$config_dir_boost/.volume_boost"
+            if [[ -f "$boost_file" ]]; then
+                # Read original volume from file
+                local boost_data
+                boost_data=$(cat "$boost_file" 2>/dev/null)
+                if [[ -n "$boost_data" ]]; then
+                    IFS='|' read -r restore_vol _ _ _ <<< "$boost_data"
+                    # Restore original volume (direct wpctl call, no fade in background)
+                    if [[ -n "$restore_vol" ]]; then
+                        wpctl set-volume "$node_id_boost" "${restore_vol}%" &>/dev/null
+                    fi
+                    # Clean up boost state files
+                    rm -f "$boost_file"
+                    rm -f "$config_dir_boost/.volume_boost_pid"
+                fi
+            fi
+        ) &
+
+        # Save PID of background process
+        local pid_file
+        pid_file=$(get_boost_pid_file)
+        echo $! > "$pid_file"
+
+        if [[ "$actual_boost" != "$boost_amount" ]]; then
+            echo "Boost enabled: +${actual_boost}% (requested +${boost_amount}%, limited by max volume) for ${timeout_sec}s"
+        else
+            echo "Boost enabled: +${actual_boost}% for ${timeout_sec}s"
+        fi
+    }
+
+    disable_boost() {
+        if ! is_boost_active; then
+            error "No active boost to cancel"
+            return 1
+        fi
+
+        # Get original volume
+        local original_vol
+        original_vol=$BOOST_ORIGINAL_VOL
+
+        # Restore original volume
+        if not_empty "$FADE_DURATION"; then
+            fade_volume "$original_vol" "$FADE_DURATION" "$NODE_ID"
+        else
+            invalidate_cache
+            wpctl set-volume "$NODE_ID" "${original_vol}%"
+        fi
+
+        # Clear boost state (this also kills the background process)
+        clear_boost_state
+
+        echo "Boost disabled"
+    }
+
+    boost() {
+        local -r subcommand=${1:-}
+        local -r value=${2:-}
+
+        case "$subcommand" in
+            off|cancel|disable)
+                disable_boost
+                ;;
+            "")
+                error "Boost subcommand required. Use: boost <amount> [timeout] or boost off"
+                echo "  ${COLOR_GREEN}boost <amount> [timeout]${COLOR_RESET}  - enable boost (default timeout: 30s)"
+                echo "  ${COLOR_GREEN}boost off${COLOR_RESET}                 - disable boost"
+                EXITCODE=$EX_USAGE
+                return 1
+                ;;
+            *)
+                # Try to parse as boost amount
+                if [[ "$subcommand" =~ ^[0-9]+$ ]]; then
+                    enable_boost "$subcommand" "$value"
+                else
+                    error "Unknown boost subcommand: $subcommand"
+                    echo "Use: boost <amount> [timeout] or boost off"
+                    EXITCODE=$EX_USAGE
+                    return 1
+                fi
+                ;;
+        esac
+    }
+
     save_profile() {
         local -r profile_name=${1:?$(error 'Profile name is required')}
         local profiles_dir profile_file
@@ -1538,6 +1783,11 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   delete <name> - delete a profile
                               quick access:
                                   profile <name> - load profile (shortcut for load)
+  ${COLOR_GREEN}boost <amount> [timeout]${COLOR_RESET}   temporarily boost volume
+                              examples:
+                                  boost 20        - boost by 20% for 30s (default)
+                                  boost 20 60    - boost by 20% for 60s
+                                  boost off      - cancel active boost
   ${COLOR_GREEN}output <format>${COLOR_RESET}             display volume in a custom format
                               format placeholders:
                                   %v = volume
@@ -2036,6 +2286,14 @@ exec_command() {
                 0) profile "" ;;
                 1) profile "$1" ;;
                 2) profile "$1" "$2" ;;
+                *) usage ;;
+            esac
+            ;;
+        boost)
+            case "$#" in
+                0) boost "" ;;
+                1) boost "$1" ;;
+                2) boost "$1" "$2" ;;
                 *) usage ;;
             esac
             ;;
