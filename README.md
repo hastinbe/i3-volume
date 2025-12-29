@@ -110,11 +110,23 @@ Commands:
                                   %P = active port description
                                   %m = microphone volume
                                   %a = active application name
+                                  %b = balance (L=left, R=right, C=center)
+                                  %c = color codes (ANSI terminal colors)
+                                  %n = node display name/alias
+                                  %d = node id
+
+                              conditional formatting:
+                                  %v{>50:high:low}  - if volume > 50, show "high", else "low"
+                                  %v{<30:quiet:normal} - if volume < 30, show "quiet", else "normal"
+                                  %m{>80:loud:normal} - conditional on microphone volume
+                                  %b{!=0:unbalanced:centered} - conditional on balance
 
                                   examples:
                                       output json              - JSON format for programmatic use
                                       "Volume is %v" = Volume is 50%
                                       "%i %v %p \n"  = 奔 50% ██████████
+                                      "%c%v${COLOR_RESET}" = colored volume (if terminal supports)
+                                      "%v{>50:high:low}" = "high" if volume > 50%, else "low"
   outputs                     show supported output formats
   notifications               list notification methods
   help                        show help

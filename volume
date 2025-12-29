@@ -309,11 +309,76 @@ define_output_formats() {
     #   %i = volume icon
     output_volume_custom() {
         local -r vol=$(get_volume)
-        local -r format=${1//\%v/$vol%}
-        local string=${format//\%n/$(get_node_display_name)}
+        local format="$1"
+        local string
+
+        # Process conditional formatting first (e.g., %v{>50:high:low})
+        # This must be done before replacing %v with the actual volume
+        while [[ $format =~ %([a-z])\{([^}]+)\} ]]; do
+            local placeholder="${BASH_REMATCH[1]}"
+            local condition="${BASH_REMATCH[2]}"
+            local replacement=""
+
+            # Parse condition: operator:value:true_text:false_text
+            # Examples: >50:high:low, <30:quiet:normal, ==100:max:normal
+            if [[ $condition =~ ^([<>=!]+)([0-9.]+):(.+):(.+)$ ]]; then
+                local op="${BASH_REMATCH[1]}"
+                local threshold="${BASH_REMATCH[2]}"
+                local true_text="${BASH_REMATCH[3]}"
+                local false_text="${BASH_REMATCH[4]}"
+
+                # Get the value to compare based on placeholder
+                local compare_val
+                case "$placeholder" in
+                    v) compare_val=$vol ;;
+                    m) compare_val=$(get_mic_volume 2>/dev/null || echo "0") ;;
+                    b) compare_val=$(get_balance 2>/dev/null || echo "0") ;;
+                    *) compare_val=0 ;;
+                esac
+
+                # Evaluate condition using bash arithmetic
+                local condition_result=false
+                # Convert to integers for comparison (bash arithmetic works with integers)
+                local compare_int threshold_int
+                compare_int=$(printf "%.0f" "$compare_val" 2>/dev/null || echo "0")
+                threshold_int=$(printf "%.0f" "$threshold" 2>/dev/null || echo "0")
+
+                case "$op" in
+                    ">")  (( compare_int > threshold_int )) && condition_result=true ;;
+                    "<")  (( compare_int < threshold_int )) && condition_result=true ;;
+                    ">=") (( compare_int >= threshold_int )) && condition_result=true ;;
+                    "<=") (( compare_int <= threshold_int )) && condition_result=true ;;
+                    "==") (( compare_int == threshold_int )) && condition_result=true ;;
+                    "!=") (( compare_int != threshold_int )) && condition_result=true ;;
+                esac
+
+                if [[ "$condition_result" == "true" ]]; then
+                    replacement="$true_text"
+                else
+                    replacement="$false_text"
+                fi
+            else
+                # Invalid condition format, remove the conditional
+                replacement=""
+            fi
+
+            # Replace the conditional placeholder with the result
+            local conditional_pattern="%${placeholder}{${condition}}"
+            format=${format//$conditional_pattern/$replacement}
+        done
+
+        # Now process regular placeholders
+        string=${format//\%v/$vol%}
+        string=${string//\%n/$(get_node_display_name)}
         string=${string//\%d/$NODE_ID}
         string=${string//\%p/$(progress_bar "$vol")}
         string=${string//\%i/$(get_volume_emoji "$vol")}
+
+        # Replace %s with sink name
+        if [[ $string == *%s* ]]; then
+            local sink_name="${NODE_NAME:-}"
+            string=${string//%s/$sink_name}
+        fi
 
         # Replace %m with microphone volume
         if [[ $string == *%m* ]]; then
@@ -325,6 +390,28 @@ define_output_formats() {
                 mic_vol="${mic_vol}%"
             fi
             string=${string//%m/$mic_vol}
+        fi
+
+        # Replace %b with balance
+        if [[ $string == *%b* ]]; then
+            local balance
+            balance=$(get_balance 2>/dev/null || echo "0")
+            # Format balance: negative = left, positive = right, 0 = center
+            if (( balance < 0 )); then
+                balance="L${balance#-}"
+            elif (( balance > 0 )); then
+                balance="R${balance}"
+            else
+                balance="C"
+            fi
+            string=${string//%b/$balance}
+        fi
+
+        # Replace %c with color codes
+        if [[ $string == *%c* ]]; then
+            local color_code
+            color_code=$(get_volume_color_code "$vol")
+            string=${string//%c/$color_code}
         fi
 
         # Replace %P with active port description
@@ -2540,6 +2627,65 @@ define_commands() {
         not_empty "$app_name" && echo "$app_name"
     }
 
+    get_balance() {
+        # Get audio balance (left/right channel balance) from PipeWire
+        # Returns balance as a value from -100 (left) to +100 (right), or 0 (centered)
+        if empty "$NODE_ID"; then
+            echo "0"
+            return 0
+        fi
+
+        # Try to get channel volumes from pw-dump
+        local left_vol right_vol
+        left_vol=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "channelVolumes") | .value[0]? // empty' 2>/dev/null)
+        right_vol=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "channelVolumes") | .value[1]? // empty' 2>/dev/null)
+
+        # If we can't get channel volumes from pw-dump, default to centered
+        if empty "$left_vol" || empty "$right_vol"; then
+            echo "0"
+            return 0
+        fi
+
+        # Calculate balance: positive = right, negative = left
+        # Convert volumes to numeric values and calculate difference
+        local left_num right_num balance
+        left_num=$(printf "%.2f" "$left_vol" 2>/dev/null || echo "0")
+        right_num=$(printf "%.2f" "$right_vol" 2>/dev/null || echo "0")
+
+        # If volumes are equal, balance is 0
+        if [[ "$left_num" == "$right_num" ]]; then
+            echo "0"
+            return 0
+        fi
+
+        # Calculate balance using awk for floating point arithmetic
+        balance=$(awk -v left="$left_num" -v right="$right_num" 'BEGIN {
+            diff = right - left
+            # Normalize to -100..100 range (assuming volumes are 0.0-1.0)
+            balance = diff * 100
+            if (balance > 100) balance = 100
+            if (balance < -100) balance = -100
+            printf "%.0f", balance
+        }' 2>/dev/null || echo "0")
+
+        echo "$balance"
+    }
+
+    get_volume_color_code() {
+        # Get ANSI color code for volume level
+        # Returns terminal color escape sequence
+        local -ir vol=${1:-$(get_volume)}
+        if has_color; then
+            if is_muted 2>/dev/null; then
+                echo "$COLOR_RED"
+            else
+                volume_color "$vol"
+            fi
+        else
+            echo ""
+        fi
+    }
+
     app() {
         local -r subcommand=${1:-}
         local -r app_name=${2:-}
@@ -2688,11 +2834,23 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                   %P = active port description
                                   %m = microphone volume
                                   %a = active application name
+                                  %b = balance (L=left, R=right, C=center)
+                                  %c = color codes (ANSI terminal colors)
+                                  %n = node display name/alias
+                                  %d = node id
+
+                              conditional formatting:
+                                  %v{>50:high:low}  - if volume > 50, show "high", else "low"
+                                  %v{<30:quiet:normal} - if volume < 30, show "quiet", else "normal"
+                                  %m{>80:loud:normal} - conditional on microphone volume
+                                  %b{!=0:unbalanced:centered} - conditional on balance
 
                                   examples:
                                       output json              - JSON format for programmatic use
                                       "Volume is %v" = Volume is 50%
                                       "%i %v %p \n"  = 奔 50% ██████████
+                                      "%c%v${COLOR_RESET}" = colored volume (if terminal supports)
+                                      "%v{>50:high:low}" = "high" if volume > 50%, else "low"
   ${COLOR_GREEN}outputs${COLOR_RESET}                     show supported output formats
   ${COLOR_GREEN}notifications${COLOR_RESET}               list notification methods
   ${COLOR_GREEN}help${COLOR_RESET}                        show help
