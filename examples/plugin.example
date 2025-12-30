@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+# Example i3-volume notification plugin
+#
+# This is a template for creating custom notification methods.
+# Copy this file to ~/.config/i3-volume/plugins/notify/<plugin-name> and make it executable.
+#
+# Plugin Interface:
+#   Function name: notify_volume_<plugin-name>()
+#   Parameters:
+#     $1 - volume (0-100)
+#     $2 - icon path (may be empty)
+#     $3 - summary text
+#     $4 - body text (may be empty)
+#
+# Example usage:
+#   NOTIFICATION_METHOD="myplugin" volume up 5
+
+notify_volume_example() {
+    local vol=$1
+    local icon=$2
+    local summary=$3
+    local body=${*:4}
+
+    # Example: Simple echo notification (replace with your custom notification method)
+    echo "[Volume Notification] $summary"
+    [[ -n "$body" ]] && echo "  $body"
+    echo "  Volume: $vol%"
+    [[ -n "$icon" ]] && echo "  Icon: $icon"
+
+    # Example: Write to a file (useful for testing or custom integrations)
+    # echo "$summary" > /tmp/i3-volume-notification.txt
+
+    # Example: Send to a custom notification daemon
+    # your-custom-notify-command "$summary" "$body" "$vol" "$icon"
+
+    # Example: Use a webhook or API
+    # curl -X POST https://api.example.com/notify \
+    #   -d "volume=$vol" \
+    #   -d "summary=$summary" \
+    #   -d "body=$body"
+}
+

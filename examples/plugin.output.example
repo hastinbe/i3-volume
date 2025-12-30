@@ -1,0 +1,46 @@
+#!/bin/bash
+#
+# Example i3-volume output format plugin
+#
+# This is a template for creating custom output format plugins.
+# Copy this file to ~/.config/i3-volume/plugins/output/<plugin-name> and make it executable.
+#
+# Plugin Interface:
+#   Function name: output_volume_<plugin-name>()
+#   Parameters: None (function should query volume state internally)
+#   Output: Should print the formatted output to stdout
+#
+# Example usage:
+#   volume output myformat
+
+output_volume_example() {
+    local vol
+    vol=$(get_volume 2>/dev/null || echo "0")
+    local muted=false
+
+    # Check if muted (you'll need access to is_muted function or query directly)
+    # For this example, we'll use a simple format
+    if is_muted 2>/dev/null; then
+        muted=true
+    fi
+
+    # Example: Custom format output
+    if [[ "$muted" == "true" ]]; then
+        echo "🔇 MUTED"
+    else
+        printf "🔊 %3d%%" "$vol"
+    fi
+
+    # Example: JSON-like output
+    # echo "{\"volume\":$vol,\"muted\":$muted}"
+
+    # Example: Custom formatting with colors (if terminal supports)
+    # if (( vol > 80 )); then
+    #     echo -e "\033[31mVolume: $vol%\033[0m"  # Red for high volume
+    # elif (( vol < 30 )); then
+    #     echo -e "\033[33mVolume: $vol%\033[0m"  # Yellow for low volume
+    # else
+    #     echo "Volume: $vol%"
+    # fi
+}
+
