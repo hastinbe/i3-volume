@@ -1,0 +1,17 @@
+#!/bin/bash
+# Built-in herbe notification plugin
+# Note: a patch with a notify-send script for herbe, not in the current version at this
+#       time but would make this irrelevant. See https://github.com/dudik/herbe/pull/10
+notify_volume_herbe() {
+    # shellcheck disable=SC2034  # vol and icon are part of the plugin interface but unused by herbe
+    local vol=$1 icon=$2 summary=$3 body=${*:4}
+    local text="$summary"
+    [[ -n "$body" ]] && text="$summary $body"
+    local executable="${HERBE_PATH:+${HERBE_PATH%/}/}herbe"
+
+    command_exists "$executable" || { error "$executable not found. Please install it or set HERBE_PATH to the correct path."; exit "$EX_UNAVAILABLE"; }
+
+    pkill -SIGUSR1 herbe # Dismiss existing/pending notifications to prevent queuing
+    "$executable" "$text" & disown
+}
+

@@ -1,0 +1,10 @@
+#!/bin/bash
+# Built-in KOSD notification plugin
+notify_volume_kosd() {
+    # shellcheck disable=SC2034  # icon, summary, and body are part of the plugin interface but unused by kosd
+    local vol=$1 icon=$2 summary=$3 body=${*:4}
+    local muted
+    if is_muted; then muted=1; else muted=0; fi
+    qdbus org.kde.kded /modules/kosd showVolume "$vol" "$muted"
+}
+

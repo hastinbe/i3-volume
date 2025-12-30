@@ -1,0 +1,19 @@
+#!/bin/bash
+# Built-in XOSD notification plugin
+notify_volume_xosd() {
+    # shellcheck disable=SC2034  # icon is part of the plugin interface but unused by xosd
+    local vol=$1 icon=$2 summary=$3 body=${*:4}
+    local text="$summary"
+    [[ -n "$body" ]] && text="$summary $body"
+    local executable="${XOSD_PATH:+${XOSD_PATH%/}/}osd_cat"
+    local percentage
+    local color
+
+    if is_muted; then percentage=0; color=$COLOR_MUTED
+    else percentage=$vol; color=$(volume_color "$vol"); fi
+
+    command_exists "$executable" || { error "$executable not found. Please install it or set XOSD_PATH to the correct path."; exit "$EX_UNAVAILABLE"; }
+
+    "$executable" --align center -b percentage -P "$percentage" -d "$(ms_to_secs "$EXPIRES")" -p top -A center -c "$color" -T "$text" -O 2 -u "$COLOR_XOSD_OUTLINE" & disown
+}
+
