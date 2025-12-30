@@ -34,6 +34,99 @@ define_helpers() {
     has_capability() { [[ "${NOTIFY_CAPS[*]}" =~ $1 ]]; }
     max() { echo $(( $1 > $2 ? $1 : $2 )); }
 
+    # Generalized plugin system for multiple plugin types
+    declare -gA LOADED_PLUGINS=()
+
+    get_plugin_dir() {
+        local plugin_type=$1
+        local base_dir="${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume/plugins"
+        echo "$base_dir/$plugin_type"
+    }
+
+    load_plugin() {
+        local plugin_type=$1
+        local plugin_name=$2
+        local plugin_key="${plugin_type}:${plugin_name}"
+
+        # Check if plugin is already loaded
+        [[ -v LOADED_PLUGINS["$plugin_key"] ]] && return 0
+
+        local plugin_dir plugin_file
+        plugin_dir=$(get_plugin_dir "$plugin_type")
+        plugin_file="$plugin_dir/$plugin_name"
+
+        # Check if plugin file exists
+        if [[ ! -f "$plugin_file" ]]; then
+            return 1
+        fi
+
+        # Check if plugin file is executable
+        if [[ ! -x "$plugin_file" ]]; then
+            error "Plugin $plugin_name is not executable: $plugin_file"
+            return 1
+        fi
+
+        # Source the plugin file
+        # shellcheck source=/dev/null
+        if source "$plugin_file" 2>/dev/null; then
+            LOADED_PLUGINS["$plugin_key"]=1
+            return 0
+        else
+            error "Failed to load plugin: $plugin_name"
+            return 1
+        fi
+    }
+
+    is_plugin_available() {
+        local plugin_type=$1
+        local plugin_name=$2
+        local plugin_dir plugin_file
+        plugin_dir=$(get_plugin_dir "$plugin_type")
+        plugin_file="$plugin_dir/$plugin_name"
+
+        [[ -f "$plugin_file" && -x "$plugin_file" ]]
+    }
+
+    call_plugin() {
+        local plugin_type=$1
+        local plugin_name=$2
+        shift 2
+        local func_name="${plugin_type}_${plugin_name}"
+
+        # Try to load plugin if not already loaded
+        if ! load_plugin "$plugin_type" "$plugin_name"; then
+            return 1
+        fi
+
+        # Check if the function exists
+        if ! declare -f "$func_name" >/dev/null 2>&1; then
+            error "Plugin $plugin_name does not define function: $func_name"
+            return 1
+        fi
+
+        # Call the plugin function with all remaining arguments
+        "$func_name" "$@"
+    }
+
+    list_plugins() {
+        local plugin_type=$1
+        local plugin_dir
+        plugin_dir=$(get_plugin_dir "$plugin_type")
+
+        if [[ ! -d "$plugin_dir" ]]; then
+            return 0
+        fi
+
+        local plugin_file
+        while IFS= read -r -d '' plugin_file; do
+            local plugin_name
+            plugin_name=$(basename "$plugin_file")
+            if [[ -x "$plugin_file" ]]; then
+                echo "$plugin_name"
+            fi
+        done < <(find "$plugin_dir" -maxdepth 1 -type f -executable -print0 2>/dev/null)
+    }
+
     # Check if PipeWire is running
     check_pipewire_running() {
         if ! command_exists pw-dump; then
@@ -71,6 +164,36 @@ define_helpers() {
 }
 
 define_notify() {
+    # Notification-specific plugin wrappers (use generalized plugin system from define_helpers)
+    call_notification_plugin() {
+        local plugin_name=$1
+        shift
+        # Notification plugins use function name: notify_volume_<name>
+        local func_name="notify_volume_$plugin_name"
+
+        # Load plugin using generalized system (plugins stored in plugins/notify/ directory)
+        if ! load_plugin "notify" "$plugin_name"; then
+            return 1
+        fi
+
+        # Check if the function exists
+        if ! declare -f "$func_name" >/dev/null 2>&1; then
+            error "Notification plugin $plugin_name does not define function: $func_name"
+            return 1
+        fi
+
+        # Call the plugin function
+        "$func_name" "$@"
+    }
+
+    is_notification_plugin_available() {
+        is_plugin_available "notify" "$1"
+    }
+
+    list_notification_plugins() {
+        list_plugins "notify"
+    }
+
     # Check if multiple sinks are available
     has_multiple_sinks() {
         local sinks
@@ -144,7 +267,14 @@ define_notify() {
             herbe   ) notify_volume_herbe "$summary $body" ;;
             volnoti ) notify_volume_volnoti "$vol" ;;
             kosd    ) notify_volume_kosd "$vol" ;;
-            *       ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
+            libnotify|dunst|notify-osd|*)
+                # Check if it's a plugin
+                if is_notification_plugin_available "$NOTIFICATION_METHOD"; then
+                    call_notification_plugin "$NOTIFICATION_METHOD" "$vol" "$icon" "$summary" "$body" || notify_volume_libnotify "$vol" "$icon" "$summary" "$body"
+                else
+                    notify_volume_libnotify "$vol" "$icon" "$summary" "$body"
+                fi
+                ;;
         esac
 
         # Check for newly available ports and suggest switching (only if port didn't just change)
@@ -184,13 +314,23 @@ define_notify() {
             herbe   ) notify_volume_herbe "$summary $body" ;;
             volnoti ) notify_volume_volnoti "$vol" ;;
             kosd    ) notify_volume_kosd "$vol" ;;
-            *       ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
+            libnotify|dunst|notify-osd|*)
+                # Check if it's a plugin
+                if is_notification_plugin_available "$NOTIFICATION_METHOD"; then
+                    call_notification_plugin "$NOTIFICATION_METHOD" "$vol" "$icon" "$summary" "$body" || notify_volume_libnotify "$vol" "$icon" "$summary" "$body"
+                else
+                    notify_volume_libnotify "$vol" "$icon" "$summary" "$body"
+                fi
+                ;;
         esac
     }
 
     list_notification_methods() {
         local source="${BASH_SOURCE[0]}"
+        # List built-in methods
         awk -v source="$source" 'match($0, / +notify_volume_([[:alnum:]]+)\(\)/) { print substr($0, RSTART + 18, RLENGTH - 20) }' "$source" || EXITCODE=$EX_USAGE
+        # List notification plugins
+        list_notification_plugins
     }
 
     setup_notification_icons() { not_empty "$SYMBOLIC_ICON_SUFFIX" && apply_symbolic_icon_suffix; }
@@ -936,6 +1076,36 @@ define_commands() {
         notify_mic
     }
 
+    # Output format plugin wrappers (use generalized plugin system from define_helpers)
+    call_output_plugin() {
+        local plugin_name=$1
+        shift
+        # Output plugins use function name: output_volume_<name>
+        local func_name="output_volume_$plugin_name"
+
+        # Load plugin using generalized system (plugins stored in plugins/output/ directory)
+        if ! load_plugin "output" "$plugin_name"; then
+            return 1
+        fi
+
+        # Check if the function exists
+        if ! declare -f "$func_name" >/dev/null 2>&1; then
+            error "Output plugin $plugin_name does not define function: $func_name"
+            return 1
+        fi
+
+        # Call the plugin function
+        "$func_name" "$@"
+    }
+
+    is_output_plugin_available() {
+        is_plugin_available "output" "$1"
+    }
+
+    list_output_plugins() {
+        list_plugins "output"
+    }
+
     output_volume() {
         local -r for=${1:?$(error 'Output method is required')}
 
@@ -944,11 +1114,23 @@ define_commands() {
             xob      ) output_volume_xob ;;
             json     ) output_volume_json ;;
             default  ) output_volume_default ;;
-            *        ) output_volume_custom "$*" ;;
+            *        )
+                # Check if it's a plugin first
+                if is_output_plugin_available "$for"; then
+                    call_output_plugin "$for" || output_volume_custom "$*"
+                else
+                    output_volume_custom "$*"
+                fi
+                ;;
         esac
     }
 
-    list_output_formats() { awk 'match($0,/ +output_volume_([[:alnum:]]+)\(\)/) {print substr($0, RSTART + 18, RLENGTH - 20)}' "${BASH_SOURCE[0]}" || EXITCODE=$EX_USAGE; }
+    list_output_formats() {
+        # List built-in formats
+        awk 'match($0,/ +output_volume_([[:alnum:]]+)\(\)/) {print substr($0, RSTART + 18, RLENGTH - 20)}' "${BASH_SOURCE[0]}" || EXITCODE=$EX_USAGE
+        # List output plugins
+        list_output_plugins
+    }
 
     list_sinks() {
         local default_sink_name
@@ -3171,7 +3353,14 @@ EOF
             herbe   ) notify_volume_herbe "$summary $body" ;;
             volnoti ) notify_volume_volnoti "$vol" ;;
             kosd    ) notify_volume_kosd "$vol" ;;
-            *       ) notify_volume_libnotify "$vol" "$icon" "$summary" "$body" ;;
+            libnotify|dunst|notify-osd|*)
+                # Check if it's a plugin
+                if is_notification_plugin_available "$NOTIFICATION_METHOD"; then
+                    call_notification_plugin "$NOTIFICATION_METHOD" "$vol" "$icon" "$summary" "$body" || notify_volume_libnotify "$vol" "$icon" "$summary" "$body"
+                else
+                    notify_volume_libnotify "$vol" "$icon" "$summary" "$body"
+                fi
+                ;;
         esac
     }
 
