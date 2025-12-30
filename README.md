@@ -184,6 +184,33 @@ Notification Features:
   - Auto-suggestions for newly available ports (BETA/EXPERIMENTAL)
   - Sink and port changes trigger enhanced notifications with context
   - Set NOTIFICATION_GROUP=true in config to group volume change notifications (dunst only)
+  - Plugin system for custom notification methods (see Custom Notification Plugins below)
+
+Custom Plugins:
+  i3-volume supports a generalized plugin system for extending functionality. Currently supported
+  plugin types are notifications and output formats, with the infrastructure designed to easily
+  support additional plugin types in the future.
+
+  Plugin Directory Structure:
+    ~/.config/i3-volume/plugins/notify/   - Notification plugins
+    ~/.config/i3-volume/plugins/output/   - Output format plugins
+
+  Notification Plugins:
+    Create executable scripts in plugins/notify/
+    Each plugin must define: notify_volume_<plugin-name>()
+    Parameters: $1=volume, $2=icon, $3=summary, $4=body
+    Usage: volume -N <plugin-name> up 5
+    Example: examples/plugin.example
+
+  Output Format Plugins:
+    Create executable scripts in plugins/output/
+    Each plugin must define: output_volume_<plugin-name>()
+    Parameters: None (query volume state internally)
+    Usage: volume output <plugin-name>
+    Example: examples/plugin.output.example
+
+  Use 'volume notifications' to list notification methods (including plugins).
+  Use 'volume outputs' to list output formats (including plugins).
 
 Environment Variables:
   XOSD_PATH                   path to osd_cat

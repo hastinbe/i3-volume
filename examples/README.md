@@ -20,6 +20,11 @@ This directory contains example configuration files for common setups.
 - **notifications.dunst** - Notification settings for Dunst (can be included)
 - **volume-control.conf** - Volume control settings (can be included)
 
+### Plugin Examples
+
+- **plugin.example** - Template for creating custom notification plugins
+- **plugin.output.example** - Template for creating custom output format plugins
+
 ## Usage
 
 1. Choose an example that matches your setup
@@ -56,6 +61,72 @@ Include paths can be:
 - Absolute: `source /path/to/file`
 - Relative to config directory: `source notifications.dunst`
 - Relative to current file: `source ./notifications.dunst`
+
+## Custom Plugins
+
+i3-volume supports plugins for extending functionality. Currently supported plugin types are notifications and output formats.
+
+### Notification Plugins
+
+Create custom notification methods by creating plugin scripts:
+
+1. Create the plugin directory (if it doesn't exist):
+   ```bash
+   mkdir -p ~/.config/i3-volume/plugins/notify
+   ```
+
+2. Copy the example plugin:
+   ```bash
+   cp examples/plugin.example ~/.config/i3-volume/plugins/notify/myplugin
+   chmod +x ~/.config/i3-volume/plugins/notify/myplugin
+   ```
+
+3. Edit the plugin to implement your custom notification method
+
+4. Use it with the `-N` option:
+   ```bash
+   volume -N myplugin up 5
+   ```
+
+5. List all available notification methods (including plugins):
+   ```bash
+   volume notifications
+   ```
+
+### Output Format Plugins
+
+Create custom output formats by creating plugin scripts:
+
+1. Create the plugin directory (if it doesn't exist):
+   ```bash
+   mkdir -p ~/.config/i3-volume/plugins/output
+   ```
+
+2. Copy the example plugin:
+   ```bash
+   cp examples/plugin.output.example ~/.config/i3-volume/plugins/output/myformat
+   chmod +x ~/.config/i3-volume/plugins/output/myformat
+   ```
+
+3. Edit the plugin to implement your custom output format
+
+4. Use it with the `output` command:
+   ```bash
+   volume output myformat
+   ```
+
+5. List all available output formats (including plugins):
+   ```bash
+   volume outputs
+   ```
+
+### Plugin Directory Structure
+
+Plugins are organized by type in subdirectories:
+- `~/.config/i3-volume/plugins/notify/` - Notification plugins
+- `~/.config/i3-volume/plugins/output/` - Output format plugins
+
+See the main README for more details on the plugin system.
 
 ## Getting Help
 
