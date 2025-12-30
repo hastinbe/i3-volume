@@ -1,0 +1,230 @@
+#!/bin/bash
+#
+# i3-volume - Helper Functions Module
+#
+# Utility functions and plugin system
+#
+
+# Utility functions
+empty() { [[ -z $1 ]]; }
+not_empty() { [[ -n $1 ]]; }
+isset() { [[ -v $1 ]]; }
+command_exists() { command -v "$1" &>/dev/null; }
+# shellcheck disable=SC2034  # COLOR_RED and COLOR_RESET are external variables from main script
+error() { echo "$COLOR_RED$*$COLOR_RESET"; }
+error_with_suggestion() {
+    local msg="$1"
+    shift
+    error "$msg"
+    # shellcheck disable=SC2034  # COLOR_YELLOW and COLOR_RESET are external variables from main script
+    while [[ $# -gt 0 ]]; do
+        echo "  ${COLOR_YELLOW}→${COLOR_RESET} $1" >&2
+        shift
+    done
+}
+has_color() { [ "$(tput colors)" -ge 8 ] &>/dev/null && [ -t 1 ]; }
+ms_to_secs() { echo "scale=0; (${1} + 999) / 1000" | bc; }
+# shellcheck disable=SC2034  # POST_HOOK_EXEMPT_COMMANDS is external variable from main script
+is_command_hookable() { ! [[ ${POST_HOOK_EXEMPT_COMMANDS[*]} =~ $1 ]]; }
+# shellcheck disable=SC2034  # NOTIFY_CAPS is external variable from main script
+has_capability() { [[ "${NOTIFY_CAPS[*]}" =~ $1 ]]; }
+max() { echo $(( $1 > $2 ? $1 : $2 )); }
+
+# Generalized plugin system for multiple plugin types
+declare -gA LOADED_PLUGINS=()
+
+get_script_dir() {
+    # Get the directory where the volume script is located
+    # Walk up the BASH_SOURCE stack to find the main volume script
+    local i=0
+    local script_path
+    while [[ $i -lt ${#BASH_SOURCE[@]} ]]; do
+        script_path="${BASH_SOURCE[$i]}"
+        # If this is the main volume script (not a lib file), use it
+        if [[ "$script_path" != *"/lib/"* ]] && [[ "$(basename "$script_path")" == "volume" ]]; then
+            break
+        fi
+        ((i++))
+    done
+
+    # If we didn't find it, try to resolve from current file
+    if [[ "$script_path" == *"/lib/"* ]] || [[ "$(basename "$script_path")" != "volume" ]]; then
+        script_path="${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}"
+        local dir
+        dir=$(dirname "$script_path")
+        if [[ "$dir" == *"/lib" ]]; then
+            script_path="${dir%/lib}/volume"
+        fi
+    fi
+
+    # Resolve symlinks
+    if [[ -L "$script_path" ]]; then
+        script_path=$(readlink -f "$script_path" 2>/dev/null || echo "$script_path")
+    fi
+
+    dirname "$script_path"
+}
+
+get_plugin_dir() {
+    local plugin_type=$1
+    local base_dir="${XDG_CONFIG_HOME:-$HOME/.config}/i3-volume/plugins"
+    echo "$base_dir/$plugin_type"
+}
+
+get_builtin_plugin_dir() {
+    local plugin_type=$1
+    local script_dir
+    script_dir=$(get_script_dir)
+    echo "$script_dir/plugins/$plugin_type"
+}
+
+load_plugin() {
+    local plugin_type=$1
+    local plugin_name=$2
+    local plugin_key="${plugin_type}:${plugin_name}"
+
+    # Check if plugin is already loaded
+    [[ -v LOADED_PLUGINS["$plugin_key"] ]] && return 0
+
+    local plugin_file
+    # Check built-in plugins first (script-relative), then user plugins
+    local builtin_dir
+    builtin_dir=$(get_builtin_plugin_dir "$plugin_type")
+    if [[ -f "$builtin_dir/$plugin_name" ]]; then
+        plugin_file="$builtin_dir/$plugin_name"
+    else
+        local user_dir
+        user_dir=$(get_plugin_dir "$plugin_type")
+        plugin_file="$user_dir/$plugin_name"
+    fi
+
+    # Check if plugin file exists
+    if [[ ! -f "$plugin_file" ]]; then
+        return 1
+    fi
+
+    # Check if plugin file is executable
+    if [[ ! -x "$plugin_file" ]]; then
+        error "Plugin $plugin_name is not executable: $plugin_file"
+        return 1
+    fi
+
+    # Source the plugin file
+    # shellcheck source=/dev/null
+    if source "$plugin_file" 2>/dev/null; then
+        LOADED_PLUGINS["$plugin_key"]=1
+        return 0
+    else
+        error "Failed to load plugin: $plugin_name"
+        return 1
+    fi
+}
+
+is_plugin_available() {
+    local plugin_type=$1
+    local plugin_name=$2
+    local plugin_file
+    # Check built-in plugins first (script-relative), then user plugins
+    local builtin_dir
+    builtin_dir=$(get_builtin_plugin_dir "$plugin_type")
+    if [[ -f "$builtin_dir/$plugin_name" ]]; then
+        plugin_file="$builtin_dir/$plugin_name"
+    else
+        local user_dir
+        user_dir=$(get_plugin_dir "$plugin_type")
+        plugin_file="$user_dir/$plugin_name"
+    fi
+
+    [[ -f "$plugin_file" && -x "$plugin_file" ]]
+}
+
+call_plugin() {
+    local plugin_type=$1
+    local plugin_name=$2
+    shift 2
+    local func_name="${plugin_type}_${plugin_name}"
+
+    # Try to load plugin if not already loaded
+    if ! load_plugin "$plugin_type" "$plugin_name"; then
+        return 1
+    fi
+
+    # Check if the function exists
+    if ! declare -f "$func_name" >/dev/null 2>&1; then
+        error "Plugin $plugin_name does not define function: $func_name"
+        return 1
+    fi
+
+    # Call the plugin function with all remaining arguments
+    "$func_name" "$@"
+}
+
+list_plugins() {
+    local plugin_type=$1
+    local -A seen_plugins=()
+
+    # List built-in plugins first (script-relative)
+    local builtin_dir
+    builtin_dir=$(get_builtin_plugin_dir "$plugin_type")
+    if [[ -d "$builtin_dir" ]]; then
+        local plugin_file
+        while IFS= read -r -d '' plugin_file; do
+            local plugin_name
+            plugin_name=$(basename "$plugin_file")
+            if [[ -x "$plugin_file" ]]; then
+                echo "$plugin_name"
+                seen_plugins["$plugin_name"]=1
+            fi
+        done < <(find "$builtin_dir" -maxdepth 1 -type f -executable -print0 2>/dev/null)
+    fi
+
+    # List user plugins (skip if already seen from built-ins)
+    local user_dir
+    user_dir=$(get_plugin_dir "$plugin_type")
+    if [[ -d "$user_dir" ]]; then
+        local plugin_file
+        while IFS= read -r -d '' plugin_file; do
+            local plugin_name
+            plugin_name=$(basename "$plugin_file")
+            if [[ -x "$plugin_file" ]] && [[ ! -v seen_plugins["$plugin_name"] ]]; then
+                echo "$plugin_name"
+            fi
+        done < <(find "$user_dir" -maxdepth 1 -type f -executable -print0 2>/dev/null)
+    fi
+}
+
+# Check if PipeWire is running
+check_pipewire_running() {
+    if ! command_exists pw-dump; then
+        return 1
+    fi
+    if ! pw-dump &>/dev/null; then
+        return 1
+    fi
+    return 0
+}
+
+# Check if wpctl is available and working
+check_wpctl_available() {
+    if ! command_exists wpctl; then
+        return 1
+    fi
+    return 0
+}
+
+# Get diagnostic information for verbose mode
+get_pipewire_diagnostics() {
+    local diag=""
+    if ! check_pipewire_running; then
+        diag="PipeWire service may not be running. Try: systemctl --user status pipewire pipewire-pulse"
+    elif ! check_wpctl_available; then
+        diag="wpctl command not found. Install WirePlumber package."
+    else
+        # Try to get default sink info
+        if ! wpctl inspect @DEFAULT_AUDIO_SINK@ &>/dev/null; then
+            diag="Cannot access default audio sink. PipeWire may not be fully initialized."
+        fi
+    fi
+    echo "$diag"
+}
+
