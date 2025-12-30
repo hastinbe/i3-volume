@@ -261,6 +261,53 @@ volume -D 10 up
 
 This will save `DEFAULT_STEP=10` to your config file automatically, making it persistent for future invocations. To find more variables, check the [source code](https://github.com/hastinbe/i3-volume/blob/master/volume) of the `parse_opts` and `main` functions.
 
+### Per-Sink Configuration
+
+You can configure different settings for different audio devices (sinks). This is useful when you have multiple audio devices with different characteristics, such as headphones vs speakers.
+
+Per-sink settings can be keyed by sink ID, name, or nick. Use `volume list sinks` to see available sink identifiers. Per-sink settings take precedence over global settings and are automatically applied when you switch sinks.
+
+**Example configuration:**
+
+```bash
+# Global defaults
+DEFAULT_STEP=5
+MAX_VOL=100
+DISPLAY_NOTIFICATIONS=true
+
+# Per-sink overrides
+# Headphones can go louder without distortion
+SINK_MAX_VOL[USB Audio]=150
+SINK_MAX_VOL[headphones]=120
+
+# Smaller steps for headphones (more sensitive)
+SINK_DEFAULT_STEP[USB Audio]=2
+SINK_DEFAULT_STEP[headphones]=3
+
+# Speakers should be limited to prevent damage
+SINK_MAX_VOL[alsa_output.pci-0000_00_1f.3.analog-stereo]=100
+SINK_MAX_VOL[Speakers]=100
+
+# Larger steps for speakers (less sensitive)
+SINK_DEFAULT_STEP[alsa_output.pci-0000_00_1f.3.analog-stereo]=10
+SINK_DEFAULT_STEP[Speakers]=10
+
+# Disable notifications for headphones (you can hear the volume change)
+SINK_DISPLAY_NOTIFICATIONS[USB Audio]=false
+SINK_DISPLAY_NOTIFICATIONS[headphones]=false
+
+# Enable notifications for speakers (visual feedback helpful)
+SINK_DISPLAY_NOTIFICATIONS[alsa_output.pci-0000_00_1f.3.analog-stereo]=true
+SINK_DISPLAY_NOTIFICATIONS[Speakers]=true
+```
+
+**Supported per-sink settings:**
+- `SINK_MAX_VOL[sink_identifier]` - Maximum volume limit for a specific sink
+- `SINK_DEFAULT_STEP[sink_identifier]` - Default step size for volume changes
+- `SINK_DISPLAY_NOTIFICATIONS[sink_identifier]` - Enable/disable notifications per sink
+
+See `examples/config.per-sink` for a complete example configuration file.
+
 ### Port Information Features (BETA/EXPERIMENTAL)
 
 **⚠️ Note:** Port information features are currently in beta/experimental status. They may not work on all audio devices and may have limited functionality depending on your hardware and PipeWire configuration.

@@ -1,0 +1,44 @@
+# i3-volume Configuration Example: Per-Sink Configuration
+# Copy this file to ~/.config/i3-volume/config or $XDG_CONFIG_HOME/i3-volume/config
+
+# Global settings (used as defaults)
+NOTIFICATION_METHOD="libnotify"
+DISPLAY_NOTIFICATIONS=true
+DEFAULT_STEP=5
+MAX_VOL=100
+
+# Per-sink configuration
+# Settings can be keyed by sink ID, name, or nick
+# Per-sink settings take precedence over global settings
+
+# Example: Different max volumes for different devices
+# Headphones can go louder without distortion
+SINK_MAX_VOL[USB Audio]=150
+SINK_MAX_VOL[headphones]=120
+
+# Speakers should be limited to prevent damage
+SINK_MAX_VOL[alsa_output.pci-0000_00_1f.3.analog-stereo]=100
+SINK_MAX_VOL[Speakers]=100
+
+# Example: Different step sizes for fine control
+# Smaller steps for headphones (more sensitive)
+SINK_DEFAULT_STEP[USB Audio]=2
+SINK_DEFAULT_STEP[headphones]=3
+
+# Larger steps for speakers (less sensitive)
+SINK_DEFAULT_STEP[alsa_output.pci-0000_00_1f.3.analog-stereo]=10
+SINK_DEFAULT_STEP[Speakers]=10
+
+# Example: Per-sink notification preferences
+# Disable notifications for headphones (you can hear the volume change)
+SINK_DISPLAY_NOTIFICATIONS[USB Audio]=false
+SINK_DISPLAY_NOTIFICATIONS[headphones]=false
+
+# Enable notifications for speakers (visual feedback helpful)
+SINK_DISPLAY_NOTIFICATIONS[alsa_output.pci-0000_00_1f.3.analog-stereo]=true
+SINK_DISPLAY_NOTIFICATIONS[Speakers]=true
+
+# Note: Per-sink settings are automatically applied when you switch sinks
+# Use 'volume list sinks' to see available sink names, IDs, and nicks
+# Use 'volume switch <sink>' to switch between sinks
+

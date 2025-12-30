@@ -489,7 +489,11 @@ define_output_formats() {
         else
             local -r vol=$(get_volume)
             short_text="<span color=\"$(volume_color "$vol")\">${vol}%</span>\n"
-            isset MAX_VOL && (( vol > MAX_VOL )) && EXITCODE=$EX_URGENT
+            local effective_max_vol
+            effective_max_vol=$(get_effective_max_vol)
+            if not_empty "$effective_max_vol" && (( vol > effective_max_vol )); then
+                EXITCODE=$EX_URGENT
+            fi
         fi
 
         local full_text=${short_text}
@@ -664,8 +668,12 @@ define_commands() {
             # Clamp to valid range
             if (( new_vol < 0 )); then
                 new_vol=0
-            elif not_empty "$MAX_VOL" && (( new_vol > MAX_VOL )); then
-                new_vol=$MAX_VOL
+            else
+                local effective_max_vol
+                effective_max_vol=$(get_effective_max_vol)
+                if not_empty "$effective_max_vol" && (( new_vol > effective_max_vol )); then
+                    new_vol=$effective_max_vol
+                fi
             fi
 
             wpctl set-volume "$node_id" "${new_vol}%" &>/dev/null
@@ -704,16 +712,18 @@ define_commands() {
         fi
 
         local target_vol current_vol
+        local effective_max_vol
+        effective_max_vol=$(get_effective_max_vol)
 
-        if not_empty "$MAX_VOL"; then
+        if not_empty "$effective_max_vol"; then
             case "$op" in
                 +)  # Increase volume
                     current_vol=$(get_volume)
-                    if (( current_vol + vol > MAX_VOL )); then
+                    if (( current_vol + vol > effective_max_vol )); then
                         # Instead of doing nothing, step to max_volume
-                        local -r step=$( max "0" "$(( MAX_VOL - current_vol ))" )
+                        local -r step=$( max "0" "$(( effective_max_vol - current_vol ))" )
                         if not_empty "$FADE_DURATION"; then
-                            fade_volume "$MAX_VOL" "$FADE_DURATION" "$NODE_ID"
+                            fade_volume "$effective_max_vol" "$FADE_DURATION" "$NODE_ID"
                         else
                             wpctl set-volume "$NODE_ID" "$step%+"
                         fi
@@ -721,7 +731,7 @@ define_commands() {
                     fi
                     ;;
                 *)  # Set absolute volume
-                    if (( vol > MAX_VOL )); then
+                    if (( vol > effective_max_vol )); then
                         return
                     fi
                     ;;
@@ -758,14 +768,14 @@ define_commands() {
     increase_volume() {
         local step=${1:-}
         if empty "$step"; then
-            step=${DEFAULT_STEP:-5}
+            step=$(get_effective_default_step)
         fi
         set_volume "$step" "+"
     }
     decrease_volume() {
         local step=${1:-}
         if empty "$step"; then
-            step=${DEFAULT_STEP:-5}
+            step=$(get_effective_default_step)
         fi
         set_volume "$step" "-"
     }
@@ -774,8 +784,8 @@ define_commands() {
         local -r delta_change=${1:?$(error 'Wheel delta is required')}
         local step threshold current_delta new_delta volume_change threshold_reached
 
-        # Use DEFAULT_STEP as the base for threshold
-        step=${DEFAULT_STEP:-5}
+        # Use DEFAULT_STEP as the base for threshold (per-sink or global)
+        step=$(get_effective_default_step)
         # Threshold is based on step size - accumulate until we reach one step
         threshold=$(awk "BEGIN {printf \"%.2f\", $step}")
 
@@ -1753,9 +1763,11 @@ define_commands() {
         target_vol=$(( current_vol + boost_amount ))
         actual_boost=$boost_amount
 
-        # Respect MAX_VOL if set
-        if not_empty "$MAX_VOL" && (( target_vol > MAX_VOL )); then
-            target_vol=$MAX_VOL
+        # Respect MAX_VOL if set (per-sink or global)
+        local effective_max_vol
+        effective_max_vol=$(get_effective_max_vol)
+        if not_empty "$effective_max_vol" && (( target_vol > effective_max_vol )); then
+            target_vol=$effective_max_vol
             # Adjust boost amount to what we can actually apply
             actual_boost=$(( target_vol - original_vol ))
             if (( actual_boost <= 0 )); then
@@ -2349,6 +2361,33 @@ ${COLOR_YELLOW}Volume Control Settings:${COLOR_RESET}
     Maximum volume limit (optional)
     Values: integer (percentage, 0-200)
 
+${COLOR_YELLOW}Per-Sink Configuration:${COLOR_RESET}
+  Per-sink settings allow you to configure different values for different audio devices.
+  Settings can be keyed by sink ID, name, or nick. Per-sink settings take precedence
+  over global settings.
+
+  ${COLOR_CYAN}SINK_MAX_VOL[sink_identifier]${COLOR_RESET}
+    Per-sink maximum volume limit
+    Examples:
+      SINK_MAX_VOL[alsa_output.pci-0000_00_1f.3.analog-stereo]=100
+      SINK_MAX_VOL[USB Audio]=120
+      SINK_MAX_VOL[headphones]=150
+
+  ${COLOR_CYAN}SINK_DEFAULT_STEP[sink_identifier]${COLOR_RESET}
+    Per-sink default step size for volume changes
+    Examples:
+      SINK_DEFAULT_STEP[alsa_output.pci-0000_00_1f.3.analog-stereo]=5
+      SINK_DEFAULT_STEP[USB Audio]=10
+      SINK_DEFAULT_STEP[headphones]=2
+
+  ${COLOR_CYAN}SINK_DISPLAY_NOTIFICATIONS[sink_identifier]${COLOR_RESET}
+    Per-sink notification display preference
+    Examples:
+      SINK_DISPLAY_NOTIFICATIONS[headphones]=true
+      SINK_DISPLAY_NOTIFICATIONS[speakers]=false
+
+  Note: Per-sink settings are automatically applied when the sink changes.
+
   ${COLOR_CYAN}FADE_DURATION${COLOR_RESET}
     Fade duration in milliseconds for volume changes (optional)
     Values: integer (milliseconds)
@@ -2473,15 +2512,17 @@ EOF
         local sink_id
         for sink_id in "${all_sinks[@]}"; do
             local target_vol current_vol
+            local effective_max_vol
+            effective_max_vol=$(get_effective_max_vol "$sink_id")
 
-            if not_empty "$MAX_VOL"; then
+            if not_empty "$effective_max_vol"; then
                 case "$op" in
                     +)  # Increase volume
                         current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
-                        if (( current_vol + vol > MAX_VOL )); then
-                            local -r step=$( max "0" "$(( MAX_VOL - current_vol ))" )
+                        if (( current_vol + vol > effective_max_vol )); then
+                            local -r step=$( max "0" "$(( effective_max_vol - current_vol ))" )
                             if not_empty "$FADE_DURATION"; then
-                                fade_volume "$MAX_VOL" "$FADE_DURATION" "$sink_id"
+                                fade_volume "$effective_max_vol" "$FADE_DURATION" "$sink_id"
                             else
                                 wpctl set-volume "$sink_id" "$step%+"
                             fi
@@ -2489,7 +2530,7 @@ EOF
                         fi
                         ;;
                     *)  # Set absolute volume
-                        if (( vol > MAX_VOL )); then
+                        if (( vol > effective_max_vol )); then
                             continue
                         fi
                         ;;
@@ -3597,9 +3638,11 @@ apply_symbolic_icon_suffix() { for i in "${!ICONS_SYMBOLIC[@]}"; do ICONS_SYMBOL
 
 volume_color() {
     local -ir vol=${1:?$(error 'A volume is required')}
+    local effective_max_vol
+    effective_max_vol=$(get_effective_max_vol)
     if (( vol >= MIN_VOL && vol < DEFAULT_VOL )); then echo "$COLOR_MIN_TO_DEFAULT";
     elif (( vol == 100 )); then echo "$COLOR_FULL";
-    elif (( vol > 100 && vol <= MAX_VOL )); then echo "$COLOR_FULL_TO_MAX";
+    elif (( vol > 100 && vol <= effective_max_vol )); then echo "$COLOR_FULL_TO_MAX";
     else echo "$COLOR_OTHER";
     fi
 }
@@ -4040,6 +4083,104 @@ get_volume_info() {
 get_default_volume() { get_volume_info "default"; }
 get_min_volume() { get_volume_info "min"; }
 get_max_volume() { get_volume_info "max"; }
+
+# Get effective MAX_VOL for a specific sink (per-sink or global)
+# If sink_id is provided, uses that sink; otherwise uses current sink
+get_effective_max_vol() {
+    local sink_id=${1:-$NODE_ID}
+    local sink_name sink_nick
+
+    if empty "$sink_id"; then
+        echo "${MAX_VOL:-100}"
+        return 0
+    fi
+
+    # Get sink name and nick for this sink
+    sink_name=$(pw_dump | jq -r --argjson id "$sink_id" '.[] | select(.id == $id) | .info.props."node.name"' 2>/dev/null)
+    sink_nick=$(pw_dump | jq -r --argjson id "$sink_id" '.[] | select(.id == $id) | .info.props."node.nick" // ""' 2>/dev/null)
+
+    # Check by ID first
+    if isset "SINK_MAX_VOL[$sink_id]"; then
+        echo "${SINK_MAX_VOL[$sink_id]}"
+        return 0
+    fi
+
+    # Check by name
+    if not_empty "$sink_name" && isset "SINK_MAX_VOL[$sink_name]"; then
+        echo "${SINK_MAX_VOL[$sink_name]}"
+        return 0
+    fi
+
+    # Check by nick
+    if not_empty "$sink_nick" && isset "SINK_MAX_VOL[$sink_nick]"; then
+        echo "${SINK_MAX_VOL[$sink_nick]}"
+        return 0
+    fi
+
+    # Fall back to global value
+    echo "${MAX_VOL:-100}"
+}
+
+# Get effective DEFAULT_STEP for current sink (per-sink or global)
+get_effective_default_step() {
+    if empty "$NODE_ID" || empty "$NODE_NAME"; then
+        echo "${DEFAULT_STEP:-5}"
+        return 0
+    fi
+
+    # Check by ID first
+    if isset "SINK_DEFAULT_STEP[$NODE_ID]"; then
+        echo "${SINK_DEFAULT_STEP[$NODE_ID]}"
+        return 0
+    fi
+
+    # Check by name
+    if isset "SINK_DEFAULT_STEP[$NODE_NAME]"; then
+        echo "${SINK_DEFAULT_STEP[$NODE_NAME]}"
+        return 0
+    fi
+
+    # Check by nick
+    if not_empty "$NODE_NICK" && isset "SINK_DEFAULT_STEP[$NODE_NICK]"; then
+        echo "${SINK_DEFAULT_STEP[$NODE_NICK]}"
+        return 0
+    fi
+
+    # Fall back to global value
+    echo "${DEFAULT_STEP:-5}"
+}
+
+# Get effective DISPLAY_NOTIFICATIONS for current sink (per-sink or global)
+# shellcheck disable=SC2317  # Function is used indirectly via config
+get_effective_display_notifications() {
+    if empty "$NODE_ID" || empty "$NODE_NAME"; then
+        echo "${DISPLAY_NOTIFICATIONS:-false}"
+        return 0
+    fi
+
+    local value=""
+
+    # Check by ID first
+    if isset "SINK_DISPLAY_NOTIFICATIONS[$NODE_ID]"; then
+        value="${SINK_DISPLAY_NOTIFICATIONS[$NODE_ID]}"
+    # Check by name
+    elif isset "SINK_DISPLAY_NOTIFICATIONS[$NODE_NAME]"; then
+        value="${SINK_DISPLAY_NOTIFICATIONS[$NODE_NAME]}"
+    # Check by nick
+    elif not_empty "$NODE_NICK" && isset "SINK_DISPLAY_NOTIFICATIONS[$NODE_NICK]"; then
+        value="${SINK_DISPLAY_NOTIFICATIONS[$NODE_NICK]}"
+    # Fall back to global value
+    else
+        value="${DISPLAY_NOTIFICATIONS:-false}"
+    fi
+
+    # Convert to boolean string if needed
+    if [[ "$value" == "true" ]] || [[ "$value" == "1" ]]; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
 
 init_color() {
     has_color && {
@@ -4555,6 +4696,22 @@ main() {
     # PipeWire node aliases
     declare -gA NODE_ALIASES=()
 
+    # Per-sink configuration arrays
+    # These can be keyed by sink ID, name, or nick
+    declare -gA SINK_MAX_VOL=()
+    declare -gA SINK_DEFAULT_STEP=()
+    declare -gA SINK_DISPLAY_NOTIFICATIONS=()
+    # shellcheck disable=SC2034  # Reserved for future per-sink notification preferences
+    declare -gA SINK_NOTIFICATION_METHOD=()
+    # shellcheck disable=SC2034  # Reserved for future per-sink notification preferences
+    declare -gA SINK_USE_DUNSTIFY=()
+    # shellcheck disable=SC2034  # Reserved for future per-sink notification preferences
+    declare -gA SINK_USE_FULLCOLOR_ICONS=()
+    # shellcheck disable=SC2034  # Reserved for future per-sink notification preferences
+    declare -gA SINK_SHOW_VOLUME_PROGRESS=()
+    # shellcheck disable=SC2034  # Reserved for future per-sink notification preferences
+    declare -gA SINK_EXPIRES=()
+
     declare -i DEFAULT_VOL=100 MIN_VOL=0 MAX_VOL=100
     declare -i DEFAULT_STEP=${DEFAULT_STEP:-5}
 
@@ -4635,7 +4792,7 @@ main() {
     # handle wheel events before executing the output command
     if not_empty "${BLOCK_BUTTON:-}" && [[ "${CMDARGS[0]:-}" == "output" ]] && [[ "${CMDARGS[1]:-}" == "i3blocks" ]]; then
         local step
-        step=${DEFAULT_STEP:-5}
+        step=$(get_effective_default_step)
 
         case "$BLOCK_BUTTON" in
             4)  # Scroll up
