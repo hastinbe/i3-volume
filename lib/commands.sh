@@ -2910,6 +2910,247 @@ get_volume_color_code() {
      fi
  }
 
+analyze_volumes() {
+     # Analyze volumes across all sinks and apps
+     # Returns: target_vol, adjustments array
+     local -r target=${1:-}  # Optional target volume
+     local -a all_sinks
+     local -a adjustments
+     local total_vol=0
+     local count=0
+     local sink_id vol display_name
+     # shellcheck disable=SC2034  # Used externally by normalize_volume
+     declare -g NORMALIZE_TARGET_VOL
+     # shellcheck disable=SC2034  # Used externally by normalize_volume
+     declare -ga NORMALIZE_ADJUSTMENTS
+     # shellcheck disable=SC2034  # Used externally by normalize_volume
+     declare -gi NORMALIZE_COUNT
+
+     readarray -t all_sinks < <(get_all_sinks)
+
+     # Collect sink volumes
+     for sink_id in "${all_sinks[@]}"; do
+         vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}' || echo "0")
+         if not_empty "$vol"; then
+             total_vol=$((total_vol + vol))
+             ((count++))
+             display_name=$(get_sink_display_name_by_id "$sink_id")
+             adjustments+=("$sink_id|$display_name|$vol|sink")
+         fi
+     done
+
+     # Collect app stream volumes
+     local streams
+     readarray -t streams < <(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Stream/Output/Audio") | "\(.id)|\(.info.props."application.name" // .info.props."media.name" // .info.props."application.process.binary" // "Unknown")"' 2>/dev/null)
+
+     local stream_id app_name
+     for stream in "${streams[@]}"; do
+         IFS='|' read -r stream_id app_name <<< "$stream"
+         vol=$(wpctl get-volume "$stream_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}' || echo "0")
+         if not_empty "$vol"; then
+             total_vol=$((total_vol + vol))
+             ((count++))
+             adjustments+=("$stream_id|$app_name|$vol|app")
+         fi
+     done
+
+     # Calculate target volume
+     local target_vol
+     if not_empty "$target"; then
+         target_vol=$target
+     elif (( count > 0 )); then
+         # Calculate average
+         target_vol=$((total_vol / count))
+     else
+         target_vol=100  # Default if nothing found
+     fi
+
+     # Clamp target to valid range
+     local effective_max_vol
+     effective_max_vol=$(get_effective_max_vol)
+     if not_empty "$effective_max_vol" && (( target_vol > effective_max_vol )); then
+         target_vol=$effective_max_vol
+     fi
+     if (( target_vol < 0 )); then
+         target_vol=0
+     fi
+
+     # Return results via global variables (bash limitation)
+     NORMALIZE_TARGET_VOL=$target_vol
+     NORMALIZE_ADJUSTMENTS=("${adjustments[@]}")
+     NORMALIZE_COUNT=$count
+ }
+
+normalize_volume() {
+     local -r mode=${1:-}  # "suggest", "apply", or "auto"
+     local -r target=${2:-}  # Optional target volume
+     local -r interval=${3:-5}  # For auto mode: check interval in seconds
+
+     if [[ "$mode" == "auto" ]]; then
+         # Auto-normalization mode: continuously monitor and adjust
+         echo "${COLOR_YELLOW}Auto-normalization mode started. Press Ctrl+C to stop.${COLOR_RESET}"
+         echo "Checking every ${interval} seconds..."
+         echo
+
+         while true; do
+             analyze_volumes "$target"
+             local adjustments=("${NORMALIZE_ADJUSTMENTS[@]}")
+             local target_vol=$NORMALIZE_TARGET_VOL
+             local adjusted=0
+
+             for adjustment in "${adjustments[@]}"; do
+                 IFS='|' read -r id name current_vol type <<< "$adjustment"
+                 local diff=$((target_vol - current_vol))
+                 local abs_diff
+                 if (( diff < 0 )); then
+                     abs_diff=$((-diff))
+                 else
+                     abs_diff=$diff
+                 fi
+
+                 # Only adjust if difference is significant (>= 5%)
+                 if (( abs_diff >= 5 )); then
+                     if [[ "$type" == "sink" ]]; then
+                         wpctl set-volume "$id" "${target_vol}%" &>/dev/null
+                     else
+                         wpctl set-volume "$id" "${target_vol}%" &>/dev/null
+                     fi
+                     ((adjusted++))
+                 fi
+             done
+
+             if (( adjusted > 0 )); then
+                 invalidate_cache
+                 echo "[$(date +%H:%M:%S)] Normalized $adjusted source(s) to ${target_vol}%"
+             fi
+
+             sleep "$interval"
+         done
+     else
+         # Analyze current volumes
+         analyze_volumes "$target"
+         local adjustments=("${NORMALIZE_ADJUSTMENTS[@]}")
+         local target_vol=$NORMALIZE_TARGET_VOL
+         local count=$NORMALIZE_COUNT
+
+         if (( count == 0 )); then
+             error "No audio sources found to normalize."
+             return 1
+         fi
+
+         echo "${COLOR_YELLOW}Volume Normalization Analysis${COLOR_RESET}"
+         echo "Target volume: ${COLOR_GREEN}${target_vol}%${COLOR_RESET}"
+         echo "Found ${count} source(s)"
+         echo
+
+         local needs_adjustment=false
+         local adjustment_count=0
+
+         for adjustment in "${adjustments[@]}"; do
+             IFS='|' read -r id name current_vol type <<< "$adjustment"
+             local diff=$((target_vol - current_vol))
+             local abs_diff
+             if (( diff < 0 )); then
+                 abs_diff=$((-diff))
+             else
+                 abs_diff=$diff
+             fi
+
+             if (( abs_diff >= 1 )); then  # Show if difference >= 1%
+                 needs_adjustment=true
+                 local type_label
+                 if [[ "$type" == "sink" ]]; then
+                     type_label="Sink"
+                 else
+                     type_label="App"
+                 fi
+
+                 if (( diff > 0 )); then
+                     printf "  ${COLOR_CYAN}%s${COLOR_RESET} (${type_label}): ${COLOR_YELLOW}%3s%%${COLOR_RESET} → ${COLOR_GREEN}%3s%%${COLOR_RESET} (+%2s%%)" "$name" "$current_vol" "$target_vol" "$diff"
+                 else
+                     printf "  ${COLOR_CYAN}%s${COLOR_RESET} (${type_label}): ${COLOR_YELLOW}%3s%%${COLOR_RESET} → ${COLOR_GREEN}%3s%%${COLOR_RESET} (%2s%%)" "$name" "$current_vol" "$target_vol" "$diff"
+                 fi
+
+                 if [[ "$mode" == "apply" ]]; then
+                     if [[ "$type" == "sink" ]]; then
+                         wpctl set-volume "$id" "${target_vol}%" &>/dev/null
+                     else
+                         wpctl set-volume "$id" "${target_vol}%" &>/dev/null
+                     fi
+                     echo " ${COLOR_GREEN}[APPLIED]${COLOR_RESET}"
+                     ((adjustment_count++))
+                 else
+                     echo
+                 fi
+             else
+                 # Show sources that are already at target
+                 local type_label
+                 if [[ "$type" == "sink" ]]; then
+                     type_label="Sink"
+                 else
+                     type_label="App"
+                 fi
+                 printf "  ${COLOR_CYAN}%s${COLOR_RESET} (${type_label}): ${COLOR_GREEN}%3s%%${COLOR_RESET} (already normalized)" "$name" "$current_vol"
+                 echo
+             fi
+         done
+
+         echo
+
+         if [[ "$mode" == "apply" ]]; then
+             if (( adjustment_count > 0 )); then
+                 invalidate_cache
+                 echo "${COLOR_GREEN}Normalized ${adjustment_count} source(s) to ${target_vol}%${COLOR_RESET}"
+             else
+                 echo "All sources already normalized."
+             fi
+         elif $needs_adjustment; then
+             echo "Use ${COLOR_GREEN}normalize apply${COLOR_RESET} to apply these adjustments."
+             echo "Or use ${COLOR_GREEN}normalize apply <target>${COLOR_RESET} to set a specific target volume."
+         else
+             echo "All sources are already normalized."
+         fi
+     fi
+ }
+
+normalize() {
+     local -r subcommand=${1:-suggest}
+     local -r target=${2:-}
+
+     case "$subcommand" in
+         suggest|analyze)
+             normalize_volume "suggest" "$target"
+             ;;
+         apply)
+             normalize_volume "apply" "$target"
+             ;;
+         auto)
+             local -r interval=${3:-5}
+             normalize_volume "auto" "$target" "$interval"
+             ;;
+         "")
+             error "Normalize subcommand required. Use: normalize suggest|apply|auto"
+             echo "  ${COLOR_GREEN}normalize suggest${COLOR_RESET}     - analyze and suggest volume adjustments"
+             echo "  ${COLOR_GREEN}normalize apply${COLOR_RESET}       - analyze and apply volume adjustments"
+             echo "  ${COLOR_GREEN}normalize apply <target>${COLOR_RESET} - normalize to specific target volume"
+             echo "  ${COLOR_GREEN}normalize auto [interval]${COLOR_RESET} - auto-normalization mode (default: 5s)"
+             EXITCODE=$EX_USAGE
+             return 1
+             ;;
+         *)
+             # If subcommand is a number, treat it as target volume for apply
+             if [[ "$subcommand" =~ ^[0-9]+$ ]]; then
+                 normalize_volume "apply" "$subcommand"
+             else
+                 error "Unknown normalize subcommand: $subcommand"
+                 echo "Valid subcommands: suggest, apply, auto"
+                 EXITCODE=$EX_USAGE
+                 return 1
+             fi
+             ;;
+     esac
+ }
+
 app() {
      local -r subcommand=${1:-}
      local -r app_name=${2:-}
@@ -3061,6 +3302,20 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                balance 100      - full right
                            note: Balance range is -100 (left) to +100 (right), 0 is centered
                            Balance preference is stored per sink
+  ${COLOR_GREEN}normalize [cmd] [target]${COLOR_RESET}    normalize volume across sources
+                           commands:
+                               suggest         - analyze and suggest adjustments (default)
+                               apply           - analyze and apply adjustments
+                               apply <target>  - normalize to specific target volume
+                               auto [interval] - auto-normalization mode (default: 5s)
+                           examples:
+                               normalize                    - suggest volume adjustments
+                               normalize apply              - normalize all sources to average
+                               normalize apply 75           - normalize all sources to 75%
+                               normalize auto               - auto-normalize every 5 seconds
+                               normalize auto 10            - auto-normalize every 10 seconds
+                           note: Analyzes volumes across all sinks and applications
+                           Useful for consistent volume levels across different audio sources
   ${COLOR_GREEN}app <cmd> [args]${COLOR_RESET}            control per-application volume
                            commands:
                                list                    - list all applications with audio streams

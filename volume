@@ -310,6 +310,15 @@ exec_command() {
                 *) usage ;;
             esac
             ;;
+        normalize)
+            case "$#" in
+                0) normalize suggest ;;
+                1) normalize "$1" ;;
+                2) normalize "$1" "$2" ;;
+                3) normalize "$1" "$2" "$3" ;;
+                *) usage ;;
+            esac
+            ;;
         *) usage ;;
     esac
 }
@@ -375,6 +384,7 @@ main() {
         sync
         app
         config
+        normalize
     )
 
     # Exit codes

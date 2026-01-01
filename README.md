@@ -113,6 +113,20 @@ Commands:
                                   balance 100      - full right
                               note: Balance range is -100 (left) to +100 (right), 0 is centered
                               Balance preference is stored per sink
+  normalize [cmd] [target]    normalize volume across sources
+                              commands:
+                                  suggest         - analyze and suggest adjustments (default)
+                                  apply           - analyze and apply adjustments
+                                  apply <target>  - normalize to specific target volume
+                                  auto [interval] - auto-normalization mode (default: 5s)
+                              examples:
+                                  normalize                    - suggest volume adjustments
+                                  normalize apply              - normalize all sources to average
+                                  normalize apply 75           - normalize all sources to 75%
+                                  normalize auto               - auto-normalize every 5 seconds
+                                  normalize auto 10            - auto-normalize every 10 seconds
+                              note: Analyzes volumes across all sinks and applications
+                              Useful for consistent volume levels across different audio sources
   app <cmd> [args]            control per-application volume
                               commands:
                                   list                    - list all applications with audio streams
