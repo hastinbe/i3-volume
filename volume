@@ -104,7 +104,30 @@ parse_opts() {
         esac
     done
 
-    read -ra CMDARGS <<< "${OPTARR[@]:$((OPTIND-1))}"
+    # Extract command arguments: skip all processed options
+    # Since arrange_opts puts all flags first, then args, we need to find where flags end
+    # Count how many elements in OPTARR are options (start with -)
+    local i=0
+    while [[ $i -lt ${#OPTARR[@]} && ${OPTARR[$i]} == -* && ${OPTARR[$i]} != -- ]]; do
+        # Check if this option takes an argument by looking it up in optstring
+        local opt="${OPTARR[$i]#-}"
+        local opt_char="${opt:0:1}"
+        # Check if opt_char: appears in optstring (option char followed by colon means it takes an arg)
+        # Simple substring match is sufficient since we're checking specific option chars
+        if [[ "$optstring" == *"${opt_char}:"* ]] && [[ $((i+1)) -lt ${#OPTARR[@]} ]] && [[ ${OPTARR[$((i+1))]} != -* ]]; then
+            ((i += 2))  # Skip option and its argument
+        else
+            ((i++))  # Skip just the option
+        fi
+    done
+    # If we hit --, skip it too
+    [[ $i -lt ${#OPTARR[@]} && ${OPTARR[$i]} == -- ]] && ((i++))
+    # Extract remaining arguments as command
+    if [[ $i -lt ${#OPTARR[@]} ]]; then
+        CMDARGS=("${OPTARR[@]:$i}")
+    else
+        CMDARGS=()
+    fi
 }
 
 exec_command() {
