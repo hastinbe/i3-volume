@@ -6,14 +6,15 @@
 #
 
 # Volume getters/setters
-get_volume() { wpctl get-volume "$NODE_ID" | awk '{print $2 * 100}'; }
+# Preserve decimal precision (wpctl returns 0.0-1.0, convert to 0.0-100.0)
+get_volume() { wpctl get-volume "$NODE_ID" | awk '{printf "%.2f", $2 * 100}'; }
 is_muted() { wpctl get-volume "$NODE_ID" | grep -q '\[MUTED\]'; }
 
 get_mic_volume() {
     if empty "$SOURCE_ID"; then
         init_source
     fi
-    wpctl get-volume "$SOURCE_ID" 2>/dev/null | awk '{print $2 * 100}'
+    wpctl get-volume "$SOURCE_ID" 2>/dev/null | awk '{printf "%.2f", $2 * 100}'
 }
 
 is_mic_muted() {
@@ -29,17 +30,17 @@ get_volume_icon() {
     local icon
 
     if $USE_FULLCOLOR_ICONS; then
-        if (( vol >= 70 )); then icon=${ICONS[1]}
-        elif (( vol >= 40 )); then icon=${ICONS[3]}
-        elif (( vol > 0 )); then icon=${ICONS[2]}
+        if [ "$(echo "$vol >= 70" | bc -l 2>/dev/null)" = "1" ]; then icon=${ICONS[1]}
+        elif [ "$(echo "$vol >= 40" | bc -l 2>/dev/null)" = "1" ]; then icon=${ICONS[3]}
+        elif [ "$(echo "$vol > 0" | bc -l 2>/dev/null)" = "1" ]; then icon=${ICONS[2]}
         else icon=${ICONS[2]}
         fi
     else
         # Get overamplified icon if available, otherwise default to high volume icon
-        if (( vol > 100 )); then icon=${ICONS_SYMBOLIC[4]:-${ICONS_SYMBOLIC[1]}}
-        elif (( vol >= 70 )); then icon=${ICONS_SYMBOLIC[1]}
-        elif (( vol >= 40 )); then icon=${ICONS_SYMBOLIC[3]}
-        elif (( vol > 0 )); then icon=${ICONS_SYMBOLIC[2]}
+        if [ "$(echo "$vol > 100" | bc -l 2>/dev/null)" = "1" ]; then icon=${ICONS_SYMBOLIC[4]:-${ICONS_SYMBOLIC[1]}}
+        elif [ "$(echo "$vol >= 70" | bc -l 2>/dev/null)" = "1" ]; then icon=${ICONS_SYMBOLIC[1]}
+        elif [ "$(echo "$vol >= 40" | bc -l 2>/dev/null)" = "1" ]; then icon=${ICONS_SYMBOLIC[3]}
+        elif [ "$(echo "$vol > 0" | bc -l 2>/dev/null)" = "1" ]; then icon=${ICONS_SYMBOLIC[2]}
         else icon=${ICONS_SYMBOLIC[2]}
         fi
     fi
@@ -53,9 +54,9 @@ get_volume_emoji() {
 
     if is_muted; then icon=${ICONS_EMOJI[0]}
     else
-        if (( vol >= 70 )); then icon=${ICONS_EMOJI[1]}
-        elif (( vol >= 40 )); then icon=${ICONS_EMOJI[3]}
-        elif (( vol > 0 )); then icon=${ICONS_EMOJI[2]}
+        if [ "$(echo "$vol >= 70" | bc -l 2>/dev/null)" = "1" ]; then icon=${ICONS_EMOJI[1]}
+        elif [ "$(echo "$vol >= 40" | bc -l 2>/dev/null)" = "1" ]; then icon=${ICONS_EMOJI[3]}
+        elif [ "$(echo "$vol > 0" | bc -l 2>/dev/null)" = "1" ]; then icon=${ICONS_EMOJI[2]}
         else icon=${ICONS_EMOJI[2]}
         fi
     fi
@@ -74,10 +75,16 @@ progress_bar() {
     local -i max_percent=${2:-100}
     local -i bar_length=${3:-20}
 
-    # Clamp the percentage to be within 0 and max_percent
-    (( percent = percent < 0 ? 0 : (percent > max_percent ? max_percent : percent) ))
+    # Clamp the percentage to be within 0 and max_percent (handle decimals)
+    if [ "$(echo "$percent < 0" | bc -l 2>/dev/null)" = "1" ]; then
+        percent="0"
+    elif [ "$(echo "$percent > $max_percent" | bc -l 2>/dev/null)" = "1" ]; then
+        percent="$max_percent"
+    fi
 
-    local filled_blocks=$(( percent * bar_length / max_percent ))
+    # Calculate filled blocks (round to nearest integer)
+    local filled_blocks
+    filled_blocks=$(echo "scale=0; ($percent * $bar_length / $max_percent + 0.5) / 1" | bc -l 2>/dev/null || printf "%.0f" "$(echo "$percent * $bar_length / $max_percent" | bc -l)")
     local empty_blocks=$(( bar_length - filled_blocks ))
     local bar; printf -v bar "%${filled_blocks}s" ''
     local empty; printf -v empty "%${empty_blocks}s" ''
@@ -92,13 +99,18 @@ apply_symbolic_icon_suffix() {
 }
 
 volume_color() {
-    local -ir vol=${1:?$(error 'A volume is required')}
+    local vol=${1:?$(error 'A volume is required')}
     local effective_max_vol
     effective_max_vol=$(get_effective_max_vol)
-    if (( vol >= MIN_VOL && vol < DEFAULT_VOL )); then echo "$COLOR_MIN_TO_DEFAULT";
-    elif (( vol == 100 )); then echo "$COLOR_FULL";
-    elif (( vol > 100 && vol <= effective_max_vol )); then echo "$COLOR_FULL_TO_MAX";
-    else echo "$COLOR_OTHER";
+    # Use decimal comparisons for volume thresholds
+    if [ "$(echo "$vol >= $MIN_VOL && $vol < $DEFAULT_VOL" | bc -l 2>/dev/null)" = "1" ]; then
+        echo "$COLOR_MIN_TO_DEFAULT"
+    elif [ "$(echo "$vol == 100" | bc -l 2>/dev/null)" = "1" ]; then
+        echo "$COLOR_FULL"
+    elif [ "$(echo "$vol > 100 && $vol <= $effective_max_vol" | bc -l 2>/dev/null)" = "1" ]; then
+        echo "$COLOR_FULL_TO_MAX"
+    else
+        echo "$COLOR_OTHER"
     fi
 }
 

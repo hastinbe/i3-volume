@@ -20,11 +20,15 @@ fade_volume() {
      local -i step_delay
 
      if not_empty "$start_vol"; then
-         current_vol=${start_vol%.*}  # Use provided starting volume
+         # Convert decimal to integer for fade steps (wpctl rounds anyway)
+         current_vol=$(printf "%.0f" "$start_vol" 2>/dev/null || echo "${start_vol%.*}")
      else
          current_vol=$(get_volume)
+         # Convert to integer for fade steps
+         current_vol=$(printf "%.0f" "$current_vol" 2>/dev/null || echo "${current_vol%.*}")
      fi
-     target_vol_int=${target_vol%.*}  # Convert to integer
+     # Round target volume to integer (wpctl will round anyway)
+     target_vol_int=$(printf "%.0f" "$target_vol" 2>/dev/null || echo "${target_vol%.*}")
 
      # Calculate step delay in milliseconds
      if (( duration_ms > 0 && steps > 0 )); then
@@ -91,7 +95,7 @@ fade_volume() {
          fi
      done
 
-     # Ensure we end at exact target
+     # Ensure we end at exact target (rounded)
      wpctl set-volume "$node_id" "${target_vol_int}%" &>/dev/null
      invalidate_cache
  }
@@ -118,19 +122,28 @@ set_volume() {
      if not_empty "$effective_max_vol"; then
          case "$op" in
              +)  # Increase volume
-                 if (( current_vol + vol > effective_max_vol )); then
+                 local sum_vol
+                 sum_vol=$(decimal_add "$current_vol" "$vol")
+                 if [ "$(decimal_gt "$sum_vol" "$effective_max_vol")" = "1" ]; then
                      # Instead of doing nothing, step to max_volume
-                     local -r step=$( max "0" "$(( effective_max_vol - current_vol ))" )
+                     local step
+                     step=$(decimal_subtract "$effective_max_vol" "$current_vol")
+                     # Ensure step is not negative
+                     if [ "$(decimal_lt "$step" "0")" = "1" ]; then
+                         step="0"
+                     fi
+                     local step_int
+                     step_int=$(printf "%.0f" "$step")
                      if not_empty "$FADE_DURATION"; then
                          fade_volume "$effective_max_vol" "$FADE_DURATION" "$NODE_ID"
                      else
-                         wpctl set-volume "$NODE_ID" "$step%+"
+                         wpctl set-volume "$NODE_ID" "${step_int}%+"
                      fi
                      return
                  fi
                  ;;
              *)  # Set absolute volume
-                 if (( vol > effective_max_vol )); then
+                 if [ "$(decimal_gt "$vol" "$effective_max_vol")" = "1" ]; then
                      return
                  fi
                  ;;
@@ -141,11 +154,11 @@ set_volume() {
      if not_empty "$FADE_DURATION"; then
          case "$op" in
              +)
-                 target_vol=$(( current_vol + vol ))
+                 target_vol=$(decimal_add "$current_vol" "$vol")
                  fade_volume "$target_vol" "$FADE_DURATION" "$NODE_ID"
                  ;;
              -)
-                 target_vol=$(( current_vol - vol ))
+                 target_vol=$(decimal_subtract "$current_vol" "$vol")
                  fade_volume "$target_vol" "$FADE_DURATION" "$NODE_ID"
                  ;;
              *)
@@ -1977,19 +1990,28 @@ set_volume_all() {
          if not_empty "$effective_max_vol"; then
              case "$op" in
                  +)  # Increase volume
-                     current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
-                     if (( current_vol + vol > effective_max_vol )); then
-                         local -r step=$( max "0" "$(( effective_max_vol - current_vol ))" )
+                     current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}')
+                     local sum_vol
+                     sum_vol=$(decimal_add "$current_vol" "$vol")
+                     if [ "$(decimal_gt "$sum_vol" "$effective_max_vol")" = "1" ]; then
+                         local step
+                         step=$(decimal_subtract "$effective_max_vol" "$current_vol")
+                         # Ensure step is not negative
+                         if [ "$(decimal_lt "$step" "0")" = "1" ]; then
+                             step="0"
+                         fi
+                         local step_int
+                         step_int=$(printf "%.0f" "$step")
                          if not_empty "$FADE_DURATION"; then
                              fade_volume "$effective_max_vol" "$FADE_DURATION" "$sink_id"
                          else
-                             wpctl set-volume "$sink_id" "$step%+"
+                             wpctl set-volume "$sink_id" "${step_int}%+"
                          fi
                          continue
                      fi
                      ;;
                  *)  # Set absolute volume
-                     if (( vol > effective_max_vol )); then
+                     if [ "$(decimal_gt "$vol" "$effective_max_vol")" = "1" ]; then
                          continue
                      fi
                      ;;
@@ -2000,13 +2022,13 @@ set_volume_all() {
          if not_empty "$FADE_DURATION"; then
              case "$op" in
                  +)
-                     current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
-                     target_vol=$(( current_vol + vol ))
+                     current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}')
+                     target_vol=$(decimal_add "$current_vol" "$vol")
                      fade_volume "$target_vol" "$FADE_DURATION" "$sink_id"
                      ;;
                  -)
-                     current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.0f", $2 * 100}')
-                     target_vol=$(( current_vol - vol ))
+                     current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}')
+                     target_vol=$(decimal_subtract "$current_vol" "$vol")
                      fade_volume "$target_vol" "$FADE_DURATION" "$sink_id"
                      ;;
                  *)

@@ -43,8 +43,15 @@ Control volume and related notifications.
 
 Commands:
   up [value]                  increase volume (uses default step if value omitted)
+                              supports decimal values: up 2.5
   down [value]                decrease volume (uses default step if value omitted)
-  set <value>                 set volume
+                              supports decimal values: down 1.25
+  set <value>                 set volume (supports decimal values)
+                              examples:
+                                  set 50      - set to 50%
+                                  set 45.5    - set to 45.5% (may round to 46% depending on hardware)
+                                  set 33.33   - set to 33.33% (may round to 33% depending on hardware)
+                              note: wpctl may round decimal values to nearest integer percentage
   wheel <delta>               mouse wheel volume control (accumulates small changes)
                               examples:
                                   wheel 2.0   - scroll up (positive delta)
@@ -55,11 +62,12 @@ Commands:
                               examples:
                                   fade 0 100        - fade from 0% to 100% (500ms)
                                   fade 0 100 2000  - fade from 0% to 100% over 2 seconds
+                                  fade 20.5 75.5   - fade from 20.5% to 75.5% (supports decimals)
   mic <cmd> [value]           control microphone
                               commands:
-                                  up <value>    - increase microphone volume
-                                  down <value>  - decrease microphone volume
-                                  set <value>   - set microphone volume
+                                  up <value>    - increase microphone volume (supports decimals)
+                                  down <value>  - decrease microphone volume (supports decimals)
+                                  set <value>   - set microphone volume (supports decimals)
                                   mute          - toggle microphone mute
   listen [options] [output_format] monitor volume changes
                               options:

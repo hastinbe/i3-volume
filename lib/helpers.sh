@@ -30,6 +30,71 @@ is_command_hookable() { ! [[ ${POST_HOOK_EXEMPT_COMMANDS[*]} =~ $1 ]]; }
 has_capability() { [[ "${NOTIFY_CAPS[*]}" =~ $1 ]]; }
 max() { echo $(( $1 > $2 ? $1 : $2 )); }
 
+# Decimal arithmetic functions for volume calculations
+# These use bc for decimal precision (bc is a dependency)
+decimal_add() {
+    local a=$1
+    local b=$2
+    echo "$a + $b" | bc -l
+}
+
+decimal_subtract() {
+    local a=$1
+    local b=$2
+    echo "$a - $b" | bc -l
+}
+
+decimal_multiply() {
+    local a=$1
+    local b=$2
+    echo "$a * $b" | bc -l
+}
+
+decimal_divide() {
+    local a=$1
+    local b=$2
+    echo "scale=2; $a / $b" | bc -l
+}
+
+# Compare two decimal values: returns 1 if true, 0 if false
+# Usage: decimal_gt 45.5 45.0 -> returns 1 (true)
+decimal_gt() {
+    local a=$1
+    local b=$2
+    echo "$a > $b" | bc -l
+}
+
+decimal_lt() {
+    local a=$1
+    local b=$2
+    echo "$a < $b" | bc -l
+}
+
+decimal_ge() {
+    local a=$1
+    local b=$2
+    echo "$a >= $b" | bc -l
+}
+
+decimal_le() {
+    local a=$1
+    local b=$2
+    echo "$a <= $b" | bc -l
+}
+
+decimal_eq() {
+    local a=$1
+    local b=$2
+    echo "$a == $b" | bc -l
+}
+
+# Format decimal to specified precision (default 2 decimal places)
+decimal_format() {
+    local val=$1
+    local precision=${2:-2}
+    printf "%.${precision}f" "$val" 2>/dev/null || echo "$val"
+}
+
 # Generalized plugin system for multiple plugin types
 declare -gA LOADED_PLUGINS=()
 

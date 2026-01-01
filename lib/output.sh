@@ -7,8 +7,25 @@
 # Note: EXITCODE, EX_URGENT, EX_USAGE are external variables from main script
 #
 
+# Format volume for display (show 1 decimal place if needed, otherwise integer)
+format_volume_display() {
+    local vol=$1
+    # Check if it's effectively a whole number (handle cases like "51.00" or "50.0")
+    # Use bc to check if the value equals its integer part
+    local int_part
+    int_part=$(echo "$vol" | awk '{printf "%.0f", $1}')
+    # Compare the original value to the integer part
+    if [ "$(echo "$vol == $int_part" | bc -l 2>/dev/null)" = "1" ]; then
+        # It's a whole number, display as integer
+        printf "%.0f" "$vol"
+    else
+        # It has a fractional part, display with 1 decimal place
+        printf "%.1f" "$vol"
+    fi
+}
+
 output_volume_default() {
-    if is_muted; then echo MUTE; else echo "$(get_volume)%"; fi
+    if is_muted; then echo MUTE; else echo "$(format_volume_display "$(get_volume)")%"; fi
 }
 
 # Format options:
@@ -46,21 +63,32 @@ output_volume_custom() {
                 *) compare_val=0 ;;
             esac
 
-            # Evaluate condition using bash arithmetic
+            # Evaluate condition using decimal comparison
             local condition_result=false
-            # Convert to integers for comparison (bash arithmetic works with integers)
-            local compare_int threshold_int
-            compare_int=$(printf "%.0f" "$compare_val" 2>/dev/null || echo "0")
-            threshold_int=$(printf "%.0f" "$threshold" 2>/dev/null || echo "0")
-
-            case "$op" in
-                ">")  (( compare_int > threshold_int )) && condition_result=true ;;
-                "<")  (( compare_int < threshold_int )) && condition_result=true ;;
-                ">=") (( compare_int >= threshold_int )) && condition_result=true ;;
-                "<=") (( compare_int <= threshold_int )) && condition_result=true ;;
-                "==") (( compare_int == threshold_int )) && condition_result=true ;;
-                "!=") (( compare_int != threshold_int )) && condition_result=true ;;
-            esac
+            # Use decimal comparison functions if available, otherwise fall back to integer
+            if command_exists bc; then
+                case "$op" in
+                    ">")  [ "$(echo "$compare_val > $threshold" | bc -l)" = "1" ] && condition_result=true ;;
+                    "<")  [ "$(echo "$compare_val < $threshold" | bc -l)" = "1" ] && condition_result=true ;;
+                    ">=") [ "$(echo "$compare_val >= $threshold" | bc -l)" = "1" ] && condition_result=true ;;
+                    "<=") [ "$(echo "$compare_val <= $threshold" | bc -l)" = "1" ] && condition_result=true ;;
+                    "==") [ "$(echo "$compare_val == $threshold" | bc -l)" = "1" ] && condition_result=true ;;
+                    "!=") [ "$(echo "$compare_val != $threshold" | bc -l)" = "1" ] && condition_result=true ;;
+                esac
+            else
+                # Fallback to integer comparison
+                local compare_int threshold_int
+                compare_int=$(printf "%.0f" "$compare_val" 2>/dev/null || echo "0")
+                threshold_int=$(printf "%.0f" "$threshold" 2>/dev/null || echo "0")
+                case "$op" in
+                    ">")  (( compare_int > threshold_int )) && condition_result=true ;;
+                    "<")  (( compare_int < threshold_int )) && condition_result=true ;;
+                    ">=") (( compare_int >= threshold_int )) && condition_result=true ;;
+                    "<=") (( compare_int <= threshold_int )) && condition_result=true ;;
+                    "==") (( compare_int == threshold_int )) && condition_result=true ;;
+                    "!=") (( compare_int != threshold_int )) && condition_result=true ;;
+                esac
+            fi
 
             if [[ "$condition_result" == "true" ]]; then
                 replacement="$true_text"
@@ -77,8 +105,10 @@ output_volume_custom() {
         format=${format//$conditional_pattern/$replacement}
     done
 
-    # Now process regular placeholders
-    string=${format//\%v/$vol%}
+    # Now process regular placeholders (format volume for display)
+    local vol_display
+    vol_display=$(format_volume_display "$vol")
+    string=${format//\%v/$vol_display%}
     string=${string//\%n/$(get_node_display_name)}
     string=${string//\%d/$NODE_ID}
     string=${string//\%p/$(progress_bar "$vol")}
@@ -97,6 +127,9 @@ output_volume_custom() {
             mic_vol="MUTED"
         else
             mic_vol=$(get_mic_volume 2>/dev/null || echo "N/A")
+            if [[ "$mic_vol" != "N/A" ]]; then
+                mic_vol=$(format_volume_display "$mic_vol")
+            fi
             mic_vol="${mic_vol}%"
         fi
         string=${string//%m/$mic_vol}
@@ -172,11 +205,15 @@ output_volume_i3blocks() {
     if is_muted; then
         short_text="<span color=\"$COLOR_MUTED\">MUTED</span>\n"
     else
-        local -r vol=$(get_volume)
-        short_text="<span color=\"$(volume_color "$vol")\">${vol}%</span>\n"
+        local vol_raw vol_display
+        vol_raw=$(get_volume)
+        # Use format_volume_display to show whole numbers without decimals
+        vol_display=$(format_volume_display "$vol_raw")
+        short_text="<span color=\"$(volume_color "$vol_raw")\">${vol_display}%</span>\n"
         local effective_max_vol
         effective_max_vol=$(get_effective_max_vol)
-        if not_empty "$effective_max_vol" && (( vol > effective_max_vol )); then
+        # Use decimal comparison for max volume check
+        if not_empty "$effective_max_vol" && [ "$(echo "$vol_raw > $effective_max_vol" | bc -l 2>/dev/null)" = "1" ]; then
             # shellcheck disable=SC2034  # EXITCODE and EX_URGENT are external variables from main script
             EXITCODE=$EX_URGENT
         fi
@@ -189,7 +226,10 @@ output_volume_i3blocks() {
 }
 
 output_volume_xob() {
-    echo "$(get_volume)$(is_muted && echo "!")"
+    local vol_raw vol_display
+    vol_raw=$(get_volume)
+    vol_display=$(format_volume_display "$vol_raw")
+    echo "${vol_display}$(is_muted && echo "!")"
 }
 
 output_volume_json() {

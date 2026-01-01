@@ -95,7 +95,10 @@ notify_volume() {
         summary="Volume muted${sink_info}${port_info}"
         icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[0]}" || echo "${ICONS_SYMBOLIC[0]}")
     else
-        printf -v summary "Volume %3s%%%s%s%s" "$vol" "$boost_info" "$sink_info" "$port_info"
+        # Format volume for display (show whole numbers without decimals)
+        local vol_display
+        vol_display=$(format_volume_display "$vol")
+        printf -v summary "Volume %3s%%%s%s%s" "$vol_display" "$boost_info" "$sink_info" "$port_info"
         icon=$(get_volume_icon "$vol")
 
         if $SHOW_VOLUME_PROGRESS; then
