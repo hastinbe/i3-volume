@@ -4,19 +4,111 @@ Volume control with on-screen display notifications. Works with any window manag
 
 [![License: GPL v2][license-badge]][license] ![build][build]
 
+## Quick Start
+
+### Basic Commands
+
+```bash
+volume up              # Increase volume by default step (5%)
+volume down            # Decrease volume by default step (5%)
+volume set 50         # Set to 50%
+volume set +10         # Increase by 10% (relative)
+volume mute           # Toggle mute
+volume mic mute        # Toggle microphone mute
+```
+
+**Command Aliases:** `up` = `raise` = `increase`, `down` = `lower` = `decrease`, `prev` = `previous`
+
+### With Notifications
+
+```bash
+volume -n up 5         # Increase with notification
+volume -n -N dunst up 5  # Use dunst for notifications
+```
+
+### For Status Bars
+
+```bash
+volume output i3blocks  # i3blocks format (mouse wheel auto-handled)
+volume output polybar   # polybar format
+```
+
+See [Installation](https://github.com/hastinbe/i3-volume/wiki/Installation) for setup instructions.
+
+## Key Features
+
+- 🎚️ **Volume Control**: Increase, decrease, set, mute with decimal and dB support
+- 🎤 **Microphone Control**: Control input volume and mute state
+- 🎯 **Per-Application Volume**: Control individual app volumes independently
+- 📊 **Multiple Sinks**: Switch between audio devices, sync volumes across sinks
+- 🎨 **Notifications**: Support for dunst, notify-osd, xob, XOSD, herbe, volnoti, KOSD
+- 🔌 **Plugin System**: Custom notification and output format plugins
+- ⚙️ **Per-Sink Configuration**: Different settings for different audio devices
+- 📈 **Advanced Features**: Volume profiles, boost, balance, normalization, smooth fade transitions
+
+[See all features →](https://github.com/hastinbe/i3-volume/wiki/Features)
+
 ## Installation
 
-Read the [installation instructions](https://github.com/hastinbe/i3-volume/wiki/Installation) to get started. For a specific usage:
+Read the [installation instructions](https://github.com/hastinbe/i3-volume/wiki/Installation) to get started. For specific setups:
 
 - [i3wm](https://github.com/hastinbe/i3-volume/wiki/Installation#i3wm)
 - [polybar](https://github.com/hastinbe/i3-volume/wiki/Installation#polybar)
 - [i3blocks](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3blocks)
 
-### Usage
+## Usage Examples
 
-Use your keyboard volume keys to increase, decrease, or mute your volume. If you have a volume indicator in your status line it will be updated to reflect the volume change. When notifications are enabled a popup will display the volume level.
+### Basic Volume Control
 
-#### On-Screen Notifications
+```bash
+volume up 10           # Increase by 10%
+volume down 5          # Decrease by 5%
+volume set 50          # Set to 50%
+volume set +10         # Increase by 10% (relative)
+volume set -5          # Decrease by 5% (relative)
+volume set 45.5        # Set to 45.5% (decimal support)
+volume set -6dB        # Set to -6dB (dB support)
+volume -f 1000 up 10   # Fade volume up by 10% over 1 second
+```
+
+### Advanced Features
+
+```bash
+# Per-application volume control
+volume app list                # List all applications with audio
+volume app firefox up 5        # Increase Firefox volume by 5%
+volume app mpv set +10         # Increase mpv volume by 10% (relative)
+
+# Volume profiles
+volume profile save quiet      # Save current settings as "quiet"
+volume profile load loud       # Load saved "loud" profile
+
+# Temporary volume boost
+volume boost 20 60             # Boost by 20% for 60 seconds
+
+# Stereo balance
+volume balance -10             # Shift 10% to left speaker
+volume balance +10             # Shift 10% to right speaker
+
+# Sink management
+volume list sinks              # List all audio devices
+volume switch                  # Switch to next audio device
+volume sync                    # Sync volume across all sinks
+```
+
+### Status Bar Integration
+
+```bash
+# i3blocks - mouse wheel automatically handled when scrolling on volume block
+volume output i3blocks
+
+# polybar
+volume output polybar
+```
+
+**Full Command Reference:** See [MANUAL.md](MANUAL.md) or run `volume help` for complete usage.
+
+## On-Screen Notifications
 
 | [notify-osd] | [dunst] | [xob] |
 | ------------ | ------- | ----- |
@@ -24,7 +116,7 @@ Use your keyboard volume keys to increase, decrease, or mute your volume. If you
 
 | [XOSD] | [herbe] | [volnoti] |
 | ------ | ------- | --------- |
-| ![xosd notifications](https://github.com/hastinbe/i3-volume/wiki/images/xosd.png) | ![herbe notifications](https://github.com/hastinbe/i3-volume/wiki/images/herbe.png) | ![volnoti notifications](https://github.com/hastinbe/i3-volume/wiki/images/volnoti.png)
+| ![xosd notifications](https://github.com/hastinbe/i3-volume/wiki/images/xosd.png) | ![herbe notifications](https://github.com/hastinbe/i3-volume/wiki/images/herbe.png) | ![volnoti notifications](https://github.com/hastinbe/i3-volume/wiki/images/volnoti.png) |
 
 | [KOSD] |
 | ------ |
@@ -32,253 +124,103 @@ Use your keyboard volume keys to increase, decrease, or mute your volume. If you
 
 Read about [notifications](https://github.com/hastinbe/i3-volume/wiki/Notifications) for more information.
 
-### Standalone
+## Configuration
 
-`i3-volume` does not require any particular desktop environment and can be used as a standalone script.
+`i3-volume` looks for a configuration file at `~/.config/i3-volume/config` or `$XDG_CONFIG_HOME/i3-volume/config`.
 
-#### Command-line options
-```
-Usage: ./volume [<options>] <command> [<args>]
-Control volume and related notifications.
+### Basic Configuration
 
-Commands:
-  up [value]                  increase volume (uses default step if value omitted)
-                              supports decimal values and dB: up 2.5, up 3dB
-  down [value]                decrease volume (uses default step if value omitted)
-                              supports decimal values and dB: down 1.25, down 6dB
-  set <value>                 set volume (supports decimal values and dB)
-                              examples:
-                                  set 50      - set to 50%
-                                  set 45.5    - set to 45.5% (may round to 46% depending on hardware)
-                                  set -6dB    - set to -6dB (approximately 50% in dBFS scale)
-                                  set 0dB     - set to 0dB (100%, full volume)
-                              note: wpctl may round decimal values to nearest integer percentage
-                              note: dB values use dBFS scale where 0dB = 100%, negative values attenuate
-  wheel <delta>               mouse wheel volume control (accumulates small changes)
-                              examples:
-                                  wheel 2.0   - scroll up (positive delta)
-                                  wheel -2.0 - scroll down (negative delta)
-                              note: accumulates changes until reaching DEFAULT_STEP threshold
-  mute                        toggle mute
-  fade <from> <to> [duration_ms] fade volume smoothly
-                              examples:
-                                  fade 0 100        - fade from 0% to 100% (500ms)
-                                  fade 0 100 2000  - fade from 0% to 100% over 2 seconds
-                                  fade 20.5 75.5   - fade from 20.5% to 75.5% (supports decimals)
-  mic <cmd> [value]           control microphone
-                              commands:
-                                  up <value>    - increase microphone volume (supports decimals)
-                                  down <value>  - decrease microphone volume (supports decimals)
-                                  set <value>   - set microphone volume (supports decimals)
-                                  mute          - toggle microphone mute
-  listen [options] [output_format] monitor volume changes
-                              options:
-                                  -a, --all          - monitor all sinks
-                                  -I, --input        - monitor input sources
-                                  --watch            - show real-time updates in terminal
-                                  --volume-only      - only show volume change events
-                                  --mute-only        - only show mute change events
-                              examples:
-                                  listen                    - monitor default sink
-                                  listen -a                 - monitor all sinks
-                                  listen -I                 - monitor all input sources
-                                  listen --watch            - show terminal output
-                                  listen -a --watch         - monitor all sinks with terminal output
-                                  listen --volume-only      - only volume changes
-                                  listen i3blocks           - output in i3blocks format
-  list <type>                 list sinks, sources, or ports
-                              types:
-                                  sinks   - list all audio output sinks
-                                  sources - list all audio input sources
-                                  ports   - list ports for current sink (BETA: shows availability status)
-  switch [sink]               switch to next sink or specified sink
-  next                        switch to next sink
-  prev                        switch to previous sink
-  port <cmd> [port]           control audio ports (BETA/EXPERIMENTAL)
-                              commands:
-                                  list        - list available ports with availability status
-                                  set <port>  - set active port
-                              note: Port features are experimental and may not work on all devices
-  profile <cmd> [name]       manage volume profiles
-                              commands:
-                                  save <name>   - save current settings as profile
-                                  load <name>   - load a saved profile
-                                  list          - list all saved profiles
-                                  delete <name> - delete a profile
-                              quick access:
-                                  profile <name> - load profile (shortcut for load)
-  boost <amount> [timeout]   temporarily boost volume
-                              examples:
-                                  boost 20        - boost by 20% for 30s (default)
-                                  boost 20 60    - boost by 20% for 60s
-                                  boost off      - cancel active boost
-  sync                        sync volume across all active sinks
-  balance [value]             control stereo balance (left/right)
-                              examples:
-                                  balance          - show current balance
-                                  balance 0        - center balance
-                                  balance -10      - shift 10% left
-                                  balance +10      - shift 10% right
-                                  balance -100     - full left
-                                  balance 100      - full right
-                              note: Balance range is -100 (left) to +100 (right), 0 is centered
-                              Balance preference is stored per sink
-  normalize [cmd] [target]    normalize volume across sources
-                              commands:
-                                  suggest         - analyze and suggest adjustments (default)
-                                  apply           - analyze and apply adjustments
-                                  apply <target>  - normalize to specific target volume
-                                  auto [interval] - auto-normalization mode (default: 5s)
-                              examples:
-                                  normalize                    - suggest volume adjustments
-                                  normalize apply              - normalize all sources to average
-                                  normalize apply 75           - normalize all sources to 75%
-                                  normalize auto               - auto-normalize every 5 seconds
-                                  normalize auto 10            - auto-normalize every 10 seconds
-                              note: Analyzes volumes across all sinks and applications
-                              Useful for consistent volume levels across different audio sources
-  app <cmd> [args]            control per-application volume
-                              commands:
-                                  list                    - list all applications with audio streams
-                                  <name> up [value]       - increase application volume
-                                  <name> down [value]     - decrease application volume
-                                  <name> set <value>      - set application volume
-                                  <name> mute             - toggle application mute
-                              examples:
-                                  app list                - show all active applications
-                                  app firefox up 5        - increase Firefox volume by 5%
-                                  app mpv mute            - mute/unmute mpv
-  output <format>             display volume in a custom format
-                              special formats:
-                                  json                        - JSON output with all volume information
-                              format placeholders:
-                                  %v = volume
-                                  %s = sink name
-                                  %p = volume progress bar
-                                  %i = volume icon/emoji
-                                  %P = active port description (BETA: includes availability status when available)
-                                  %m = microphone volume
-                                  %a = active application name
-                                  %b = balance (L=left, R=right, C=center)
-                                  %c = color codes (ANSI terminal colors)
-                                  %n = node display name/alias
-                                  %d = node id
+```bash
+# Enable notifications with dunst
+NOTIFICATION_METHOD="dunst"
+DISPLAY_NOTIFICATIONS=true
+USE_DUNSTIFY=true
 
-                              conditional formatting:
-                                  %v{>50:high:low}  - if volume > 50, show "high", else "low"
-                                  %v{<30:quiet:normal} - if volume < 30, show "quiet", else "normal"
-                                  %m{>80:loud:normal} - conditional on microphone volume
-                                  %b{!=0:unbalanced:centered} - conditional on balance
+# Set default step size
+DEFAULT_STEP=10
 
-                                  examples:
-                                      output json              - JSON format for programmatic use
-                                      "Volume is %v" = Volume is 50%
-                                      "%i %v %p \n"  = 奔 50% ██████████
-                                      "%c%v${COLOR_RESET}" = colored volume (if terminal supports)
-                                      "%v{>50:high:low}" = "high" if volume > 50%, else "low"
-  outputs                     show supported output formats
-  notifications               list notification methods
-  config <cmd>                manage configuration
-                              commands:
-                                  show        - show current configuration
-                                  validate    - validate config file syntax
-                                  docs        - show all configurable variables
-  undo                        restore previous volume level
-                              examples:
-                                  undo        - revert to last volume before current change
-                              note: History is tracked automatically for volume changes
-  history [count]             show volume change history
-                              examples:
-                                  history     - show last 10 volume changes
-                                  history 20  - show last 20 volume changes
-                              note: History persists across sessions in config directory
-  help                        show help
-
-Options:
-  -n                          enable notifications
-  -q, --no-notify             disable notifications (quiet mode)
-  -C                          play event sounds using libcanberra
-  -P                          play sound for volume changes
-  -j <muted,high,low,medium>  custom volume emojis
-  -s <sink>                   specify sink (default: @DEFAULT_AUDIO_SINK@)
-  -I <source>                 specify input source (default: @DEFAULT_AUDIO_SOURCE@)
-  -a                          operate on all sinks (for up/down/set/mute)
-  -t <process_name>           status bar process name (requires -u)
-  -A <node.nick:alias>        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
-  -u <signal>                 signal to update status bar (requires -t)
-  -D <value>                  set default step size (default: 5)
-  -f <duration_ms>            fade duration in milliseconds (for set/up/down/mute)
-  -x <value>                  set maximum volume
-  -U <unit>                   display unit for volume output (percent or db)
-                              examples:
-                                  -U db      - display volume in dB
-                                  -U percent - display volume in percentage (default)
-                              note: can also be set in config file as VOLUME_DISPLAY_UNIT
-  -v                          verbose mode (detailed error information)
-  --exit-code                 show detailed exit code information
-  -h                          show help
-
-Notification Options:
-  -N <method>                 notification method (default: libnotify)
-  -p                          enable progress bar in notifications
-  -L <placement>              progress bar placement (default: summary; requires -p)
-                              placements:
-                                  body
-                                  summary
-  -e <ms>                     notification expiration time
-  -l                          use full-color icons
-  -S <suffix>                 add suffix to symbolic icon names
-  -y                          use dunstify (default: notify-send)
-
-Notification Features:
-  - Notifications show sink name when multiple sinks are available
-  - Port information is displayed in notifications when available (BETA/EXPERIMENTAL)
-  - Port change detection shows when active port changes (BETA/EXPERIMENTAL)
-  - Auto-suggestions for newly available ports (BETA/EXPERIMENTAL)
-  - Sink and port changes trigger enhanced notifications with context
-  - Set NOTIFICATION_GROUP=true in config to group volume change notifications (dunst only)
-  - Plugin system for custom notification methods (see Custom Notification Plugins below)
-
-Custom Plugins:
-  i3-volume supports a generalized plugin system for extending functionality. Currently supported
-  plugin types are notifications and output formats, with the infrastructure designed to easily
-  support additional plugin types in the future.
-
-  Plugin Directory Structure:
-    ~/.config/i3-volume/plugins/notify/   - Notification plugins
-    ~/.config/i3-volume/plugins/output/   - Output format plugins
-
-  Notification Plugins:
-    Create executable scripts in plugins/notify/
-    Each plugin must define: notify_volume_<plugin-name>()
-    Parameters: $1=volume, $2=icon, $3=summary, $4=body
-    Usage: volume -N <plugin-name> up 5
-    Example: examples/plugin.example
-
-  Output Format Plugins:
-    Create executable scripts in plugins/output/
-    Each plugin must define: output_volume_<plugin-name>()
-    Parameters: None (query volume state internally)
-    Usage: volume output <plugin-name>
-    Example: examples/plugin.output.example
-
-  Use 'volume notifications' to list notification methods (including plugins).
-  Use 'volume outputs' to list output formats (including plugins).
-
-Environment Variables:
-  XOSD_PATH                   path to osd_cat
-  HERBE_PATH                  path to herbe
-  VOLNOTI_PATH                path to volnoti-show
-  CANBERRA_PATH               path to canberra-gtk-play
-  NOTIFY_PATH                 path to command that sends notifications
-  NO_NOTIFY_COLOR             flag to disable colors in notifications
-  USE_NOTIFY_SEND_PY          flag to use notify-send.py instead of notify-send
-  NOTIFICATION_GROUP          set to "true" to group volume change notifications (dunst only)
+# Set maximum volume
+MAX_VOL=100
 ```
 
-### Exit Codes
+### i3blocks Configuration
 
-`i3-volume` uses standard exit codes to indicate the result of command execution. This is particularly useful for scripts that need to handle errors properly.
+**Note:** When using `i3blocks`, mouse wheel events are automatically handled. Scrolling up or down on the volume block will increase or decrease the volume without any additional configuration.
+
+```bash
+STATUSLINE="i3blocks"
+SIGNAL="SIGRTMIN+10"
+NOTIFICATION_METHOD="dunst"
+USE_DUNSTIFY=true
+DISPLAY_NOTIFICATIONS=true
+USE_FULLCOLOR_ICONS=true
+PORT_ALIASES[analog-output-speaker]=Speaker
+```
+
+### Per-Sink Configuration
+
+Configure different settings for different audio devices:
+
+```bash
+# Global defaults
+DEFAULT_STEP=5
+MAX_VOL=100
+
+# Per-sink overrides
+SINK_MAX_VOL[USB Audio]=150        # Headphones can go louder
+SINK_DEFAULT_STEP[USB Audio]=2     # Smaller steps for headphones
+SINK_DISPLAY_NOTIFICATIONS[USB Audio]=false  # Disable notifications
+```
+
+**Supported per-sink settings:**
+- `SINK_MAX_VOL[sink_identifier]` - Maximum volume limit
+- `SINK_DEFAULT_STEP[sink_identifier]` - Default step size
+- `SINK_DISPLAY_NOTIFICATIONS[sink_identifier]` - Enable/disable notifications
+- `SINK_BALANCE[sink_identifier]` - Balance setting (-100 to +100)
+
+See [Configuration wiki](https://github.com/hastinbe/i3-volume/wiki/Configuration) for all options and examples.
+
+## Command Reference
+
+### Volume Control
+- `up [value]`, `down [value]`, `set <value>`, `mute`
+- Aliases: `raise`/`increase` for up, `lower`/`decrease` for down
+- Supports decimals and dB: `set 45.5`, `set -6dB`, `set +10`
+
+### Microphone
+- `mic up/down/set/mute` - Control microphone volume
+- Aliases: `mic raise`/`mic increase` for up, `mic lower`/`mic decrease` for down
+- Relative operations: `mic set +10`, `mic set -5`
+
+### Applications
+- `app list` - List apps with audio
+- `app <name> up/down/set/mute` - Control app volume
+- Aliases: `app <name> raise`/`app <name> increase` for up, `app <name> lower`/`app <name> decrease` for down
+- Relative operations: `app <name> set +10`, `app <name> set -5`
+
+### Sinks & Devices
+- `list sinks/sources` - List audio devices
+- `switch/next/prev` - Switch between sinks (alias: `previous` for `prev`)
+- `sync` - Sync volume across sinks
+
+### Advanced
+- `profile save/load/list/delete` - Volume profiles
+- `boost <amount> [timeout]` - Temporary volume boost
+- `balance [value]` - Stereo balance (-100 to +100)
+- `normalize [cmd]` - Normalize volumes across sources
+- `fade <from> <to> [duration]` - Smooth volume transitions
+- `fade option`: Use `-f <duration_ms>` with `up`, `down`, `set`, or `mute` for smooth transitions
+- `undo` - Restore previous volume
+- `history [count]` - View volume history
+
+**Full Reference:**
+- See [MANUAL.md](MANUAL.md) for complete command reference
+- Run `volume help` for complete usage information
+- See [Features wiki](https://github.com/hastinbe/i3-volume/wiki/Features) for detailed documentation
+
+## Exit Codes
+
+`i3-volume` uses standard exit codes for script integration:
 
 | Code | Constant | Description |
 |------|----------|-------------|
@@ -286,12 +228,6 @@ Environment Variables:
 | 33 | `EX_URGENT` | Urgent - volume exceeds maximum limit (MAX_VOL) |
 | 64 | `EX_USAGE` | Usage error - invalid command, option, or argument |
 | 69 | `EX_UNAVAILABLE` | Unavailable - required tool or feature not available |
-
-To view detailed information about exit codes, use the `--exit-code` option:
-
-```bash
-volume --exit-code
-```
 
 **Example usage in scripts:**
 
@@ -306,153 +242,70 @@ if ! volume up 5; then
 fi
 ```
 
-### Configuration
+Use `volume --exit-code` to view detailed exit code information.
 
-`i3-volume` also looks for a configuration file located at either `~/.config/i3-volume/config`, or `$XDG_CONFIG_HOME/i3-volume/config`. You can use this file to set any variables that are not set in the command line. For example, if you want to always display notifications using `dunst`. You can add the following to your config file:
+## Practical Examples
 
-```
-NOTIFICATION_METHOD="dunst"
-DISPLAY_NOTIFICATIONS=true
-```
-
-Or if using `i3blocks` as your statusline and `dunst` for notifications, aliasing the `analog-output-speaker` port to `Speaker` and using fullcolor icons:
-
-```
-STATUSLINE="i3blocks"
-SIGNAL="SIGRTMIN+10"
-NOTIFICATION_METHOD="dunst"
-USE_DUNSTIFY=true
-DISPLAY_NOTIFICATIONS=true
-USE_FULLCOLOR_ICONS=true
-PORT_ALIASES[analog-output-speaker]=Speaker
-```
-
-Now every invocation of the script will use these settings, unless overridden by command line options. For example, to set a default step size:
-
-```
-DEFAULT_STEP=10
-```
-
-This allows you to use `volume up` or `volume down` without specifying a step size each time. You can also use the `-D` option to set and save the default step size:
+### Keyboard Shortcuts (i3wm/sxhkd)
 
 ```bash
-volume -D 10 up
+# In ~/.config/i3/config
+bindsym XF86AudioRaiseVolume exec --no-startup-id volume up
+bindsym XF86AudioLowerVolume exec --no-startup-id volume down
+bindsym XF86AudioMute exec --no-startup-id volume mute
+bindsym XF86AudioMicMute exec --no-startup-id volume mic mute
+
+# With notifications
+bindsym XF86AudioRaiseVolume exec --no-startup-id volume -n up
+bindsym XF86AudioLowerVolume exec --no-startup-id volume -n down
+
+# In ~/.config/sxhkd/sxhkdrc (sxhkd doesn't use --no-startup-id)
+XF86AudioRaiseVolume
+    volume up
+XF86AudioLowerVolume
+    volume down
+XF86AudioMute
+    volume mute
+XF86AudioMicMute
+    volume mic mute
 ```
 
-This will save `DEFAULT_STEP=10` to your config file automatically, making it persistent for future invocations.
-
-You can also set the volume display unit in the config file:
+### Scripts with Exit Codes
 
 ```bash
-VOLUME_DISPLAY_UNIT=db      # Display volume in dB
-VOLUME_DISPLAY_UNIT=percent # Display volume in percentage (default)
+#!/bin/bash
+# Safe volume increase with error handling
+if volume up 5; then
+    echo "Volume increased successfully"
+else
+    case $? in
+        33) notify-send "Volume limit reached" ;;
+        64) notify-send "Invalid command" ;;
+        69) notify-send "Audio system unavailable" ;;
+    esac
+fi
 ```
 
-Or use the `-U` option to override it for a single command:
+### Combining Options
 
 ```bash
-volume -U db output i3blocks    # Display in dB for this command
-volume -U percent output default # Display in percentage
+# Fade with notifications
+volume -n -f 1000 up 10
+
+# Multiple sinks with fade
+volume -a -f 500 set 50
+
+# Custom notification method with fade
+volume -n -N dunst -f 1000 mute
 ```
-
-To find more variables, check the [source code](https://github.com/hastinbe/i3-volume/blob/master/volume) of the `parse_opts` and `main` functions.
-
-### Per-Sink Configuration
-
-You can configure different settings for different audio devices (sinks). This is useful when you have multiple audio devices with different characteristics, such as headphones vs speakers.
-
-Per-sink settings can be keyed by sink ID, name, or nick. Use `volume list sinks` to see available sink identifiers. Per-sink settings take precedence over global settings and are automatically applied when you switch sinks.
-
-**Example configuration:**
-
-```bash
-# Global defaults
-DEFAULT_STEP=5
-MAX_VOL=100
-DISPLAY_NOTIFICATIONS=true
-
-# Per-sink overrides
-# Headphones can go louder without distortion
-SINK_MAX_VOL[USB Audio]=150
-SINK_MAX_VOL[headphones]=120
-
-# Smaller steps for headphones (more sensitive)
-SINK_DEFAULT_STEP[USB Audio]=2
-SINK_DEFAULT_STEP[headphones]=3
-
-# Speakers should be limited to prevent damage
-SINK_MAX_VOL[alsa_output.pci-0000_00_1f.3.analog-stereo]=100
-SINK_MAX_VOL[Speakers]=100
-
-# Larger steps for speakers (less sensitive)
-SINK_DEFAULT_STEP[alsa_output.pci-0000_00_1f.3.analog-stereo]=10
-SINK_DEFAULT_STEP[Speakers]=10
-
-# Disable notifications for headphones (you can hear the volume change)
-SINK_DISPLAY_NOTIFICATIONS[USB Audio]=false
-SINK_DISPLAY_NOTIFICATIONS[headphones]=false
-
-# Enable notifications for speakers (visual feedback helpful)
-SINK_DISPLAY_NOTIFICATIONS[alsa_output.pci-0000_00_1f.3.analog-stereo]=true
-SINK_DISPLAY_NOTIFICATIONS[Speakers]=true
-```
-
-**Supported per-sink settings:**
-- `SINK_MAX_VOL[sink_identifier]` - Maximum volume limit for a specific sink
-- `SINK_DEFAULT_STEP[sink_identifier]` - Default step size for volume changes
-- `SINK_DISPLAY_NOTIFICATIONS[sink_identifier]` - Enable/disable notifications per sink
-- `SINK_BALANCE[sink_identifier]` - Balance setting for a specific sink (-100 to +100)
-
-See `examples/config.per-sink` for a complete example configuration file.
-
-### Port Information Features (BETA/EXPERIMENTAL)
-
-**⚠️ Note:** Port information features are currently in beta/experimental status. They may not work on all audio devices and may have limited functionality depending on your hardware and PipeWire configuration.
-
-The port information system provides enhanced visibility into audio port status and management:
-
-- **Port Listing**: Use `volume port list` to see all available ports for the current sink with availability status (plugged/unplugged)
-- **Port Switching**: Use `volume port set <port_id>` to switch between available ports
-- **Port Detection**: Enhanced port detection with multiple fallback methods for better compatibility
-- **Availability Status**: Ports are marked with their availability status:
-  - `[plugged]` - Port is available and ready to use
-  - `[unplugged]` - Port is not currently available
-  - `[unknown]` - Availability status cannot be determined
-- **Port Change Notifications**: Notifications automatically show when the active port changes
-- **Auto-Suggestions**: When a new port becomes available, you'll receive a notification suggesting to switch to it
-- **%P Placeholder**: The `%P` placeholder in output formats includes port description and availability status when available
-
-**Limitations:**
-- Not all audio devices support port switching
-- Port availability detection may vary by device
-- Some devices may not expose port information through PipeWire
-- Features are actively being improved and may change in future versions
-
-If your device doesn't show ports, this is normal - not all audio hardware supports port switching or exposes port information.
-
-## Migrating
-
-### Version 2.x to 3.x
-
-Version 3 introduces commands which makes it incompatible with previous versions. Your command-line usage and/or configured hotkeys need to be updated to reflect this.
-
-| Change | v2 | v3 |
-| ------ | -- | -- |
-| `-d` is now the `down` command | `volume -d 5` | `volume down 5` |
-| `-i` is now the `up` command | `volume -i 5` | `volume up 5` |
-| `-m` is now the `mute` command | `volume -m` | `volume mute` |
-| `-o` is now the `output` command | `volume -o i3blocks` | `volume output i3blocks` |
-| `-v` is now the `set` command | `volume -v 5` | `volume set 5` |
-| `-L` is now the `listen` command | `volume -L` | `volume listen` |
-| `-M` is now the `-m` option | `volume -M Master` | `volume -m Master` |
 
 ## Interoperability
 
-`i3-volume` is capable of working with many other programs. The following lists a few with examples:
+`i3-volume` works with many other programs:
 
 | Program | Note |
 | ---------- | ----- |
-| **[i3blocks]** | See our [example blocklet](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3blocks) |
+| **[i3blocks]** | See our [example blocklet](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3blocks). Mouse wheel events are automatically handled - scrolling on the volume block adjusts volume without additional configuration. |
 | **[i3status-rust]** | See our [example custom block](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3status-rust) |
 | **[xob]** | Requires extra steps for notifications. [Guide](https://github.com/hastinbe/i3-volume/wiki/Usage-with-xob) |
 | **[XOSD]** | Notifications require the `-N xosd` option. [Example](https://github.com/hastinbe/i3-volume/wiki/Usage-with-XOSD) |
@@ -466,6 +319,7 @@ Version 3 introduces commands which makes it incompatible with previous versions
 Having a problem? Try reading our [common issues](https://github.com/hastinbe/i3-volume/wiki/Common-Issues) or open an [issue](https://github.com/hastinbe/i3-volume/issues/new).
 
 ## License
+
 `i3-volume` is released under [GNU General Public License v2][license]
 
 Copyright (C) 1989, 1991 Free Software Foundation, Inc.
