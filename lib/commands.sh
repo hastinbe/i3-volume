@@ -106,14 +106,18 @@ set_volume() {
          return
      fi
 
-     local target_vol current_vol
+     # Save current volume to history before making changes
+     local current_vol
+     current_vol=$(get_volume 2>/dev/null || echo "0")
+     save_volume_to_history "$current_vol"
+
+     local target_vol
      local effective_max_vol
      effective_max_vol=$(get_effective_max_vol)
 
      if not_empty "$effective_max_vol"; then
          case "$op" in
              +)  # Increase volume
-                 current_vol=$(get_volume)
                  if (( current_vol + vol > effective_max_vol )); then
                      # Instead of doing nothing, step to max_volume
                      local -r step=$( max "0" "$(( effective_max_vol - current_vol ))" )
@@ -137,12 +141,10 @@ set_volume() {
      if not_empty "$FADE_DURATION"; then
          case "$op" in
              +)
-                 current_vol=$(get_volume)
                  target_vol=$(( current_vol + vol ))
                  fade_volume "$target_vol" "$FADE_DURATION" "$NODE_ID"
                  ;;
              -)
-                 current_vol=$(get_volume)
                  target_vol=$(( current_vol - vol ))
                  fade_volume "$target_vol" "$FADE_DURATION" "$NODE_ID"
                  ;;
@@ -3362,6 +3364,15 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                show        - show current configuration
                                validate    - validate config file syntax
                                docs        - show all configurable variables
+  ${COLOR_GREEN}undo${COLOR_RESET}                        restore previous volume level
+                           examples:
+                               undo        - revert to last volume before current change
+                           note: History is tracked automatically for volume changes
+  ${COLOR_GREEN}history [count]${COLOR_RESET}             show volume change history
+                           examples:
+                               history     - show last 10 volume changes
+                               history 20  - show last 20 volume changes
+                           note: History persists across sessions in config directory
   ${COLOR_GREEN}help${COLOR_RESET}                        show help
 
 ${COLOR_YELLOW}Options:${COLOR_RESET}
@@ -3466,3 +3477,284 @@ ${COLOR_YELLOW}Usage in Scripts:${COLOR_RESET}
 
 EOF
  }
+
+# Volume history tracking functions
+get_volume_history_file() {
+    local config_dir
+    config_dir=$(get_config_dir)
+    echo "$config_dir/.volume_history"
+}
+
+get_volume_history_max_size() {
+    # Default to 20 entries, can be overridden via VOLUME_HISTORY_SIZE config
+    echo "${VOLUME_HISTORY_SIZE:-20}"
+}
+
+save_volume_to_history() {
+    local -r vol=$1
+    local history_file current_vol
+    history_file=$(get_volume_history_file)
+    local config_dir
+    config_dir=$(get_config_dir)
+
+    # Get current volume if not provided (shouldn't happen, but safety check)
+    if empty "$vol"; then
+        current_vol=$(get_volume 2>/dev/null || echo "0")
+    else
+        current_vol=$vol
+    fi
+
+    # Skip if volume is the same as the last entry (avoid duplicates)
+    if [[ -f "$history_file" ]]; then
+        local last_vol
+        last_vol=$(tail -n 1 "$history_file" 2>/dev/null | cut -d'|' -f1)
+        if [[ "$last_vol" == "$current_vol" ]]; then
+            return 0
+        fi
+    fi
+
+    # Create config directory if it doesn't exist
+    mkdir -p "$config_dir" || {
+        return 1
+    }
+
+    # Format: volume|node_id|timestamp
+    local timestamp
+    timestamp=$(date +%s 2>/dev/null || echo "0")
+    local entry="${current_vol}|${NODE_ID:-default}|${timestamp}"
+
+    # Append to history file
+    echo "$entry" >> "$history_file" 2>/dev/null || {
+        return 1
+    }
+
+    # Trim history to max size
+    trim_volume_history
+}
+
+trim_volume_history() {
+    local history_file max_size
+    history_file=$(get_volume_history_file)
+    max_size=$(get_volume_history_max_size)
+
+    if [[ ! -f "$history_file" ]]; then
+        return 0
+    fi
+
+    local line_count
+    line_count=$(wc -l < "$history_file" 2>/dev/null || echo "0")
+
+    if (( line_count > max_size )); then
+        # Keep only the last max_size entries
+        local temp_file
+        temp_file=$(mktemp 2>/dev/null || echo "/tmp/volume_history_$$")
+        tail -n "$max_size" "$history_file" > "$temp_file" 2>/dev/null
+        mv "$temp_file" "$history_file" 2>/dev/null || {
+            rm -f "$temp_file" 2>/dev/null
+            return 1
+        }
+    fi
+}
+
+load_volume_history() {
+    local history_file
+    history_file=$(get_volume_history_file)
+
+    if [[ ! -f "$history_file" ]]; then
+        return 0
+    fi
+
+    # Read history into array (format: volume|node_id|timestamp)
+    local -a history_array=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ -z "$line" ]] && continue
+        history_array+=("$line")
+    done < "$history_file"
+
+    # Return history as newline-separated string
+    printf '%s\n' "${history_array[@]}"
+}
+
+get_last_volume_from_history() {
+    local history_file
+    history_file=$(get_volume_history_file)
+
+    if [[ ! -f "$history_file" ]]; then
+        return 1
+    fi
+
+    # Get the last entry for current node (or any node if current not found)
+    local last_entry current_node_entry
+    last_entry=$(tail -n 1 "$history_file" 2>/dev/null)
+
+    if empty "$last_entry"; then
+        return 1
+    fi
+
+    # Try to find last entry for current node
+    if not_empty "$NODE_ID"; then
+        current_node_entry=$(grep "|${NODE_ID}|" "$history_file" 2>/dev/null | tail -n 1)
+        if not_empty "$current_node_entry"; then
+            last_entry=$current_node_entry
+        fi
+    fi
+
+    # Extract volume (first field)
+    echo "$last_entry" | cut -d'|' -f1
+}
+
+get_last_history_entry_line() {
+    local history_file
+    history_file=$(get_volume_history_file)
+
+    if [[ ! -f "$history_file" ]]; then
+        return 1
+    fi
+
+    # Get the last entry for current node (or any node if current not found)
+    local last_entry current_node_entry
+    last_entry=$(tail -n 1 "$history_file" 2>/dev/null)
+
+    if empty "$last_entry"; then
+        return 1
+    fi
+
+    # Try to find last entry for current node
+    if not_empty "$NODE_ID"; then
+        current_node_entry=$(grep "|${NODE_ID}|" "$history_file" 2>/dev/null | tail -n 1)
+        if not_empty "$current_node_entry"; then
+            last_entry=$current_node_entry
+        fi
+    fi
+
+    # Return the full entry line
+    echo "$last_entry"
+}
+
+undo_volume() {
+    local last_entry
+    last_entry=$(get_last_history_entry_line)
+
+    if empty "$last_entry"; then
+        error "No volume history available to undo."
+        echo "  ${COLOR_YELLOW}→${COLOR_RESET} Use 'volume history' to see recent changes."
+        EXITCODE=$EX_USAGE
+        return 1
+    fi
+
+    # Extract volume from the entry
+    local last_vol
+    last_vol=$(echo "$last_entry" | cut -d'|' -f1)
+
+    # Get current volume to save before undo (so undo can be undone)
+    local current_vol
+    current_vol=$(get_volume 2>/dev/null || echo "0")
+
+    # Remove the entry we're restoring to BEFORE saving current volume
+    # This prevents infinite undo loops
+    local history_file
+    history_file=$(get_volume_history_file)
+    if [[ -f "$history_file" ]]; then
+        # Remove the specific entry we're restoring to
+        local temp_file
+        temp_file=$(mktemp 2>/dev/null || echo "/tmp/volume_history_$$")
+        # Use grep -v to remove the specific line, handling it carefully
+        if not_empty "$NODE_ID"; then
+            # Remove last matching entry for current node
+            grep -v "^${last_entry}$" "$history_file" > "$temp_file" 2>/dev/null || {
+                # Fallback: remove last line
+                head -n -1 "$history_file" > "$temp_file" 2>/dev/null
+            }
+        else
+            # Remove last matching entry
+            grep -v "^${last_entry}$" "$history_file" > "$temp_file" 2>/dev/null || {
+                # Fallback: remove last line
+                head -n -1 "$history_file" > "$temp_file" 2>/dev/null
+            }
+        fi
+        if [[ -s "$temp_file" ]]; then
+            mv "$temp_file" "$history_file" 2>/dev/null || {
+                rm -f "$temp_file" 2>/dev/null
+            }
+        else
+            rm -f "$history_file" "$temp_file" 2>/dev/null
+        fi
+    fi
+
+    # Save current volume to history (after removing the entry we're restoring to)
+    # This allows undo to be undone
+    save_volume_to_history "$current_vol"
+
+    # Set volume to the previous value
+    invalidate_cache
+    if not_empty "$FADE_DURATION"; then
+        fade_volume "$last_vol" "$FADE_DURATION" "$NODE_ID"
+    else
+        wpctl set-volume "$NODE_ID" "${last_vol}%" &>/dev/null
+        invalidate_cache
+    fi
+}
+
+show_volume_history() {
+    local history_file max_entries
+    history_file=$(get_volume_history_file)
+    max_entries=${1:-10}
+
+    if [[ ! -f "$history_file" ]] || [[ ! -s "$history_file" ]]; then
+        echo "No volume history available."
+        return 0
+    fi
+
+    local count=0
+    local current_node_id="${NODE_ID:-default}"
+
+    echo "Volume History (showing last $max_entries entries):"
+    echo ""
+
+    # Read history in reverse (newest first) and filter by current node if available
+    local -a relevant_entries=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ -z "$line" ]] && continue
+        local entry_node_id
+        entry_node_id=$(echo "$line" | cut -d'|' -f2)
+        # Include entries for current node, or all if no specific node
+        if [[ "$current_node_id" == "default" ]] || [[ "$entry_node_id" == "$current_node_id" ]]; then
+            relevant_entries+=("$line")
+        fi
+    done < "$history_file"
+
+    # Reverse array to show newest first
+    local i
+    for (( i=${#relevant_entries[@]}-1; i>=0 && count<max_entries; i-- )); do
+        local entry="${relevant_entries[$i]}"
+        local vol node_id timestamp
+        IFS='|' read -r vol node_id timestamp <<< "$entry"
+
+        # Format timestamp
+        local date_str
+        if [[ "$timestamp" =~ ^[0-9]+$ ]] && [[ "$timestamp" -gt 0 ]]; then
+            # Try GNU date format first (Linux)
+            date_str=$(date -d "@$timestamp" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || \
+                       # Try BSD date format (macOS)
+                       date -r "$timestamp" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || \
+                       echo "unknown")
+        else
+            date_str="unknown"
+        fi
+
+        # Show node name if available
+        local node_display
+        if [[ "$node_id" != "default" ]] && not_empty "$NODE_NAME"; then
+            node_display=" ($NODE_NAME)"
+        else
+            node_display=""
+        fi
+
+        printf "  %3d%%%s - %s\n" "$vol" "$node_display" "$date_str"
+        ((count++))
+    done
+
+    if (( count == 0 )); then
+        echo "No history entries for current sink."
+    fi
+}

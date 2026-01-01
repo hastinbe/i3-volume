@@ -168,6 +168,20 @@ Commands:
                                       "%v{>50:high:low}" = "high" if volume > 50%, else "low"
   outputs                     show supported output formats
   notifications               list notification methods
+  config <cmd>                manage configuration
+                              commands:
+                                  show        - show current configuration
+                                  validate    - validate config file syntax
+                                  docs        - show all configurable variables
+  undo                        restore previous volume level
+                              examples:
+                                  undo        - revert to last volume before current change
+                              note: History is tracked automatically for volume changes
+  history [count]             show volume change history
+                              examples:
+                                  history     - show last 10 volume changes
+                                  history 20  - show last 20 volume changes
+                              note: History persists across sessions in config directory
   help                        show help
 
 Options:

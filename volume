@@ -319,6 +319,19 @@ exec_command() {
                 *) usage ;;
             esac
             ;;
+        undo)
+            case "$#" in
+                0) undo_volume ;;
+                *) usage ;;
+            esac
+            ;;
+        history)
+            case "$#" in
+                0) show_volume_history ;;
+                1) show_volume_history "$1" ;;
+                *) usage ;;
+            esac
+            ;;
         *) usage ;;
     esac
 }
@@ -385,6 +398,7 @@ main() {
         app
         config
         normalize
+        history
     )
 
     # Exit codes
