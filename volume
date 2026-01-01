@@ -46,6 +46,10 @@ arrange_opts() {
                 # Pass them through as command arguments
                 args+=("$1")
                 ;;
+            -[0-9]*|-*.[0-9]*)
+                # Negative numbers (e.g., -20, -2.0) should be treated as arguments, not options
+                args+=("$1")
+                ;;
             -*)
                 flags+=("$1")
                 if [[ $optstr == *"${1: -1}:"* ]]; then
@@ -288,6 +292,24 @@ exec_command() {
                 *) usage ;;
             esac
             ;;
+        balance)
+            case "$#" in
+                0)
+                    # Show current balance
+                    local current_balance
+                    current_balance=$(get_balance 2>/dev/null || echo "0")
+                    echo "Balance: $current_balance (0=center, negative=left, positive=right)"
+                    ;;
+                1)
+                    case "$1" in
+                        +*) set_balance "${1:1}" "+" ;;
+                        -*) set_balance "${1:1}" "-" ;;
+                        *) set_balance "$1" ;;
+                    esac
+                    ;;
+                *) usage ;;
+            esac
+            ;;
         *) usage ;;
     esac
 }
@@ -434,6 +456,8 @@ main() {
     declare -gA SINK_SHOW_VOLUME_PROGRESS=()
     # shellcheck disable=SC2034  # Reserved for future per-sink notification preferences
     declare -gA SINK_EXPIRES=()
+    # shellcheck disable=SC2034  # Used externally by modules
+    declare -gA SINK_BALANCE=()
 
     # shellcheck disable=SC2034  # Used externally by modules
     declare -gi DEFAULT_VOL=100 MIN_VOL=0 MAX_VOL=100

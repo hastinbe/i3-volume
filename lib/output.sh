@@ -193,7 +193,7 @@ output_volume_xob() {
 }
 
 output_volume_json() {
-    local vol muted display_name port_desc app_name mic_vol mic_muted
+    local vol muted display_name port_desc app_name mic_vol mic_muted balance
     local json_output
 
     # Get volume and muted status
@@ -212,6 +212,9 @@ output_volume_json() {
 
     # Get active app name (may be empty, function defined in commands.sh)
     app_name=$(get_active_app_name 2>/dev/null || echo "")
+
+    # Get balance (may not be available, function defined in commands.sh)
+    balance=$(get_balance 2>/dev/null || echo "0")
 
     # Get microphone information (may not be available)
     if is_mic_muted 2>/dev/null; then
@@ -233,6 +236,7 @@ output_volume_json() {
         --arg mic_volume "${mic_vol:-}" \
         --arg muted_str "$muted" \
         --arg mic_muted_str "$mic_muted" \
+        --arg balance_str "$balance" \
         '{
             volume: ($volume | tonumber),
             muted: ($muted_str == "true"),
@@ -241,6 +245,7 @@ output_volume_json() {
             display_name: (if $display_name == "" then null else $display_name end),
             port: (if $port == "" then null else $port end),
             active_app: (if $active_app == "" then null else $active_app end),
+            balance: ($balance_str | tonumber),
             microphone: {
                 volume: (if $mic_volume == "" then null else ($mic_volume | tonumber) end),
                 muted: ($mic_muted_str == "true")
@@ -288,6 +293,7 @@ output_volume_json() {
         else
             json_output="${json_output}\"active_app\":null,"
         fi
+        json_output="${json_output}\"balance\":${balance},"
         json_output="${json_output}\"microphone\":{"
         if [[ -n "$mic_vol" ]]; then
             json_output="${json_output}\"volume\":${mic_vol},"

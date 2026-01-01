@@ -103,6 +103,16 @@ Commands:
                                   boost 20 60    - boost by 20% for 60s
                                   boost off      - cancel active boost
   sync                        sync volume across all active sinks
+  balance [value]             control stereo balance (left/right)
+                              examples:
+                                  balance          - show current balance
+                                  balance 0        - center balance
+                                  balance -10      - shift 10% left
+                                  balance +10      - shift 10% right
+                                  balance -100     - full left
+                                  balance 100      - full right
+                              note: Balance range is -100 (left) to +100 (right), 0 is centered
+                              Balance preference is stored per sink
   app <cmd> [args]            control per-application volume
                               commands:
                                   list                    - list all applications with audio streams
@@ -332,6 +342,7 @@ SINK_DISPLAY_NOTIFICATIONS[Speakers]=true
 - `SINK_MAX_VOL[sink_identifier]` - Maximum volume limit for a specific sink
 - `SINK_DEFAULT_STEP[sink_identifier]` - Default step size for volume changes
 - `SINK_DISPLAY_NOTIFICATIONS[sink_identifier]` - Enable/disable notifications per sink
+- `SINK_BALANCE[sink_identifier]` - Balance setting for a specific sink (-100 to +100)
 
 See `examples/config.per-sink` for a complete example configuration file.
 

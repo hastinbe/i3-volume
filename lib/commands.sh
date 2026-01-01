@@ -2681,10 +2681,30 @@ get_balance() {
          return 0
      fi
 
+     # First check if we have a stored balance preference for this sink
+     # Check by ID first
+     if isset "SINK_BALANCE[$NODE_ID]"; then
+         echo "${SINK_BALANCE[$NODE_ID]}"
+         return 0
+     fi
+
+     # Check by name
+     if isset "SINK_BALANCE[$NODE_NAME]"; then
+         echo "${SINK_BALANCE[$NODE_NAME]}"
+         return 0
+     fi
+
+     # Check by nick
+     if not_empty "$NODE_NICK" && isset "SINK_BALANCE[$NODE_NICK]"; then
+         echo "${SINK_BALANCE[$NODE_NICK]}"
+         return 0
+     fi
+
      # Try to get channel volumes from pw-dump
+     # Channel volumes are stored in .info.params.Props[].channelVolumes
      local left_vol right_vol
-     left_vol=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "channelVolumes") | .value[0]? // empty' 2>/dev/null)
-     right_vol=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.PropInfo[]? | select(.id == "channelVolumes") | .value[1]? // empty' 2>/dev/null)
+     left_vol=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.Props[]? | .channelVolumes[0]? // empty' 2>/dev/null)
+     right_vol=$(pw_dump | jq -r --argjson node_id "$NODE_ID" '.[] | select(.id == $node_id) | .info.params.Props[]? | .channelVolumes[1]? // empty' 2>/dev/null)
 
      # If we can't get channel volumes from pw-dump, default to centered
      if empty "$left_vol" || empty "$right_vol"; then
@@ -2714,8 +2734,166 @@ get_balance() {
          printf "%.0f", balance
      }' 2>/dev/null || echo "0")
 
-     echo "$balance"
- }
+    echo "$balance"
+}
+
+# Get effective balance for current sink (per-sink or global)
+get_effective_balance() {
+    if empty "$NODE_ID" || empty "$NODE_NAME"; then
+        echo "0"
+        return 0
+    fi
+
+    # Check by ID first
+    if isset "SINK_BALANCE[$NODE_ID]"; then
+        echo "${SINK_BALANCE[$NODE_ID]}"
+        return 0
+    fi
+
+    # Check by name
+    if isset "SINK_BALANCE[$NODE_NAME]"; then
+        echo "${SINK_BALANCE[$NODE_NAME]}"
+        return 0
+    fi
+
+    # Check by nick
+    if not_empty "$NODE_NICK" && isset "SINK_BALANCE[$NODE_NICK]"; then
+        echo "${SINK_BALANCE[$NODE_NICK]}"
+        return 0
+    fi
+
+    # Fall back to current balance from PipeWire
+    # Note: pw-dump may not return channelVolumes values, so we default to 0
+    # if no stored preference exists
+    get_balance
+}
+
+set_balance() {
+    local -r balance_val=${1:?$(error 'Balance value is required')}
+    local -r op=${2:-}
+
+    if empty "$NODE_ID"; then
+        error "No audio sink available"
+        return 1
+    fi
+
+    # Validate balance range: -100 to +100
+    local target_balance current_balance
+    current_balance=$(get_balance)
+
+    case "$op" in
+        +)
+            # Relative increase
+            target_balance=$(( current_balance + balance_val ))
+            ;;
+        -)
+            # Relative decrease
+            target_balance=$(( current_balance - balance_val ))
+            ;;
+        *)
+            # Absolute value
+            target_balance=$balance_val
+            ;;
+    esac
+
+    # Clamp to valid range
+    if (( target_balance > 100 )); then
+        target_balance=100
+    elif (( target_balance < -100 )); then
+        target_balance=-100
+    fi
+
+    # Get current volume to maintain overall volume level
+    local current_vol
+    current_vol=$(get_volume)
+    if empty "$current_vol"; then
+        current_vol=100
+    fi
+
+    # Calculate left and right channel volumes
+    # Balance: -100 (all left) to +100 (all right)
+    # When balance is 0, both channels are equal
+    # When balance is positive (right), right channel is louder
+    # When balance is negative (left), left channel is louder
+    local left_vol right_vol
+    if (( target_balance == 0 )); then
+        # Centered: both channels at current volume
+        left_vol=$current_vol
+        right_vol=$current_vol
+    elif (( target_balance > 0 )); then
+        # Shift right: reduce left, increase right
+        # Balance is 0-100, convert to factor 0.0-1.0
+        local balance_factor
+        balance_factor=$(awk "BEGIN {printf \"%.3f\", $target_balance / 100}" 2>/dev/null || echo "0")
+        # Left channel: reduce by balance factor
+        left_vol=$(awk "BEGIN {printf \"%.0f\", $current_vol * (1.0 - $balance_factor)}" 2>/dev/null || echo "$current_vol")
+        # Right channel: increase by balance factor (but don't exceed max)
+        right_vol=$(awk "BEGIN {printf \"%.0f\", $current_vol * (1.0 + $balance_factor)}" 2>/dev/null || echo "$current_vol")
+        # Clamp right channel to max volume
+        local effective_max_vol
+        effective_max_vol=$(get_effective_max_vol)
+        if not_empty "$effective_max_vol" && (( right_vol > effective_max_vol )); then
+            right_vol=$effective_max_vol
+        fi
+    else
+        # Shift left: increase left, reduce right
+        # Balance is -100 to 0, convert to factor 0.0-1.0
+        local balance_factor
+        balance_factor=$(awk "BEGIN {printf \"%.3f\", -$target_balance / 100}" 2>/dev/null || echo "0")
+        # Left channel: increase by balance factor (but don't exceed max)
+        left_vol=$(awk "BEGIN {printf \"%.0f\", $current_vol * (1.0 + $balance_factor)}" 2>/dev/null || echo "$current_vol")
+        # Clamp left channel to max volume
+        local effective_max_vol
+        effective_max_vol=$(get_effective_max_vol)
+        if not_empty "$effective_max_vol" && (( left_vol > effective_max_vol )); then
+            left_vol=$effective_max_vol
+        fi
+        # Right channel: reduce by balance factor
+        right_vol=$(awk "BEGIN {printf \"%.0f\", $current_vol * (1.0 - $balance_factor)}" 2>/dev/null || echo "$current_vol")
+    fi
+
+    # Ensure volumes are non-negative
+    if (( left_vol < 0 )); then
+        left_vol=0
+    fi
+    if (( right_vol < 0 )); then
+        right_vol=0
+    fi
+
+    # Set channel volumes using pw-cli
+    # Convert percentages to 0.0-1.0 range for PipeWire
+    local left_pw right_pw
+    left_pw=$(awk "BEGIN {printf \"%.3f\", $left_vol / 100}" 2>/dev/null || echo "0")
+    right_pw=$(awk "BEGIN {printf \"%.3f\", $right_vol / 100}" 2>/dev/null || echo "0")
+
+    # Use pw-cli to set channel volumes
+    # Format: pw-cli s <node_id> Props '{ channelVolumes: [left, right] }'
+    local result pw_cmd
+    # Construct command with proper JSON format (no quotes around channelVolumes key)
+    # Using eval to properly handle the single quotes in the JSON
+    pw_cmd="pw-cli s $NODE_ID Props '{ channelVolumes: [$left_pw, $right_pw] }'"
+    if ! result=$(eval "$pw_cmd" 2>&1); then
+        error "Failed to set balance. pw-cli may not be available or the sink may not support channel volume control."
+        if [[ "${VERBOSE:-false}" == "true" ]] && not_empty "$result"; then
+            echo "${COLOR_CYAN}[verbose]${COLOR_RESET} pw-cli output: $result" >&2
+        fi
+        return 1
+    fi
+
+    # Store balance preference per sink (before invalidating cache)
+    if not_empty "$NODE_ID"; then
+        SINK_BALANCE["$NODE_ID"]=$target_balance
+    fi
+    if not_empty "$NODE_NAME"; then
+        SINK_BALANCE["$NODE_NAME"]=$target_balance
+    fi
+    if not_empty "$NODE_NICK"; then
+        SINK_BALANCE["$NODE_NICK"]=$target_balance
+    fi
+
+    # Invalidate cache so next get_balance() call will use stored preference
+    invalidate_cache
+}
 
 get_volume_color_code() {
      # Get ANSI color code for volume level
@@ -2873,6 +3051,16 @@ ${COLOR_YELLOW}Commands:${COLOR_RESET}
                                boost 20 60    - boost by 20% for 60s
                                boost off      - cancel active boost
   ${COLOR_GREEN}sync${COLOR_RESET}                        sync volume across all active sinks
+  ${COLOR_GREEN}balance [value]${COLOR_RESET}             control stereo balance (left/right)
+                           examples:
+                               balance          - show current balance
+                               balance 0        - center balance
+                               balance -10      - shift 10% left
+                               balance +10      - shift 10% right
+                               balance -100     - full left
+                               balance 100      - full right
+                           note: Balance range is -100 (left) to +100 (right), 0 is centered
+                           Balance preference is stored per sink
   ${COLOR_GREEN}app <cmd> [args]${COLOR_RESET}            control per-application volume
                            commands:
                                list                    - list all applications with audio streams
