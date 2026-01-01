@@ -95,10 +95,16 @@ notify_volume() {
         summary="Volume muted${sink_info}${port_info}"
         icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[0]}" || echo "${ICONS_SYMBOLIC[0]}")
     else
-        # Format volume for display (show whole numbers without decimals)
-        local vol_display
-        vol_display=$(format_volume_display "$vol")
-        printf -v summary "Volume %3s%%%s%s%s" "$vol_display" "$boost_info" "$sink_info" "$port_info"
+        # Format volume for display (respect VOLUME_DISPLAY_UNIT setting)
+        local vol_display unit_suffix
+        local display_unit="${VOLUME_DISPLAY_UNIT:-percent}"
+        vol_display=$(format_volume_display "$vol" "$display_unit")
+        if [ "$display_unit" = "db" ]; then
+            unit_suffix="dB"
+        else
+            unit_suffix="%"
+        fi
+        printf -v summary "Volume %3s%s%s%s%s" "$vol_display" "$unit_suffix" "$boost_info" "$sink_info" "$port_info"
         icon=$(get_volume_icon "$vol")
 
         if $SHOW_VOLUME_PROGRESS; then
@@ -145,7 +151,16 @@ notify_mic() {
         summary="Microphone muted"
         icon=$($USE_FULLCOLOR_ICONS && echo "${ICONS[0]}" || echo "${ICONS_SYMBOLIC[0]}")
     else
-        printf -v summary "Microphone %3s%%" "$vol"
+        # Format volume for display (respect VOLUME_DISPLAY_UNIT setting)
+        local vol_display unit_suffix
+        local display_unit="${VOLUME_DISPLAY_UNIT:-percent}"
+        vol_display=$(format_volume_display "$vol" "$display_unit")
+        if [ "$display_unit" = "db" ]; then
+            unit_suffix="dB"
+        else
+            unit_suffix="%"
+        fi
+        printf -v summary "Microphone %3s%s" "$vol_display" "$unit_suffix"
         icon=$(get_volume_icon "$vol")
 
         if $SHOW_VOLUME_PROGRESS; then

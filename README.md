@@ -43,15 +43,17 @@ Control volume and related notifications.
 
 Commands:
   up [value]                  increase volume (uses default step if value omitted)
-                              supports decimal values: up 2.5
+                              supports decimal values and dB: up 2.5, up 3dB
   down [value]                decrease volume (uses default step if value omitted)
-                              supports decimal values: down 1.25
-  set <value>                 set volume (supports decimal values)
+                              supports decimal values and dB: down 1.25, down 6dB
+  set <value>                 set volume (supports decimal values and dB)
                               examples:
                                   set 50      - set to 50%
                                   set 45.5    - set to 45.5% (may round to 46% depending on hardware)
-                                  set 33.33   - set to 33.33% (may round to 33% depending on hardware)
+                                  set -6dB    - set to -6dB (approximately 50% in dBFS scale)
+                                  set 0dB     - set to 0dB (100%, full volume)
                               note: wpctl may round decimal values to nearest integer percentage
+                              note: dB values use dBFS scale where 0dB = 100%, negative values attenuate
   wheel <delta>               mouse wheel volume control (accumulates small changes)
                               examples:
                                   wheel 2.0   - scroll up (positive delta)
@@ -207,6 +209,11 @@ Options:
   -D <value>                  set default step size (default: 5)
   -f <duration_ms>            fade duration in milliseconds (for set/up/down/mute)
   -x <value>                  set maximum volume
+  -U <unit>                   display unit for volume output (percent or db)
+                              examples:
+                                  -U db      - display volume in dB
+                                  -U percent - display volume in percentage (default)
+                              note: can also be set in config file as VOLUME_DISPLAY_UNIT
   -v                          verbose mode (detailed error information)
   --exit-code                 show detailed exit code information
   -h                          show help
@@ -332,7 +339,23 @@ This allows you to use `volume up` or `volume down` without specifying a step si
 volume -D 10 up
 ```
 
-This will save `DEFAULT_STEP=10` to your config file automatically, making it persistent for future invocations. To find more variables, check the [source code](https://github.com/hastinbe/i3-volume/blob/master/volume) of the `parse_opts` and `main` functions.
+This will save `DEFAULT_STEP=10` to your config file automatically, making it persistent for future invocations.
+
+You can also set the volume display unit in the config file:
+
+```bash
+VOLUME_DISPLAY_UNIT=db      # Display volume in dB
+VOLUME_DISPLAY_UNIT=percent # Display volume in percentage (default)
+```
+
+Or use the `-U` option to override it for a single command:
+
+```bash
+volume -U db output i3blocks    # Display in dB for this command
+volume -U percent output default # Display in percentage
+```
+
+To find more variables, check the [source code](https://github.com/hastinbe/i3-volume/blob/master/volume) of the `parse_opts` and `main` functions.
 
 ### Per-Sink Configuration
 

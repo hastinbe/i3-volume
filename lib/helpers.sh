@@ -95,6 +95,80 @@ decimal_format() {
     printf "%.${precision}f" "$val" 2>/dev/null || echo "$val"
 }
 
+# dB conversion functions (dBFS scale: 0dB = 100%, negative values for attenuation)
+# Convert percentage to dB: dB = 20 * log10(percentage/100)
+percentage_to_db() {
+    local pct=$1
+    # Handle edge cases: 0% = -120dB (effectively silent, avoid -infinity)
+    if [ "$(echo "$pct <= 0" | bc -l 2>/dev/null)" = "1" ]; then
+        echo "-120"
+        return
+    fi
+    # Clamp to reasonable range to avoid issues
+    if [ "$(echo "$pct > 100" | bc -l 2>/dev/null)" = "1" ]; then
+        pct="100"
+    fi
+    # Calculate dB: 20 * log10(pct/100)
+    echo "scale=2; 20 * l($pct / 100) / l(10)" | bc -l 2>/dev/null || echo "0"
+}
+
+# Convert dB to percentage: percentage = 100 * 10^(dB/20)
+db_to_percentage() {
+    local db=$1
+    # Handle very negative dB (effectively 0%)
+    if [ "$(echo "$db <= -120" | bc -l 2>/dev/null)" = "1" ]; then
+        echo "0"
+        return
+    fi
+    # Calculate percentage: 100 * 10^(dB/20)
+    local result
+    result=$(echo "scale=2; 100 * e($db / 20 * l(10))" | bc -l 2>/dev/null)
+    # Clamp to 0-100 range
+    if [ "$(echo "$result < 0" | bc -l 2>/dev/null)" = "1" ]; then
+        echo "0"
+    elif [ "$(echo "$result > 100" | bc -l 2>/dev/null)" = "1" ]; then
+        echo "100"
+    else
+        echo "$result"
+    fi
+}
+
+# Detect if volume value is in dB or percentage
+# Returns: "db" or "percent"
+detect_volume_unit() {
+    local value=$1
+    # Check if value ends with "dB" or "db" (case insensitive)
+    if [[ "$value" =~ ^[+-]?[0-9]+\.?[0-9]*[dD][bB]$ ]]; then
+        echo "db"
+    else
+        echo "percent"
+    fi
+}
+
+# Parse volume value and return as percentage
+# Handles both percentage and dB inputs
+parse_volume_value() {
+    local value=$1
+    local unit
+    unit=$(detect_volume_unit "$value")
+
+    if [ "$unit" = "db" ]; then
+        # Extract numeric part (remove "dB", "db", "DB", or "Db" suffix)
+        # Use a simple approach: remove last 2 characters if they match dB pattern
+        local db_value
+        if [[ "$value" =~ ^(.+)[dD][bB]$ ]]; then
+            db_value="${BASH_REMATCH[1]}"
+        else
+            db_value="$value"
+        fi
+        # Convert dB to percentage
+        db_to_percentage "$db_value"
+    else
+        # Already in percentage, just return as-is
+        echo "$value"
+    fi
+}
+
 # Generalized plugin system for multiple plugin types
 declare -gA LOADED_PLUGINS=()
 

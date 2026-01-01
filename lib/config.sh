@@ -31,6 +31,7 @@ load_config() {
     if [[ ! -f "$config" ]]; then
         # Set defaults if no config file
         : "${NOTIFICATION_METHOD:=libnotify}"
+        : "${VOLUME_DISPLAY_UNIT:=percent}"
         return 0
     fi
 
@@ -97,6 +98,7 @@ load_config() {
 
     # Set defaults if not defined in config
     : "${NOTIFICATION_METHOD:=libnotify}"
+    : "${VOLUME_DISPLAY_UNIT:=percent}"
 }
 
 save_config_value() {

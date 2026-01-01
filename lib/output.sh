@@ -10,22 +10,46 @@
 # Format volume for display (show 1 decimal place if needed, otherwise integer)
 format_volume_display() {
     local vol=$1
-    # Check if it's effectively a whole number (handle cases like "51.00" or "50.0")
-    # Use bc to check if the value equals its integer part
-    local int_part
-    int_part=$(echo "$vol" | awk '{printf "%.0f", $1}')
-    # Compare the original value to the integer part
-    if [ "$(echo "$vol == $int_part" | bc -l 2>/dev/null)" = "1" ]; then
-        # It's a whole number, display as integer
-        printf "%.0f" "$vol"
+    local unit=${2:-percent}  # "percent" or "db"
+
+    if [ "$unit" = "db" ]; then
+        # Display in dB
+        local db_value
+        db_value=$(percentage_to_db "$vol")
+        printf "%.1f" "$db_value"
     else
-        # It has a fractional part, display with 1 decimal place
-        printf "%.1f" "$vol"
+        # Display in percentage
+        # Check if it's effectively a whole number (handle cases like "51.00" or "50.0")
+        # Use bc to check if the value equals its integer part
+        local int_part
+        int_part=$(echo "$vol" | awk '{printf "%.0f", $1}')
+        # Compare the original value to the integer part
+        if [ "$(echo "$vol == $int_part" | bc -l 2>/dev/null)" = "1" ]; then
+            # It's a whole number, display as integer
+            printf "%.0f" "$vol"
+        else
+            # It has a fractional part, display with 1 decimal place
+            printf "%.1f" "$vol"
+        fi
     fi
 }
 
 output_volume_default() {
-    if is_muted; then echo MUTE; else echo "$(format_volume_display "$(get_volume)")%"; fi
+    if is_muted; then
+        echo MUTE
+    else
+        local vol_raw vol_display unit_suffix
+        vol_raw=$(get_volume)
+        # Use VOLUME_DISPLAY_UNIT if set, default to percent
+        local display_unit="${VOLUME_DISPLAY_UNIT:-percent}"
+        vol_display=$(format_volume_display "$vol_raw" "$display_unit")
+        if [ "$display_unit" = "db" ]; then
+            unit_suffix="dB"
+        else
+            unit_suffix="%"
+        fi
+        echo "${vol_display}${unit_suffix}"
+    fi
 }
 
 # Format options:
@@ -106,9 +130,16 @@ output_volume_custom() {
     done
 
     # Now process regular placeholders (format volume for display)
-    local vol_display
-    vol_display=$(format_volume_display "$vol")
-    string=${format//\%v/$vol_display%}
+    local vol_display unit_suffix
+    # Use VOLUME_DISPLAY_UNIT if set, default to percent
+    local display_unit="${VOLUME_DISPLAY_UNIT:-percent}"
+    vol_display=$(format_volume_display "$vol" "$display_unit")
+    if [ "$display_unit" = "db" ]; then
+        unit_suffix="dB"
+    else
+        unit_suffix="%"
+    fi
+    string=${format//\%v/$vol_display$unit_suffix}
     string=${string//\%n/$(get_node_display_name)}
     string=${string//\%d/$NODE_ID}
     string=${string//\%p/$(progress_bar "$vol")}
@@ -205,11 +236,17 @@ output_volume_i3blocks() {
     if is_muted; then
         short_text="<span color=\"$COLOR_MUTED\">MUTED</span>\n"
     else
-        local vol_raw vol_display
+        local vol_raw vol_display unit_suffix
         vol_raw=$(get_volume)
-        # Use format_volume_display to show whole numbers without decimals
-        vol_display=$(format_volume_display "$vol_raw")
-        short_text="<span color=\"$(volume_color "$vol_raw")\">${vol_display}%</span>\n"
+        # Use VOLUME_DISPLAY_UNIT if set, default to percent
+        local display_unit="${VOLUME_DISPLAY_UNIT:-percent}"
+        vol_display=$(format_volume_display "$vol_raw" "$display_unit")
+        if [ "$display_unit" = "db" ]; then
+            unit_suffix="dB"
+        else
+            unit_suffix="%"
+        fi
+        short_text="<span color=\"$(volume_color "$vol_raw")\">${vol_display}${unit_suffix}</span>\n"
         local effective_max_vol
         effective_max_vol=$(get_effective_max_vol)
         # Use decimal comparison for max volume check
@@ -226,10 +263,17 @@ output_volume_i3blocks() {
 }
 
 output_volume_xob() {
-    local vol_raw vol_display
+    local vol_raw vol_display unit_suffix
     vol_raw=$(get_volume)
-    vol_display=$(format_volume_display "$vol_raw")
-    echo "${vol_display}$(is_muted && echo "!")"
+    # Use VOLUME_DISPLAY_UNIT if set, default to percent
+    local display_unit="${VOLUME_DISPLAY_UNIT:-percent}"
+    vol_display=$(format_volume_display "$vol_raw" "$display_unit")
+    if [ "$display_unit" = "db" ]; then
+        unit_suffix="dB"
+    else
+        unit_suffix="%"
+    fi
+    echo "${vol_display}${unit_suffix}$(is_muted && echo "!")"
 }
 
 output_volume_json() {

@@ -67,7 +67,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:A:Ce:af:hj:lL:nN:pPs:S:t:u:vyI:D:q
+    local optstring=:A:Ce:af:hj:lL:nN:pPs:S:t:u:vyI:D:qU:
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -99,6 +99,7 @@ parse_opts() {
                    save_config_value "DEFAULT_STEP" "$OPTARG" ;;
             y    ) USE_DUNSTIFY=true ;;
             q    ) DISPLAY_NOTIFICATIONS=false ;;
+            U    ) VOLUME_DISPLAY_UNIT=$OPTARG ;;
             h | *) usage ;;
         esac
     done
@@ -530,7 +531,8 @@ main() {
         USE_CANBERRA=false \
         FADE_DURATION="" \
         ALL_SINKS=false \
-        VERBOSE=false
+        VERBOSE=false \
+        VOLUME_DISPLAY_UNIT="percent"
 
     # shellcheck disable=SC2034  # Used externally by modules
     declare -gi EXPIRES=1500

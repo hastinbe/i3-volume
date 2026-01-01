@@ -101,13 +101,47 @@ fade_volume() {
  }
 
 set_volume() {
-     local -r vol=${1:?$(error 'Volume is required')}
+     local -r vol_input=${1:?$(error 'Volume is required')}
      local -r op=${2:-}
 
      # Check if operating on all sinks
      if $ALL_SINKS; then
-         set_volume_all "$vol" "$op"
+         set_volume_all "$vol_input" "$op"
          return
+     fi
+
+     # Detect if input is in dB or percentage, and convert to percentage for internal use
+     local vol vol_unit is_relative_db=false
+     vol_unit=$(detect_volume_unit "$vol_input")
+     if [ "$vol_unit" = "db" ]; then
+         # For relative operations with dB, we need special handling
+         if [ "$op" = "+" ] || [ "$op" = "-" ]; then
+             # Relative dB operation: convert current volume to dB, add/subtract, convert back
+             # This gives us the target volume directly
+             local current_vol current_db new_db
+             current_vol=$(get_volume 2>/dev/null || echo "0")
+             current_db=$(percentage_to_db "$current_vol")
+             # Extract numeric part from dB input (remove "dB", "db", "DB", or "Db" suffix)
+             local db_value
+             if [[ "$vol_input" =~ ^(.+)[dD][bB]$ ]]; then
+                 db_value="${BASH_REMATCH[1]}"
+             else
+                 db_value="$vol_input"
+             fi
+             if [ "$op" = "+" ]; then
+                 new_db=$(decimal_add "$current_db" "$db_value")
+             else
+                 new_db=$(decimal_subtract "$current_db" "$db_value")
+             fi
+             vol=$(db_to_percentage "$new_db")
+             is_relative_db=true
+         else
+             # Absolute dB value: convert to percentage
+             vol=$(parse_volume_value "$vol_input")
+         fi
+     else
+         # Already in percentage
+         vol="$vol_input"
      fi
 
      # Save current volume to history before making changes
@@ -122,8 +156,13 @@ set_volume() {
      if not_empty "$effective_max_vol"; then
          case "$op" in
              +)  # Increase volume
+                 # For relative dB operations, vol is already the target, don't add again
                  local sum_vol
-                 sum_vol=$(decimal_add "$current_vol" "$vol")
+                 if [ "$is_relative_db" = "true" ]; then
+                     sum_vol="$vol"
+                 else
+                     sum_vol=$(decimal_add "$current_vol" "$vol")
+                 fi
                  if [ "$(decimal_gt "$sum_vol" "$effective_max_vol")" = "1" ]; then
                      # Instead of doing nothing, step to max_volume
                      local step
@@ -154,11 +193,21 @@ set_volume() {
      if not_empty "$FADE_DURATION"; then
          case "$op" in
              +)
-                 target_vol=$(decimal_add "$current_vol" "$vol")
+                 # For relative dB operations, vol is already the target
+                 if [ "$is_relative_db" = "true" ]; then
+                     target_vol="$vol"
+                 else
+                     target_vol=$(decimal_add "$current_vol" "$vol")
+                 fi
                  fade_volume "$target_vol" "$FADE_DURATION" "$NODE_ID"
                  ;;
              -)
-                 target_vol=$(decimal_subtract "$current_vol" "$vol")
+                 # For relative dB operations, vol is already the target
+                 if [ "$is_relative_db" = "true" ]; then
+                     target_vol="$vol"
+                 else
+                     target_vol=$(decimal_subtract "$current_vol" "$vol")
+                 fi
                  fade_volume "$target_vol" "$FADE_DURATION" "$NODE_ID"
                  ;;
              *)
@@ -168,8 +217,22 @@ set_volume() {
      else
          invalidate_cache
          case "$op" in
-             +) wpctl set-volume "$NODE_ID" "${vol}%+" ;;
-             -) wpctl set-volume "$NODE_ID" "${vol}%-" ;;
+             +)
+                 # For relative dB operations, vol is already the target percentage
+                 if [ "$is_relative_db" = "true" ]; then
+                     wpctl set-volume "$NODE_ID" "${vol}%"
+                 else
+                     wpctl set-volume "$NODE_ID" "${vol}%+"
+                 fi
+                 ;;
+             -)
+                 # For relative dB operations, vol is already the target percentage
+                 if [ "$is_relative_db" = "true" ]; then
+                     wpctl set-volume "$NODE_ID" "${vol}%"
+                 else
+                     wpctl set-volume "$NODE_ID" "${vol}%-"
+                 fi
+                 ;;
              *) wpctl set-volume "$NODE_ID" "${vol}%" ;;
          esac
      fi
@@ -1962,7 +2025,7 @@ get_all_sources() {
  }
 
 set_volume_all() {
-     local -r vol=$1
+     local -r vol_input=$1
      local -r op=${2:-}
      local -a all_sinks
      readarray -t all_sinks < <(get_all_sinks)
@@ -1981,37 +2044,77 @@ set_volume_all() {
          return 1
      fi
 
+     # Detect if input is in dB or percentage, and convert to percentage for internal use
+     local vol vol_unit
+     vol_unit=$(detect_volume_unit "$vol_input")
+     if [ "$vol_unit" = "db" ]; then
+         # For relative operations with dB, we need special handling per sink
+         if [ "$op" = "+" ] || [ "$op" = "-" ]; then
+             # Will handle per-sink in the loop
+             vol="$vol_input"
+         else
+             # Absolute dB value: convert to percentage
+             vol=$(parse_volume_value "$vol_input")
+         fi
+     else
+         # Already in percentage
+         vol="$vol_input"
+     fi
+
      local sink_id
      for sink_id in "${all_sinks[@]}"; do
-         local target_vol current_vol
+         local target_vol current_vol vol_to_use
          local effective_max_vol
          effective_max_vol=$(get_effective_max_vol "$sink_id")
+
+         # Handle relative dB operations per sink
+         if [ "$vol_unit" = "db" ] && ([ "$op" = "+" ] || [ "$op" = "-" ]); then
+             current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}')
+             local current_db new_db
+             current_db=$(percentage_to_db "$current_vol")
+             # Extract numeric part from dB input (remove "dB", "db", "DB", or "Db" suffix)
+             local db_value
+             if [[ "$vol_input" =~ ^(.+)[dD][bB]$ ]]; then
+                 db_value="${BASH_REMATCH[1]}"
+             else
+                 db_value="$vol_input"
+             fi
+             if [ "$op" = "+" ]; then
+                 new_db=$(decimal_add "$current_db" "$db_value")
+             else
+                 new_db=$(decimal_subtract "$current_db" "$db_value")
+             fi
+             vol_to_use=$(db_to_percentage "$new_db")
+         else
+             vol_to_use="$vol"
+         fi
 
          if not_empty "$effective_max_vol"; then
              case "$op" in
                  +)  # Increase volume
-                     current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}')
-                     local sum_vol
-                     sum_vol=$(decimal_add "$current_vol" "$vol")
-                     if [ "$(decimal_gt "$sum_vol" "$effective_max_vol")" = "1" ]; then
-                         local step
-                         step=$(decimal_subtract "$effective_max_vol" "$current_vol")
-                         # Ensure step is not negative
-                         if [ "$(decimal_lt "$step" "0")" = "1" ]; then
-                             step="0"
+                     if [ "$vol_unit" != "db" ]; then
+                         current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}')
+                         local sum_vol
+                         sum_vol=$(decimal_add "$current_vol" "$vol_to_use")
+                         if [ "$(decimal_gt "$sum_vol" "$effective_max_vol")" = "1" ]; then
+                             local step
+                             step=$(decimal_subtract "$effective_max_vol" "$current_vol")
+                             if [ "$(decimal_lt "$step" "0")" = "1" ]; then
+                                 step="0"
+                             fi
+                             local step_int
+                             step_int=$(printf "%.0f" "$step")
+                             if not_empty "$FADE_DURATION"; then
+                                 fade_volume "$effective_max_vol" "$FADE_DURATION" "$sink_id"
+                             else
+                                 wpctl set-volume "$sink_id" "${step_int}%+"
+                             fi
+                             continue
                          fi
-                         local step_int
-                         step_int=$(printf "%.0f" "$step")
-                         if not_empty "$FADE_DURATION"; then
-                             fade_volume "$effective_max_vol" "$FADE_DURATION" "$sink_id"
-                         else
-                             wpctl set-volume "$sink_id" "${step_int}%+"
-                         fi
-                         continue
                      fi
                      ;;
                  *)  # Set absolute volume
-                     if [ "$(decimal_gt "$vol" "$effective_max_vol")" = "1" ]; then
+                     if [ "$(decimal_gt "$vol_to_use" "$effective_max_vol")" = "1" ]; then
                          continue
                      fi
                      ;;
@@ -2022,24 +2125,32 @@ set_volume_all() {
          if not_empty "$FADE_DURATION"; then
              case "$op" in
                  +)
-                     current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}')
-                     target_vol=$(decimal_add "$current_vol" "$vol")
+                     if [ "$vol_unit" != "db" ]; then
+                         current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}')
+                         target_vol=$(decimal_add "$current_vol" "$vol_to_use")
+                     else
+                         target_vol="$vol_to_use"
+                     fi
                      fade_volume "$target_vol" "$FADE_DURATION" "$sink_id"
                      ;;
                  -)
-                     current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}')
-                     target_vol=$(decimal_subtract "$current_vol" "$vol")
+                     if [ "$vol_unit" != "db" ]; then
+                         current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}')
+                         target_vol=$(decimal_subtract "$current_vol" "$vol_to_use")
+                     else
+                         target_vol="$vol_to_use"
+                     fi
                      fade_volume "$target_vol" "$FADE_DURATION" "$sink_id"
                      ;;
                  *)
-                     fade_volume "$vol" "$FADE_DURATION" "$sink_id"
+                     fade_volume "$vol_to_use" "$FADE_DURATION" "$sink_id"
                      ;;
              esac
          else
              case "$op" in
-                 +) wpctl set-volume "$sink_id" "${vol}%+" ;;
-                 -) wpctl set-volume "$sink_id" "${vol}%-" ;;
-                 *) wpctl set-volume "$sink_id" "${vol}%" ;;
+                 +) wpctl set-volume "$sink_id" "${vol_to_use}%+" ;;
+                 -) wpctl set-volume "$sink_id" "${vol_to_use}%-" ;;
+                 *) wpctl set-volume "$sink_id" "${vol_to_use}%" ;;
              esac
          fi
      done
@@ -3412,6 +3523,7 @@ ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-D <value>${COLOR_RESET}                  set default step size (${COLOR_MAGENTA}default: 5${COLOR_RESET})
   ${COLOR_GREEN}-f <duration_ms>${COLOR_RESET}            fade duration in milliseconds (${COLOR_MAGENTA}for set/up/down/mute${COLOR_RESET})
   ${COLOR_GREEN}-x <value>${COLOR_RESET}                  set maximum volume
+  ${COLOR_GREEN}-U <unit>${COLOR_RESET}                   display unit for volume output (${COLOR_MAGENTA}percent${COLOR_RESET} or ${COLOR_MAGENTA}db${COLOR_RESET})
   ${COLOR_GREEN}-v${COLOR_RESET}                          verbose mode (detailed error information)
   ${COLOR_GREEN}--exit-code${COLOR_RESET}                 show detailed exit code information
   ${COLOR_GREEN}-h${COLOR_RESET}                          show help
