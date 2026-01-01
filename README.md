@@ -69,6 +69,7 @@ volume set -5          # Decrease by 5% (relative)
 volume set 45.5        # Set to 45.5% (decimal support)
 volume set -6dB        # Set to -6dB (dB support)
 volume -f 1000 up 10   # Fade volume up by 10% over 1 second
+volume -d up 10        # Test what would happen (dry-run mode)
 ```
 
 ### Advanced Features
@@ -297,6 +298,11 @@ volume -a -f 500 set 50
 
 # Custom notification method with fade
 volume -n -N dunst -f 1000 mute
+
+# Test commands without executing (dry-run mode)
+volume -d up 10          # See what would happen without changing volume
+volume --dry-run set 50   # Test setting volume to 50%
+volume -d switch          # See which sink would be switched to
 ```
 
 ## Interoperability

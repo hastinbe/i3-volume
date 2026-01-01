@@ -22,6 +22,12 @@ error_with_suggestion() {
         shift
     done
 }
+# shellcheck disable=SC2034  # DRY_RUN, COLOR_CYAN, and COLOR_RESET are external variables from main script
+dry_run_msg() {
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        echo "${COLOR_CYAN}[DRY-RUN]${COLOR_RESET} $*" >&2
+    fi
+}
 has_color() { [ "$(tput colors)" -ge 8 ] &>/dev/null && [ -t 1 ]; }
 ms_to_secs() { echo "scale=0; (${1} + 999) / 1000" | bc; }
 # shellcheck disable=SC2034  # POST_HOOK_EXEMPT_COMMANDS is external variable from main script

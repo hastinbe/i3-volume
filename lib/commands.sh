@@ -30,6 +30,17 @@ fade_volume() {
      # Round target volume to integer (wpctl will round anyway)
      target_vol_int=$(printf "%.0f" "$target_vol" 2>/dev/null || echo "${target_vol%.*}")
 
+     # Dry-run mode: show what would happen
+     if [[ "${DRY_RUN:-false}" == "true" ]]; then
+         local node_display
+         node_display=$(get_node_display_name 2>/dev/null || echo "sink $node_id")
+         dry_run_msg "Would fade volume from ${current_vol}% to ${target_vol_int}% over ${duration_ms}ms on $node_display"
+         dry_run_msg "  Current volume: ${current_vol}%"
+         dry_run_msg "  Target volume: ${target_vol_int}%"
+         dry_run_msg "  Duration: ${duration_ms}ms (${steps} steps, ~$(( duration_ms / steps ))ms per step)"
+         return 0
+     fi
+
      # Calculate step delay in milliseconds
      if (( duration_ms > 0 && steps > 0 )); then
          step_delay=$(( duration_ms / steps ))
@@ -147,6 +158,72 @@ set_volume() {
      # Save current volume to history before making changes
      local current_vol
      current_vol=$(get_volume 2>/dev/null || echo "0")
+
+     # Dry-run mode: show what would happen
+     if [[ "${DRY_RUN:-false}" == "true" ]]; then
+         local node_display
+         node_display=$(get_node_display_name 2>/dev/null || echo "sink $NODE_ID")
+         local effective_max_vol
+         effective_max_vol=$(get_effective_max_vol)
+         local target_vol
+
+         # Calculate target volume based on operation
+         case "$op" in
+             +)
+                 if [ "$is_relative_db" = "true" ]; then
+                     target_vol="$vol"
+                 else
+                     target_vol=$(decimal_add "$current_vol" "$vol")
+                 fi
+                 ;;
+             -)
+                 if [ "$is_relative_db" = "true" ]; then
+                     target_vol="$vol"
+                 else
+                     target_vol=$(decimal_subtract "$current_vol" "$vol")
+                 fi
+                 ;;
+             *)
+                 target_vol="$vol"
+                 ;;
+         esac
+
+         # Check max volume constraint
+         if not_empty "$effective_max_vol" && [ "$(decimal_gt "$target_vol" "$effective_max_vol")" = "1" ]; then
+             target_vol="$effective_max_vol"
+             dry_run_msg "Would set volume on $node_display (clamped to max: ${effective_max_vol}%)"
+         else
+             dry_run_msg "Would set volume on $node_display"
+         fi
+
+         dry_run_msg "  Current volume: ${current_vol}%"
+         if [ "$vol_unit" = "db" ]; then
+             local current_db target_db
+             current_db=$(percentage_to_db "$current_vol")
+             target_db=$(percentage_to_db "$target_vol")
+             dry_run_msg "  Input: ${vol_input} (${vol_unit})"
+             dry_run_msg "  Current: ${current_vol}% (${current_db}dB)"
+             dry_run_msg "  Target: ${target_vol}% (${target_db}dB)"
+         else
+             dry_run_msg "  Input: ${vol_input}%"
+             if [ "$op" = "+" ]; then
+                 dry_run_msg "  Operation: increase by ${vol}%"
+             elif [ "$op" = "-" ]; then
+                 dry_run_msg "  Operation: decrease by ${vol}%"
+             else
+                 dry_run_msg "  Operation: set to ${vol}%"
+             fi
+             dry_run_msg "  Target volume: ${target_vol}%"
+         fi
+         if not_empty "$effective_max_vol"; then
+             dry_run_msg "  Max volume: ${effective_max_vol}%"
+         fi
+         if not_empty "$FADE_DURATION"; then
+             dry_run_msg "  Fade duration: ${FADE_DURATION}ms"
+         fi
+         return 0
+     fi
+
      save_volume_to_history "$current_vol"
 
      local target_vol
@@ -295,6 +372,31 @@ toggle_mute() {
          toggle_mute_all
          return
      fi
+
+     # Dry-run mode: show what would happen
+     if [[ "${DRY_RUN:-false}" == "true" ]]; then
+         local node_display
+         node_display=$(get_node_display_name 2>/dev/null || echo "sink $NODE_ID")
+         local currently_muted
+         currently_muted=$(is_muted && echo "muted" || echo "unmuted")
+         local new_state
+         new_state=$([ "$currently_muted" = "muted" ] && echo "unmuted" || echo "muted")
+         local current_vol
+         current_vol=$(get_volume 2>/dev/null || echo "0")
+         dry_run_msg "Would toggle mute on $node_display"
+         dry_run_msg "  Current state: $currently_muted"
+         dry_run_msg "  New state: $new_state"
+         dry_run_msg "  Current volume: ${current_vol}%"
+         if not_empty "$FADE_DURATION"; then
+             if [ "$currently_muted" = "muted" ]; then
+                 dry_run_msg "  Would fade in from 0% to ${current_vol}% over ${FADE_DURATION}ms"
+             else
+                 dry_run_msg "  Would fade out from ${current_vol}% to 0% over ${FADE_DURATION}ms, then mute"
+             fi
+         fi
+         return 0
+     fi
+
      if not_empty "$FADE_DURATION"; then
          if is_muted; then
              # Fade in (unmute)
@@ -358,6 +460,31 @@ set_mic_volume() {
          return 1
      fi
 
+     # Dry-run mode: show what would happen
+     if [[ "${DRY_RUN:-false}" == "true" ]]; then
+         local source_display
+         source_display=$(get_source_nick 2>/dev/null || echo "source $SOURCE_ID")
+         local current_mic_vol
+         current_mic_vol=$(get_mic_volume 2>/dev/null || echo "0")
+         local target_vol
+         case "$op" in
+             +) target_vol=$(decimal_add "$current_mic_vol" "$vol") ;;
+             -) target_vol=$(decimal_subtract "$current_mic_vol" "$vol") ;;
+             *) target_vol="$vol" ;;
+         esac
+         dry_run_msg "Would set microphone volume on $source_display"
+         dry_run_msg "  Current volume: ${current_mic_vol}%"
+         if [ "$op" = "+" ]; then
+             dry_run_msg "  Operation: increase by ${vol}%"
+         elif [ "$op" = "-" ]; then
+             dry_run_msg "  Operation: decrease by ${vol}%"
+         else
+             dry_run_msg "  Operation: set to ${vol}%"
+         fi
+         dry_run_msg "  Target volume: ${target_vol}%"
+         return 0
+     fi
+
      invalidate_cache
 
      case "$op" in
@@ -391,6 +518,23 @@ toggle_mic_mute() {
              "Check if a microphone or audio input device is connected." \
              "Use 'volume list sources' to see available sources."
          return 1
+     fi
+
+     # Dry-run mode: show what would happen
+     if [[ "${DRY_RUN:-false}" == "true" ]]; then
+         local source_display
+         source_display=$(get_source_nick 2>/dev/null || echo "source $SOURCE_ID")
+         local currently_muted
+         currently_muted=$(is_mic_muted && echo "muted" || echo "unmuted")
+         local new_state
+         new_state=$([ "$currently_muted" = "muted" ] && echo "unmuted" || echo "muted")
+         local current_mic_vol
+         current_mic_vol=$(get_mic_volume 2>/dev/null || echo "0")
+         dry_run_msg "Would toggle microphone mute on $source_display"
+         dry_run_msg "  Current state: $currently_muted"
+         dry_run_msg "  New state: $new_state"
+         dry_run_msg "  Current volume: ${current_mic_vol}%"
+         return 0
      fi
 
      invalidate_cache
@@ -2044,6 +2188,21 @@ set_volume_all() {
          return 1
      fi
 
+     # Dry-run mode: show what would happen
+     if [[ "${DRY_RUN:-false}" == "true" ]]; then
+         dry_run_msg "Would set volume on all ${#all_sinks[@]} sink(s)"
+         local sink_id
+         for sink_id in "${all_sinks[@]}"; do
+             local sink_name
+             sink_name=$(pw_dump | jq -r --argjson id "$sink_id" '.[] | select(.id == $id) | .info.props."node.nick" // .info.props."node.name" // "Unknown"' 2>/dev/null)
+             local current_vol
+             current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}' || echo "0")
+             dry_run_msg "  Sink: $sink_name (ID: $sink_id) - Current: ${current_vol}%"
+         done
+         dry_run_msg "  Operation: ${op:-set} ${vol_input}"
+         return 0
+     fi
+
      # Detect if input is in dB or percentage, and convert to percentage for internal use
      local vol vol_unit
      vol_unit=$(detect_volume_unit "$vol_input")
@@ -2174,6 +2333,22 @@ toggle_mute_all() {
              fi
          fi
          return 1
+     fi
+
+     # Dry-run mode: show what would happen
+     if [[ "${DRY_RUN:-false}" == "true" ]]; then
+         dry_run_msg "Would toggle mute on all ${#all_sinks[@]} sink(s)"
+         local sink_id
+         for sink_id in "${all_sinks[@]}"; do
+             local sink_name
+             sink_name=$(pw_dump | jq -r --argjson id "$sink_id" '.[] | select(.id == $id) | .info.props."node.nick" // .info.props."node.name" // "Unknown"' 2>/dev/null)
+             local is_muted
+             is_muted=$(wpctl get-volume "$sink_id" 2>/dev/null | grep -q '\[MUTED\]' && echo "muted" || echo "unmuted")
+             local new_state
+             new_state=$([ "$is_muted" = "muted" ] && echo "unmuted" || echo "muted")
+             dry_run_msg "  Sink: $sink_name (ID: $sink_id) - $is_muted → $new_state"
+         done
+         return 0
      fi
 
      local sink_id
@@ -2455,6 +2630,25 @@ switch_sink() {
              echo "Sink is already the default."
              return 0
          fi
+     fi
+
+     # Get target sink name for display
+     target_sink_name=$(pw_dump | jq -r --argjson id "$target_sink_id" '.[] | select(.id == $id) | .info.props."node.nick" // .info.props."node.name" // "Unknown"' 2>/dev/null)
+
+     # Dry-run mode: show what would happen
+     if [[ "${DRY_RUN:-false}" == "true" ]]; then
+         local current_sink_id current_sink_name
+         current_sink_id=$(get_default_sink_id)
+         current_sink_name=$(pw_dump | jq -r --argjson id "$current_sink_id" '.[] | select(.id == $id) | .info.props."node.nick" // .info.props."node.name" // "Unknown"' 2>/dev/null)
+         dry_run_msg "Would switch sink"
+         dry_run_msg "  Current sink: $current_sink_name (ID: $current_sink_id)"
+         dry_run_msg "  Target sink: $target_sink_name (ID: $target_sink_id)"
+         if not_empty "$target"; then
+             dry_run_msg "  Target specified: $target"
+         else
+             dry_run_msg "  Action: cycle to next sink"
+         fi
+         return 0
      fi
 
      # Switch to the target sink
@@ -3525,6 +3719,7 @@ ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-x <value>${COLOR_RESET}                  set maximum volume
   ${COLOR_GREEN}-U <unit>${COLOR_RESET}                   display unit for volume output (${COLOR_MAGENTA}percent${COLOR_RESET} or ${COLOR_MAGENTA}db${COLOR_RESET})
   ${COLOR_GREEN}-v${COLOR_RESET}                          verbose mode (detailed error information)
+  ${COLOR_GREEN}-d${COLOR_RESET}, ${COLOR_GREEN}--dry-run${COLOR_RESET}          show what would happen without executing (test mode)
   ${COLOR_GREEN}--exit-code${COLOR_RESET}                 show detailed exit code information
   ${COLOR_GREEN}-h${COLOR_RESET}                          show help
 

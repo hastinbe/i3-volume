@@ -37,6 +37,9 @@ arrange_opts() {
             --no-notify)
                 flags+=("-q")
                 ;;
+            --dry-run)
+                flags+=("-d")
+                ;;
             --exit-code)
                 # Handle this in main() before command execution
                 flags+=("--exit-code")
@@ -67,7 +70,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:A:Ce:af:hj:lL:nN:pPs:S:t:u:vyI:D:qU:
+    local optstring=:A:Ce:ad:f:hj:lL:nN:pPs:S:t:u:vyI:D:qU:
 
     arrange_opts "$optstring" "$@"
     set -- "${OPTARR[@]}"
@@ -81,6 +84,7 @@ parse_opts() {
             C    ) USE_CANBERRA=true ;;
             e    ) EXPIRES=$OPTARG ;;
             a    ) ALL_SINKS=true ;;
+            d    ) DRY_RUN=true ;;
             f    ) FADE_DURATION=$OPTARG ;;
             j    ) IFS=, read -ra ICONS_EMOJI <<< "$OPTARG" ;;
             l    ) USE_FULLCOLOR_ICONS=true ;;
@@ -555,7 +559,8 @@ main() {
         FADE_DURATION="" \
         ALL_SINKS=false \
         VERBOSE=false \
-        VOLUME_DISPLAY_UNIT="percent"
+        VOLUME_DISPLAY_UNIT="percent" \
+        DRY_RUN=false
 
     # shellcheck disable=SC2034  # Used externally by modules
     declare -gi EXPIRES=1500
