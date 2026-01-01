@@ -373,3 +373,111 @@ get_pipewire_diagnostics() {
     echo "$diag"
 }
 
+# Logging functions
+# shellcheck disable=SC2034  # LOG_FILE, LOG_TO_SYSLOG, DEBUG_MODE are external variables from main script
+init_logging() {
+    # Initialize logging if --log option is provided
+    if empty "${LOG_FILE:-}"; then
+        return 0
+    fi
+
+    # If LOG_FILE is "syslog", use syslog
+    if [[ "$LOG_FILE" == "syslog" ]]; then
+        LOG_TO_SYSLOG=true
+        return 0
+    fi
+
+    # Otherwise, use a custom log file
+    LOG_TO_SYSLOG=false
+
+    # Create log directory if it doesn't exist
+    local log_dir
+    log_dir=$(dirname "$LOG_FILE")
+    if not_empty "$log_dir" && [[ "$log_dir" != "." ]]; then
+        mkdir -p "$log_dir" 2>/dev/null || {
+            error "Failed to create log directory: $log_dir"
+            LOG_FILE=""
+            return 1
+        }
+    fi
+
+    # Create or append to log file
+    if ! touch "$LOG_FILE" 2>/dev/null; then
+        error "Failed to create log file: $LOG_FILE"
+        LOG_FILE=""
+        return 1
+    fi
+
+    return 0
+}
+
+# Log a message with timestamp
+# Usage: log_message <level> <message>
+# Levels: DEBUG, INFO, WARNING, ERROR
+log_message() {
+    local level=$1
+    shift
+    local message="$*"
+
+    # Only log if logging is enabled
+    if empty "${LOG_FILE:-}"; then
+        return 0
+    fi
+
+    local timestamp
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+    if [[ "${LOG_TO_SYSLOG:-false}" == "true" ]]; then
+        # Use logger for syslog
+        local priority
+        case "$level" in
+            DEBUG) priority="debug" ;;
+            INFO) priority="info" ;;
+            WARNING) priority="warning" ;;
+            ERROR) priority="err" ;;
+            *) priority="info" ;;
+        esac
+        logger -t "i3-volume" -p "user.$priority" "$message" 2>/dev/null || true
+    else
+        # Write to log file
+        echo "[$timestamp] [$level] $message" >> "$LOG_FILE" 2>/dev/null || true
+    fi
+}
+
+# Log debug message (only if --debug is enabled)
+log_debug() {
+    if [[ "${DEBUG_MODE:-false}" == "true" ]]; then
+        log_message "DEBUG" "$@"
+    fi
+}
+
+# Log info message
+log_info() {
+    log_message "INFO" "$@"
+}
+
+# Log warning message
+log_warning() {
+    log_message "WARNING" "$@"
+}
+
+# Log error message
+log_error() {
+    log_message "ERROR" "$@"
+}
+
+# Log command execution
+log_command() {
+    local cmd="$1"
+    shift
+    log_info "Command: $cmd" "$@"
+    log_debug "Full command: $cmd ${*}"
+}
+
+# Log volume operation
+log_volume_operation() {
+    local operation=$1
+    shift
+    log_info "Volume operation: $operation" "$@"
+}
+

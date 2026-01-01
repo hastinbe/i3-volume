@@ -44,6 +44,21 @@ arrange_opts() {
                 # Handle this in main() before command execution
                 flags+=("--exit-code")
                 ;;
+            --log)
+                flags+=("--log")
+                # If next argument exists and looks like a log file path, include it
+                if [[ $# -gt 1 ]] && [[ "$2" != -* ]]; then
+                    local next_arg="$2"
+                    # Only treat as log file if it looks like a path (starts with /, ., ~) or is "syslog"
+                    if [[ "$next_arg" == "syslog" ]] || [[ "$next_arg" == /* ]] || [[ "$next_arg" == .* ]] || [[ "$next_arg" == ~* ]]; then
+                        flags+=("$next_arg")
+                        shift
+                    fi
+                fi
+                ;;
+            --debug)
+                flags+=("--debug")
+                ;;
             --watch|--all|--input|--volume-only|--mute-only)
                 # These are listen command options, not global flags
                 # Pass them through as command arguments
@@ -73,6 +88,46 @@ parse_opts() {
     local optstring=:A:Ce:ad:f:hj:lL:nN:pPs:S:t:u:vyI:D:qU:
 
     arrange_opts "$optstring" "$@"
+
+    # Handle --log and --debug options (long options not handled by getopts)
+    # Extract their values and remove them from OPTARR BEFORE getopts processes it
+    local temp_arr=()
+    local i=0
+    while [[ $i -lt ${#OPTARR[@]} ]]; do
+        case "${OPTARR[$i]}" in
+            --log)
+                # Extract log file value
+                if [[ $((i+1)) -lt ${#OPTARR[@]} ]] && [[ ${OPTARR[$((i+1))]} != -* ]]; then
+                    local next_arg="${OPTARR[$((i+1))]}"
+                    # Only treat as log file if it looks like a path (starts with /, ., ~) or is "syslog"
+                    if [[ "$next_arg" == "syslog" ]] || [[ "$next_arg" == /* ]] || [[ "$next_arg" == .* ]] || [[ "$next_arg" == ~* ]]; then
+                        LOG_FILE="$next_arg"
+                        ((i += 2))  # Skip both --log and its argument
+                    else
+                        # Not a log file path, default to syslog and keep the argument as a command
+                        # Skip --log entirely (don't add to temp_arr), keep next arg for command extraction
+                        LOG_FILE="syslog"
+                        ((i++))  # Skip just --log, keep next arg
+                    fi
+                else
+                    # Default to syslog if no file specified
+                    LOG_FILE="syslog"
+                    ((i++))  # Skip just --log
+                fi
+                ;;
+            --debug)
+                DEBUG_MODE=true
+                ((i++))  # Skip --debug
+                ;;
+            *)
+                # Keep all other arguments
+                temp_arr+=("${OPTARR[$i]}")
+                ((i++))
+                ;;
+        esac
+    done
+    OPTARR=("${temp_arr[@]}")
+
     set -- "${OPTARR[@]}"
 
     OPTIND=1
@@ -111,7 +166,7 @@ parse_opts() {
     # Extract command arguments: skip all processed options
     # Since arrange_opts puts all flags first, then args, we need to find where flags end
     # Count how many elements in OPTARR are options (start with -)
-    local i=0
+    i=0
     while [[ $i -lt ${#OPTARR[@]} && ${OPTARR[$i]} == -* && ${OPTARR[$i]} != -- ]]; do
         # Check if this option takes an argument by looking it up in optstring
         local opt="${OPTARR[$i]#-}"
@@ -140,6 +195,11 @@ exec_command() {
 
     COMMAND=${1:?$(error 'A command is required')}
     shift
+
+    # Log command execution
+    if not_empty "${LOG_FILE:-}"; then
+        log_command "$COMMAND" "$@"
+    fi
 
     case "$COMMAND" in
         up|raise|increase)
@@ -560,7 +620,10 @@ main() {
         ALL_SINKS=false \
         VERBOSE=false \
         VOLUME_DISPLAY_UNIT="percent" \
-        DRY_RUN=false
+        DRY_RUN=false \
+        LOG_FILE="" \
+        DEBUG_MODE=false \
+        LOG_TO_SYSLOG=false
 
     # shellcheck disable=SC2034  # Used externally by modules
     declare -gi EXPIRES=1500
@@ -585,6 +648,15 @@ main() {
         [[ "$arg" != "--exit-code" ]] && temp+=("$arg")
     done
     CMDARGS=("${temp[@]}")
+
+    # Initialize logging if enabled
+    if not_empty "$LOG_FILE"; then
+        init_logging
+        log_info "i3-volume started" "PID: $$" "Arguments: $*"
+        if [[ "$DEBUG_MODE" == "true" ]]; then
+            log_debug "Debug mode enabled"
+        fi
+    fi
 
     # Requires options to be parsed first
     init_audio

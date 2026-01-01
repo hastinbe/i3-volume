@@ -303,6 +303,11 @@ volume -n -N dunst -f 1000 mute
 volume -d up 10          # See what would happen without changing volume
 volume --dry-run set 50   # Test setting volume to 50%
 volume -d switch          # See which sink would be switched to
+
+# Logging and debugging
+volume --log up 5         # Log operations to syslog
+volume --log /tmp/volume.log up 5  # Log to custom file
+volume --log --debug up 5 # Enable debug mode with verbose logging
 ```
 
 ## Interoperability

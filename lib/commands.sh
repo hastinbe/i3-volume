@@ -159,6 +159,22 @@ set_volume() {
      local current_vol
      current_vol=$(get_volume 2>/dev/null || echo "0")
 
+     # Log volume operation
+     if not_empty "${LOG_FILE:-}"; then
+         local node_display
+         node_display=$(get_sink_nick 2>/dev/null || echo "sink $NODE_ID")
+         local op_desc
+         case "$op" in
+             +) op_desc="increase by $vol_input" ;;
+             -) op_desc="decrease by $vol_input" ;;
+             *) op_desc="set to $vol_input" ;;
+         esac
+         log_volume_operation "set_volume" "node: $node_display" "operation: $op_desc" "current: ${current_vol}%"
+         if [[ "${DEBUG_MODE:-false}" == "true" ]]; then
+             log_debug "Volume calculation: input=$vol_input, unit=$vol_unit, calculated_vol=$vol, operation=$op"
+         fi
+     fi
+
      # Dry-run mode: show what would happen
      if [[ "${DRY_RUN:-false}" == "true" ]]; then
          local node_display
@@ -312,6 +328,13 @@ set_volume() {
                  ;;
              *) wpctl set-volume "$NODE_ID" "${vol}%" ;;
          esac
+
+         # Log successful volume change
+         if not_empty "${LOG_FILE:-}"; then
+             local new_vol
+             new_vol=$(get_volume 2>/dev/null || echo "0")
+             log_info "Volume changed successfully" "node: $(get_sink_nick 2>/dev/null || echo "sink $NODE_ID")" "from: ${current_vol}%" "to: ${new_vol}%"
+         fi
      fi
  }
 
@@ -442,6 +465,15 @@ toggle_mute() {
      else
          invalidate_cache
          wpctl set-mute "$NODE_ID" toggle
+     fi
+
+     # Log successful mute toggle
+     if not_empty "${LOG_FILE:-}" && [[ "${DRY_RUN:-false}" != "true" ]]; then
+         local node_display
+         node_display=$(get_node_display_name 2>/dev/null || echo "sink $NODE_ID")
+         local new_state
+         new_state=$(is_muted && echo "muted" || echo "unmuted")
+         log_info "Mute toggled successfully" "node: $node_display" "state: $new_state"
      fi
  }
 
@@ -3720,6 +3752,8 @@ ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-U <unit>${COLOR_RESET}                   display unit for volume output (${COLOR_MAGENTA}percent${COLOR_RESET} or ${COLOR_MAGENTA}db${COLOR_RESET})
   ${COLOR_GREEN}-v${COLOR_RESET}                          verbose mode (detailed error information)
   ${COLOR_GREEN}-d${COLOR_RESET}, ${COLOR_GREEN}--dry-run${COLOR_RESET}          show what would happen without executing (test mode)
+  ${COLOR_GREEN}--log [file|syslog]${COLOR_RESET}         enable logging to file or syslog (${COLOR_MAGENTA}default: syslog${COLOR_RESET} if no file specified)
+  ${COLOR_GREEN}--debug${COLOR_RESET}                     enable debug mode with verbose logging (${COLOR_MAGENTA}requires --log${COLOR_RESET})
   ${COLOR_GREEN}--exit-code${COLOR_RESET}                 show detailed exit code information
   ${COLOR_GREEN}-h${COLOR_RESET}                          show help
 
