@@ -17,11 +17,17 @@
 SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 
 # Source modules in dependency order
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/helpers.sh"
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/config.sh"
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/audio.sh"
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/notify.sh"
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/output.sh"
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/commands.sh"
 
 arrange_opts() {
