@@ -131,13 +131,19 @@ output_volume_custom() {
 
     # Now process regular placeholders (format volume for display)
     local vol_display unit_suffix
-    # Use VOLUME_DISPLAY_UNIT if set, default to percent
-    local display_unit="${VOLUME_DISPLAY_UNIT:-percent}"
-    vol_display=$(format_volume_display "$vol" "$display_unit")
-    if [ "$display_unit" = "db" ]; then
-        unit_suffix="dB"
+    # Check if muted first, so we can display "MUTED" for %v when muted
+    if is_muted; then
+        vol_display="MUTED"
+        unit_suffix=""
     else
-        unit_suffix="%"
+        # Use VOLUME_DISPLAY_UNIT if set, default to percent
+        local display_unit="${VOLUME_DISPLAY_UNIT:-percent}"
+        vol_display=$(format_volume_display "$vol" "$display_unit")
+        if [ "$display_unit" = "db" ]; then
+            unit_suffix="dB"
+        else
+            unit_suffix="%"
+        fi
     fi
     string=${format//\%v/$vol_display$unit_suffix}
     string=${string//\%n/$(get_node_display_name)}
@@ -225,8 +231,7 @@ output_volume_custom() {
         string=${string//%a/$app_name}
     fi
 
-    if is_muted; then echo -ne "${string//\%v/MUTED}"
-    else echo -ne "$string"; fi
+    echo -ne "$string"
 }
 
 output_volume_i3blocks() {
