@@ -4121,3 +4121,233 @@ show_volume_history() {
         echo "No history entries for current sink."
     fi
 }
+
+listen() {
+    local args_str="$*"
+    local -a args
+    IFS=' ' read -ra args <<< "$args_str"
+
+    # Parse options
+    local monitor_all=false
+    local monitor_input=false
+    local watch_mode=false
+    local volume_only=false
+    local mute_only=false
+    local output_format=""
+
+    local i=0
+    while [[ $i -lt ${#args[@]} ]]; do
+        case "${args[$i]}" in
+            -a|--all)
+                monitor_all=true
+                ;;
+            -I|--input)
+                monitor_input=true
+                ;;
+            --watch)
+                watch_mode=true
+                ;;
+            --volume-only)
+                volume_only=true
+                ;;
+            --mute-only)
+                mute_only=true
+                ;;
+            -*)
+                # Unknown option, skip
+                ;;
+            *)
+                # Assume it's an output format
+                if empty "$output_format"; then
+                    output_format="${args[$i]}"
+                fi
+                ;;
+        esac
+        ((i++))
+    done
+
+    # Determine which nodes to monitor
+    local -a node_ids
+    local -a node_names
+    local -a node_types
+
+    if [[ "$monitor_input" == "true" ]]; then
+        # Monitor input sources
+        local -a sources
+        readarray -t sources < <(pw_dump | jq -r '.[] | select(.type == "PipeWire:Interface:Node" and .info.props."media.class" == "Audio/Source") | "\(.id)|\(.info.props."node.name")"' 2>/dev/null)
+        for source in "${sources[@]}"; do
+            IFS='|' read -r source_id source_name <<< "$source"
+            node_ids+=("$source_id")
+            node_names+=("$source_name")
+            node_types+=("source")
+        done
+    elif [[ "$monitor_all" == "true" ]]; then
+        # Monitor all sinks
+        readarray -t node_ids < <(get_all_sinks)
+        for sink_id in "${node_ids[@]}"; do
+            local sink_name
+            sink_name=$(pw_dump | jq -r --argjson id "$sink_id" '.[] | select(.id == $id) | .info.props."node.name"' 2>/dev/null)
+            node_names+=("$sink_name")
+            node_types+=("sink")
+        done
+    else
+        # Monitor default sink only
+        local default_sink_id
+        default_sink_id=$(get_default_sink_id)
+        if not_empty "$default_sink_id"; then
+            node_ids+=("$default_sink_id")
+            local sink_name
+            sink_name=$(pw_dump | jq -r --argjson id "$default_sink_id" '.[] | select(.id == $id) | .info.props."node.name"' 2>/dev/null)
+            node_names+=("$sink_name")
+            node_types+=("sink")
+        else
+            error "No default sink found"
+            return 1
+        fi
+    fi
+
+    if [[ ${#node_ids[@]} -eq 0 ]]; then
+        error "No nodes to monitor"
+        return 1
+    fi
+
+    # Initialize state tracking
+    local -A prev_volumes
+    local -A prev_muted
+
+    # Get initial state
+    local i
+    for i in "${!node_ids[@]}"; do
+        local node_id="${node_ids[$i]}"
+        local vol muted
+        vol=$(wpctl get-volume "$node_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}' || echo "0")
+        muted=$(wpctl get-volume "$node_id" 2>/dev/null | grep -q '\[MUTED\]' && echo "true" || echo "false")
+        prev_volumes["$node_id"]="$vol"
+        prev_muted["$node_id"]="$muted"
+    done
+
+    # Output initial state if in watch mode
+    if [[ "$watch_mode" == "true" ]]; then
+        for i in "${!node_ids[@]}"; do
+            local node_id="${node_ids[$i]}"
+            local node_name="${node_names[$i]}"
+            local node_type="${node_types[$i]}"
+            local vol="${prev_volumes[$node_id]}"
+            local muted="${prev_muted[$node_id]}"
+
+            local display_name
+            if isset NODE_ALIASES["$node_id"]; then
+                display_name="${NODE_ALIASES[$node_id]}"
+            elif isset NODE_ALIASES["$node_name"]; then
+                display_name="${NODE_ALIASES[$node_name]}"
+            else
+                display_name=$(pw_dump | jq -r --argjson id "$node_id" '.[] | select(.id == $id) | .info.props."node.nick" // .info.props."node.name"' 2>/dev/null)
+            fi
+
+            printf "[%s] %s: %s%% %s\n" "$node_type" "$display_name" "$vol" "$([ "$muted" == "true" ] && echo "[MUTED]" || echo "")"
+        done
+    fi
+
+    # Main monitoring loop
+    while true; do
+        # Invalidate cache to get fresh data
+        invalidate_cache
+
+        # Check each node for changes
+        for i in "${!node_ids[@]}"; do
+            local node_id="${node_ids[$i]}"
+            local node_name="${node_names[$i]}"
+            local node_type="${node_types[$i]}"
+
+            # Get current state
+            local vol muted vol_changed mute_changed
+            vol=$(wpctl get-volume "$node_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}' || echo "0")
+            muted=$(wpctl get-volume "$node_id" 2>/dev/null | grep -q '\[MUTED\]' && echo "true" || echo "false")
+
+            # Check for changes
+            vol_changed=false
+            mute_changed=false
+
+            # Use decimal comparison for volume
+            if [ "$(echo "$vol != ${prev_volumes[$node_id]}" | bc -l 2>/dev/null)" = "1" ]; then
+                vol_changed=true
+            fi
+
+            if [[ "$muted" != "${prev_muted[$node_id]}" ]]; then
+                mute_changed=true
+            fi
+
+            # Determine if we should output
+            local should_output=false
+            if [[ "$volume_only" == "true" ]] && [[ "$vol_changed" == "true" ]]; then
+                should_output=true
+            elif [[ "$mute_only" == "true" ]] && [[ "$mute_changed" == "true" ]]; then
+                should_output=true
+            elif [[ "$volume_only" != "true" ]] && [[ "$mute_only" != "true" ]] && ([[ "$vol_changed" == "true" ]] || [[ "$mute_changed" == "true" ]]); then
+                should_output=true
+            fi
+
+            if [[ "$should_output" == "true" ]]; then
+                # Temporarily set NODE_ID for output functions
+                local saved_node_id="$NODE_ID"
+                local saved_node_name="$NODE_NAME"
+                NODE_ID="$node_id"
+                NODE_NAME="$node_name"
+
+                # Output based on format
+                if not_empty "$output_format"; then
+                    case "$output_format" in
+                        i3blocks)
+                            output_volume_i3blocks
+                            ;;
+                        *)
+                            # Custom format or plugin
+                            if is_output_plugin_available "$output_format"; then
+                                call_output_plugin "$output_format"
+                            else
+                                output_volume_custom "$output_format"
+                            fi
+                            ;;
+                    esac
+                elif [[ "$watch_mode" == "true" ]]; then
+                    # Terminal output in watch mode
+                    local display_name
+                    if isset NODE_ALIASES["$node_id"]; then
+                        display_name="${NODE_ALIASES[$node_id]}"
+                    elif isset NODE_ALIASES["$node_name"]; then
+                        display_name="${NODE_ALIASES[$node_name]}"
+                    else
+                        display_name=$(pw_dump | jq -r --argjson id "$node_id" '.[] | select(.id == $id) | .info.props."node.nick" // .info.props."node.name"' 2>/dev/null)
+                    fi
+
+                    local change_info=""
+                    if [[ "$vol_changed" == "true" ]]; then
+                        change_info="volume: ${prev_volumes[$node_id]}% -> $vol%"
+                    fi
+                    if [[ "$mute_changed" == "true" ]]; then
+                        if [[ -n "$change_info" ]]; then
+                            change_info="$change_info, "
+                        fi
+                        change_info="${change_info}mute: ${prev_muted[$node_id]} -> $muted"
+                    fi
+
+                    printf "[%s] %s: %s\n" "$node_type" "$display_name" "$change_info"
+                else
+                    # Default: output in default format
+                    output_volume_default
+                fi
+
+                # Restore NODE_ID
+                NODE_ID="$saved_node_id"
+                NODE_NAME="$saved_node_name"
+            fi
+
+            # Update previous state
+            prev_volumes["$node_id"]="$vol"
+            prev_muted["$node_id"]="$muted"
+        done
+
+        # Sleep before next check (100ms polling interval)
+        sleep 0.1
+    done
+}
