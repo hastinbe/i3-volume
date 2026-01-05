@@ -1,6 +1,6 @@
 # i3-volume
 
-Volume control with on-screen display notifications. Works with any window manager, such as [i3wm], [bspwm], and [KDE], as a standalone script, or with statusbars such as [polybar], [i3blocks], [i3status], and more.
+Volume control with on-screen display notifications. Works with any window manager, such as [i3wm], [bspwm], and [KDE], as a standalone script, or with statusbars such as [i3status-rust], [polybar], [i3blocks], [i3status], and more.
 
 [![License: GPL v2][license-badge]][license] ![build][build]
 
@@ -29,6 +29,7 @@ volume -n -N dunst up 5  # Use dunst for notifications
 ### For Status Bars
 
 ```bash
+volume -j \",󰕾,󰕿,󰖀\" output \"%i %n %c%v %p \n\" # i3status-rust
 volume output i3blocks  # i3blocks format (mouse wheel auto-handled)
 volume output polybar   # polybar format
 ```
@@ -53,6 +54,7 @@ See [Installation](https://github.com/hastinbe/i3-volume/wiki/Installation) for 
 Read the [installation instructions](https://github.com/hastinbe/i3-volume/wiki/Installation) to get started. For specific setups:
 
 - [i3wm](https://github.com/hastinbe/i3-volume/wiki/Installation#i3wm)
+- [i3status-rust](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3status-rust)
 - [polybar](https://github.com/hastinbe/i3-volume/wiki/Installation#polybar)
 - [i3blocks](https://github.com/hastinbe/i3-volume/wiki/Usage-with-i3blocks)
 
@@ -95,16 +97,6 @@ volume balance +10             # Shift 10% to right speaker
 volume list sinks              # List all audio devices
 volume switch                  # Switch to next audio device
 volume sync                    # Sync volume across all sinks
-```
-
-### Status Bar Integration
-
-```bash
-# i3blocks - mouse wheel automatically handled when scrolling on volume block
-volume output i3blocks
-
-# polybar
-volume output polybar
 ```
 
 **Full Command Reference:** See [MANUAL.md](MANUAL.md) or run `volume help` for complete usage.
