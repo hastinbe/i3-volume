@@ -185,6 +185,7 @@ Options:
   -t <process_name>           status bar process name (requires -u)
   -A <node.nick:alias>        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   -u <signal>                 signal to update status bar (requires -t)
+  -F                          use full process name for pkill (requires -u)
   -D <value>                  set default step size (default: 5)
   -f <duration_ms>            fade duration in milliseconds (for set/up/down/mute)
                               examples:

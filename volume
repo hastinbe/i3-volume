@@ -91,7 +91,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:A:Ce:ad:f:hj:lL:nN:pPs:S:t:u:vyI:D:qU:
+    local optstring=:A:Ce:ad:f:Fhj:lL:nN:pPs:S:t:u:vyI:D:qU:
 
     arrange_opts "$optstring" "$@"
 
@@ -147,6 +147,7 @@ parse_opts() {
             a    ) ALL_SINKS=true ;;
             d    ) DRY_RUN=true ;;
             f    ) FADE_DURATION=$OPTARG ;;
+            F    ) PKILL_FULL=true ;;
             j    ) IFS=, read -ra ICONS_EMOJI <<< "$OPTARG" ;;
             l    ) USE_FULLCOLOR_ICONS=true ;;
             L    ) PROGRESS_PLACEMENT=$OPTARG ;;
@@ -622,6 +623,7 @@ main() {
         SYMBOLIC_ICON_SUFFIX="" \
         PLAY_SOUND=false \
         USE_CANBERRA=false \
+        PKILL_FULL=false \
         FADE_DURATION="" \
         ALL_SINKS=false \
         VERBOSE=false \

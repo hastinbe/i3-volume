@@ -67,7 +67,12 @@ get_volume_emoji() {
 update_statusline() {
     local signal=${1:?$(error 'Signal is required')}
     local proc=${2:?$(error 'Process name is required')}
-    pkill "-$signal" "$proc"
+    local full=${3:-false}
+    if $full; then
+        pkill -f "-$signal" "$proc"
+    else
+        pkill "-$signal" "$proc"
+    fi
 }
 
 progress_bar() {
@@ -117,7 +122,7 @@ volume_color() {
 update_statusbar() {
     # shellcheck disable=SC2153  # SIGNAL is a global variable from main script
     if not_empty "$SIGNAL" && empty "$STATUSLINE"; then return 1; fi
-    if not_empty "$SIGNAL"; then update_statusline "$SIGNAL" "$STATUSLINE";
+    if not_empty "$SIGNAL"; then update_statusline "$SIGNAL" "$STATUSLINE" "$PKILL_FULL";
     elif not_empty "$STATUSLINE"; then return 1; fi
     return 0
 }

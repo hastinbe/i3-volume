@@ -2112,6 +2112,10 @@ ${COLOR_YELLOW}Status Bar Settings:${COLOR_RESET}
  Signal to send to status bar (requires STATUSLINE)
  Values: string (e.g., SIGRTMIN+10)
 
+  ${COLOR_CYAN}PKILL_FULL${COLOR_RESET}
+ Use full process name for pkill (requires SIGNAL)
+ Values: true, false
+
 ${COLOR_YELLOW}Audio Device Settings:${COLOR_RESET}
   ${COLOR_CYAN}NODE_NAME${COLOR_RESET}
  Default sink name (optional)
@@ -3746,6 +3750,7 @@ ${COLOR_YELLOW}Options:${COLOR_RESET}
   ${COLOR_GREEN}-t <process_name>${COLOR_RESET}           status bar process name (${COLOR_MAGENTA}requires -u${COLOR_RESET})
   ${COLOR_GREEN}-A <node.nick:alias>${COLOR_RESET}        alias a node nick (e.g., -A "ALC287 Analog:Speakers")
   ${COLOR_GREEN}-u <signal>${COLOR_RESET}                 signal to update status bar (${COLOR_MAGENTA}requires -t${COLOR_RESET})
+  ${COLOR_GREEN}-F${COLOR_RESET}                          use full process name for pkill (requires -u)
   ${COLOR_GREEN}-D <value>${COLOR_RESET}                  set default step size (${COLOR_MAGENTA}default: 5${COLOR_RESET})
   ${COLOR_GREEN}-f <duration_ms>${COLOR_RESET}            fade duration in milliseconds (${COLOR_MAGENTA}for set/up/down/mute${COLOR_RESET})
   ${COLOR_GREEN}-x <value>${COLOR_RESET}                  set maximum volume
