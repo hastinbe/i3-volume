@@ -227,15 +227,17 @@ get_node_display_name() {
 }
 
 # Cache management
+# The cache is a file, not a variable: callers run pw_dump inside $(...) subshells,
+# where a variable assignment is lost and pw-dump would run on every call.
 pw_dump() {
-    if [[ $COMMAND == "listen" ]] || empty "$PW_DUMP"; then
-        PW_DUMP=$(pw-dump)
+    if [[ $COMMAND == "listen" ]] || [[ ! -s $PW_DUMP_FILE ]]; then
+        pw-dump >"$PW_DUMP_FILE" 2>/dev/null
     fi
-    echo "$PW_DUMP"
+    cat "$PW_DUMP_FILE"
 }
 
 invalidate_cache() {
-    PW_DUMP=""
+    : >"$PW_DUMP_FILE"
 }
 
 # Volume info functions

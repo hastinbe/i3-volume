@@ -583,9 +583,12 @@ main() {
     # shellcheck disable=SC2034  # Used externally by modules
     declare -gi DEFAULT_STEP=${DEFAULT_STEP:-5}
 
-    # Cached output of `pw-dump`; so we don't have to call it each time we need it
+    # Cached output of `pw-dump` (see pw_dump in lib/audio.sh); a temp file so the
+    # cache is shared with $(...) subshells. Removed on exit.
     # shellcheck disable=SC2034  # Used externally by modules
-    declare -g PW_DUMP=""
+    declare -g PW_DUMP_FILE
+    PW_DUMP_FILE=$(mktemp) || exit 1
+    trap 'rm -f "$PW_DUMP_FILE"' EXIT
 
     # Colors
     declare -r \
