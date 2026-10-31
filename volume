@@ -91,7 +91,7 @@ arrange_opts() {
 }
 
 parse_opts() {
-    local optstring=:A:Ce:ad:f:Fhj:lL:nN:pPs:S:t:u:vyI:D:qU:
+    local optstring=:A:Ce:adf:Fhj:lL:nN:pPs:S:t:u:vyI:D:qU:
 
     arrange_opts "$optstring" "$@"
 
