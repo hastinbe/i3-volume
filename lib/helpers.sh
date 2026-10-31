@@ -192,19 +192,18 @@ get_script_dir() {
         ((i++))
     done
 
+    # Make the path absolute and resolve symlinks so the lib/ check below works
+    # for relative sources such as `source lib/helpers.sh`
+    script_path=$(readlink -f "$script_path" 2>/dev/null || echo "$script_path")
+
     # If we didn't find it, try to resolve from current file
     if [[ "$script_path" == *"/lib/"* ]] || [[ "$(basename "$script_path")" != "volume" ]]; then
-        script_path="${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}"
+        script_path=$(readlink -f "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}" 2>/dev/null || echo "${BASH_SOURCE[${#BASH_SOURCE[@]}-1]}")
         local dir
         dir=$(dirname "$script_path")
         if [[ "$dir" == *"/lib" ]]; then
             script_path="${dir%/lib}/volume"
         fi
-    fi
-
-    # Resolve symlinks
-    if [[ -L "$script_path" ]]; then
-        script_path=$(readlink -f "$script_path" 2>/dev/null || echo "$script_path")
     fi
 
     dirname "$script_path"
