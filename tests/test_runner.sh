@@ -51,6 +51,8 @@ EOF
 list_modules() {
     echo "Available test modules:"
     for test_file in "$SCRIPT_DIR"/test_*.sh; do
+        # Skip this runner; its name also matches the test_*.sh glob
+        [[ "$(basename "$test_file")" == "test_runner.sh" ]] && continue
         if [[ -f "$test_file" ]]; then
             local module_name
             module_name=$(basename "$test_file" .sh | sed 's/^test_//')
@@ -124,6 +126,8 @@ main() {
     if [[ "$TEST_MODULE" == "all" ]]; then
         # Run all test modules
         for test_file in "$SCRIPT_DIR"/test_*.sh; do
+            # Skip this runner; its name also matches the test_*.sh glob
+            [[ "$(basename "$test_file")" == "test_runner.sh" ]] && continue
             if [[ -f "$test_file" ]]; then
                 local module_name
                 module_name=$(basename "$test_file" .sh | sed 's/^test_//')
