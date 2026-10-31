@@ -116,6 +116,7 @@ set_volume() {
      local -r op=${2:-}
 
      # Check if operating on all sinks
+     # shellcheck disable=SC2153  # ALL_SINKS is set by parse_opts in the main script
      if $ALL_SINKS; then
          set_volume_all "$vol_input" "$op"
          return
@@ -481,6 +482,7 @@ set_mic_volume() {
      local -r vol=${1:?$(error 'Volume is required')}
      local -r op=${2:-}
 
+     # shellcheck disable=SC2153  # SOURCE_ID is set by init_source in audio.sh
      if empty "$SOURCE_ID"; then
          init_source
      fi
@@ -2263,7 +2265,7 @@ set_volume_all() {
          effective_max_vol=$(get_effective_max_vol "$sink_id")
 
          # Handle relative dB operations per sink
-         if [ "$vol_unit" = "db" ] && ([ "$op" = "+" ] || [ "$op" = "-" ]); then
+         if [ "$vol_unit" = "db" ] && { [ "$op" = "+" ] || [ "$op" = "-" ]; }; then
              current_vol=$(wpctl get-volume "$sink_id" 2>/dev/null | awk '{printf "%.2f", $2 * 100}')
              local current_db new_db
              current_db=$(percentage_to_db "$current_vol")
@@ -4288,7 +4290,7 @@ listen() {
                 should_output=true
             elif [[ "$mute_only" == "true" ]] && [[ "$mute_changed" == "true" ]]; then
                 should_output=true
-            elif [[ "$volume_only" != "true" ]] && [[ "$mute_only" != "true" ]] && ([[ "$vol_changed" == "true" ]] || [[ "$mute_changed" == "true" ]]); then
+            elif [[ "$volume_only" != "true" ]] && [[ "$mute_only" != "true" ]] && { [[ "$vol_changed" == "true" ]] || [[ "$mute_changed" == "true" ]]; }; then
                 should_output=true
             fi
 

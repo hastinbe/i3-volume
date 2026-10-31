@@ -186,7 +186,6 @@ notify_mic() {
 }
 
 list_notification_methods() {
-    local source="${BASH_SOURCE[0]}"
     # Walk up to find the main volume script
     local script_dir
     script_dir=$(get_script_dir)
